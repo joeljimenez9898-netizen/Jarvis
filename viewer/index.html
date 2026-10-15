@@ -175,7 +175,7 @@ await new Promise((resolve, reject) => {
     row.querySelector("i").style.cssText = `background:${colour[g]};color:${colour[g]}`;
     row.querySelector("b").textContent = g;
     row.querySelector("b").style.fontWeight = "400";
-    row.onclick = () => focusSet(new Set(nodes.filter(n => n.group === g).map(n => n.id)));
+    row.onclick = () => Focus.cluster(nodes.filter(n => n.group === g).map(n => n.id), { frame: true });
     legend.appendChild(row);
   });
 
@@ -208,15 +208,15 @@ await new Promise((resolve, reject) => {
   }
 
   // ── graph ─────────────────────────────────────────────────────
-  let highlight = null;   // Set of node ids, or null for "everything lit"
-  let selected = null;
+  // What is lit and where the camera points. Read anywhere, written ONLY by Focus below.
+  const view = { lit: null, centre: null };   // lit: Set of node ids or null (all lit)
 
-  const lit = id => !highlight || highlight.has(id);
-  // A selected node lights its own links; a focused set lights links inside the set.
+  const lit = id => !view.lit || view.lit.has(id);
+  // A centred note lights its own links; a lit cluster lights links inside the cluster.
   const linkLit = l => {
-    if (!highlight) return false;
+    if (!view.lit) return false;
     const s = l.source.id ?? l.source, t = l.target.id ?? l.target;
-    return selected != null ? (s === selected || t === selected) : highlight.has(s) && highlight.has(t);
+    return view.centre != null ? (s === view.centre || t === view.centre) : view.lit.has(s) && view.lit.has(t);
   };
 
   const Graph = ForceGraph3D({ controlType: "orbit" })($("graph"))
@@ -226,15 +226,15 @@ await new Promise((resolve, reject) => {
     .nodeId("id")
     .nodeLabel(n => `<div style="font:13px system-ui;padding:4px 8px;background:rgba(5,8,16,.85);border:1px solid ${colour[n.group]};border-radius:8px">${escapeHtml(n.label)}</div>`)
     .nodeThreeObject(nodeObject)
-    .linkColor(l => linkLit(l) ? "rgba(170,200,255,0.55)" : (highlight ? "rgba(120,140,200,0.04)"
+    .linkColor(l => linkLit(l) ? "rgba(170,200,255,0.55)" : (view.lit ? "rgba(120,140,200,0.04)"
       : l.type === "mention" ? "rgba(140,170,255,0.35)" : "rgba(140,170,255,0.12)"))
     .linkWidth(l => linkLit(l) ? 0.4 : 0)
     .linkDirectionalParticles(l => linkLit(l) ? 3 : 0)
     .linkDirectionalParticleWidth(1.2)
     .linkDirectionalParticleColor(() => "#dfe9ff")
     .linkDirectionalParticleSpeed(0.006)
-    .onNodeClick(n => select(n.id))
-    .onBackgroundClick(clearSelection)
+    .onNodeClick(n => Focus.note(n.id))
+    .onBackgroundClick(() => Focus.clear())
     // Node dragging off: its drag-end code sends a synthetic pointerup that
     // OrbitControls (needed for autoRotate) chokes on.
     .enableNodeDrag(false)
@@ -243,7 +243,7 @@ await new Promise((resolve, reject) => {
   Graph.d3Force("charge").strength(-140);
   Graph.d3Force("link").distance(l => l.type === "mention" ? 55 : 95);
 
-  const controls = Graph.controls();
+  const controls = Graph.controls();   // camera moves only through Focus
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.35;
   controls.enableDamping = true;
@@ -266,51 +266,77 @@ await new Promise((resolve, reject) => {
     (function twinkle(t) { stars.rotation.y = t * 0.000004; requestAnimationFrame(twinkle); })(0);
   })();
 
-  setTimeout(() => Graph.zoomToFit(1200, 60), 2500);
 
-  // ── highlight / selection ─────────────────────────────────────
+  // ── focus: the ONE owner of the camera and the lit set ────────
+  // Nothing else calls Graph.cameraPosition / zoomToFit, touches controls.autoRotate,
+  // or writes `view`. Clicks, chips, the legend and voice commands all come through here.
+  const CLUSTER_MIN = 4;   // an answer drawing on this many notes lights them, no flight
+
+  const Focus = {
+    /** Fly to one note, light it and its direct neighbours (plus `also`), open its panel. */
+    note(id, { also = [] } = {}) {
+      const n = nodes[id];
+      if (!n) return;
+      view.centre = id;
+      view.lit = new Set([id, ...neighbours[id], ...also]);
+      controls.autoRotate = false;
+      paint();
+      const dist = 240, r = Math.hypot(n.x, n.y, n.z) || 1, k = 1 + dist / r;
+      Graph.cameraPosition({ x: n.x * k, y: n.y * k, z: n.z * k }, { x: n.x, y: n.y, z: n.z }, 1600);
+      openPanel(n);
+    },
+
+    /** Light a set of notes. The camera stays put unless `frame` asks to fit them. */
+    cluster(ids, { frame = false } = {}) {
+      const set = new Set(ids.filter(i => nodes[i]));
+      if (!set.size) return;
+      view.centre = null;
+      view.lit = set;
+      closePanel();
+      paint();
+      if (frame) { controls.autoRotate = false; Graph.zoomToFit(1400, 90, n => set.has(n.id)); }
+    },
+
+    /** Everything lit again, back to the overview, idle rotation resumes. */
+    clear() {
+      view.centre = null; view.lit = null;
+      closePanel();
+      paint();
+      Graph.cameraPosition(undefined, { x: 0, y: 0, z: 0 }, 1200);
+      setTimeout(() => { if (!view.lit) controls.autoRotate = true; }, 1300);
+    },
+
+    overview() { Graph.zoomToFit(1200, 60); },
+
+    /**
+     * The answer path's decision. The server has already decided whether the question
+     * was about the notes; only then does the number of sources pick the camera move.
+     * Returns what it did: "note", "cluster" or "still".
+     */
+    fromAnswer({ about_notes, nodes: used = [] }) {
+      used = used.filter(i => nodes[i]);
+      if (!about_notes || !used.length) return "still";        // small talk / not covered
+      if (used.length >= CLUSTER_MIN) { Focus.cluster(used); return "cluster"; }
+      Focus.note(used[0], { also: used.slice(1) });              // used[0] = top source
+      return "note";
+    },
+
+    get current() { return view.centre; },
+  };
+
   function paint() {
     nodes.forEach(n => {
       if (!n.__core) return;
-      const on = lit(n.id);
+      const on = lit(n.id), centre = n.id === view.centre;
       n.__core.material.opacity = on ? 1 : 0.12;
-      n.__glow.material.opacity = on ? (n.id === selected ? 1.4 : 0.9) : 0.05;
-      n.__glow.scale.setScalar((2.2 + Math.sqrt(n.degree || 0) * 0.9) * (n.id === selected ? 11 : 7));
+      n.__glow.material.opacity = on ? (centre ? 1.4 : 0.9) : 0.05;
+      n.__glow.scale.setScalar((2.2 + Math.sqrt(n.degree || 0) * 0.9) * (centre ? 11 : 7));
     });
     Graph.linkColor(Graph.linkColor()).linkWidth(Graph.linkWidth())
       .linkDirectionalParticles(Graph.linkDirectionalParticles());
   }
 
-  function flyTo(n) {
-    const dist = 240, r = Math.hypot(n.x, n.y, n.z) || 1, k = 1 + dist / r;
-    Graph.cameraPosition({ x: n.x * k, y: n.y * k, z: n.z * k }, { x: n.x, y: n.y, z: n.z }, 1600);
-  }
-
-  function select(id) {
-    const n = nodes[id];
-    selected = id;
-    highlight = new Set([id, ...neighbours[id]]);
-    controls.autoRotate = false;
-    paint(); flyTo(n); openPanel(n);
-  }
-
-  function focusSet(ids) {
-    if (!ids.size) return;
-    selected = null;
-    highlight = new Set(ids);
-    controls.autoRotate = false;
-    $("panel").classList.remove("open"); document.body.classList.remove("panel-open");
-    paint();
-    Graph.zoomToFit(1400, 90, n => ids.has(n.id));
-  }
-
-  function clearSelection() {
-    selected = null; highlight = null;
-    $("panel").classList.remove("open"); document.body.classList.remove("panel-open");
-    paint();
-    Graph.cameraPosition(undefined, { x: 0, y: 0, z: 0 }, 1200);
-    setTimeout(() => { if (!highlight) controls.autoRotate = true; }, 1300);
-  }
+  setTimeout(() => Focus.overview(), 2500);
 
   function chip(id) {
     const n = nodes[id], b = document.createElement("button");
@@ -318,7 +344,7 @@ await new Promise((resolve, reject) => {
     b.innerHTML = "<i></i>";
     b.querySelector("i").style.background = colour[n.group];
     b.append(n.label);
-    b.onclick = () => select(id);
+    b.onclick = () => Focus.note(id);
     return b;
   }
 
@@ -333,9 +359,14 @@ await new Promise((resolve, reject) => {
     document.body.classList.add("panel-open");
   }
 
-  $("close").onclick = clearSelection;
+  function closePanel() {
+    $("panel").classList.remove("open");
+    document.body.classList.remove("panel-open");
+  }
+
+  $("close").onclick = () => Focus.clear();
   addEventListener("keydown", e => {
-    if (e.key === "Escape") { Voice.stopSpeaking(); clearSelection(); }
+    if (e.key === "Escape") { Voice.stopSpeaking(); Focus.clear(); }
     if (e.key === "/" && document.activeElement !== $("q")) { e.preventDefault(); $("q").focus(); }
   });
 
@@ -346,9 +377,17 @@ await new Promise((resolve, reject) => {
   function newConversation() {
     resetNext = true;
     answer.className = "glass";
-    clearSelection();
+    Focus.clear();
   }
   $("reset").onclick = () => { newConversation(); $("q").focus(); };
+
+  let lastFocus = "still";
+
+  // The spoken answer stays short; the note itself is on screen, never read out.
+  function spoken(text) {
+    const sentences = text.replace(/\s+/g, " ").match(/[^.!?]+[.!?]*/g) || [text];
+    return sentences.slice(0, 3).join(" ").trim();
+  }
 
   // One path to the brain for typed and spoken questions. Every answer is spoken.
   async function ask(question) {
@@ -373,10 +412,10 @@ await new Promise((resolve, reject) => {
       answer.className = "glass show";
       answer.querySelector(".a").textContent = data.answer;
       const used = (data.nodes || []).filter(i => nodes[i]);
-      used.forEach(i => answer.querySelector(".chips").appendChild(chip(i)));
-      if (used.length === 1) select(used[0]);
-      else if (used.length) focusSet(new Set(used));
-      Voice.speak(data.answer);
+      if (data.about_notes) used.forEach(i => answer.querySelector(".chips").appendChild(chip(i)));
+      // Decide the camera first, then talk: the panel is open while the answer is spoken.
+      lastFocus = Focus.fromAnswer({ about_notes: !!data.about_notes, nodes: used });
+      Voice.speak(spoken(data.answer));
     } catch (err) {
       Voice.setThinking(false);
       answer.className = "glass show error";
@@ -400,21 +439,28 @@ await new Promise((resolve, reject) => {
     newConversation();
     Voice.speak("Fresh start.");
   });
-  Voice.addRoute(/^(?:close|close (?:the )?panel|go back|zoom out|show (?:me )?everything)$/, () => clearSelection());
+  Voice.addRoute(/^(?:close|close (?:the )?panel|go back|zoom out|show (?:me )?everything)$/, () => Focus.clear());
   Voice.addRoute(/^(?:show me|open|go to|fly to) (?:the )?(.+)$/, (m, sentence) => {
     const want = m[1];
     const hit = nodes.find(n => n.label.toLowerCase() === want)
       || nodes.find(n => n.label.toLowerCase().includes(want))
       || nodes.find(n => want.includes(n.label.toLowerCase()));
-    if (hit) { select(hit.id); Voice.speak(hit.label + "."); }
+    if (hit) { Focus.note(hit.id); Voice.speak(hit.label + "."); }
     else ask(sentence);
+  });
+
+  // The only way a note is read aloud: you ask for it.
+  Voice.addRoute(/^(?:read|read out|read me) (?:it|that|this|the note|this note|that note|me the note)(?: (?:out|aloud|to me|please))*$/, () => {
+    const id = Focus.current;
+    if (id == null) Voice.speak("No note is open. Ask about one first.");
+    else Voice.speak(`${nodes[id].label}. ${nodes[id].excerpt}`);
   });
 
   Voice.init({ ask });
   // Queued until the first click or key press, then spoken (browsers block audio before that).
   Voice.speak(`Knowledge galaxy online. ${nodes.length} notes charted. Ask me anything.`);
 
-  window.galaxy = { Graph, select, focusSet, clearSelection };  // handy in devtools
+  window.galaxy = { Graph, Focus, view, get lastFocus() { return lastFocus; } };  // devtools + tests
 
   function escapeHtml(s) {
     return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

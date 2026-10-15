@@ -6,7 +6,7 @@ const GRAPH = {
    "label": "Harbour Street Cafe",
    "group": "business",
    "path": "notes/business/Harbour Street Cafe.md",
-   "excerpt": "Harbour Street Cafe The flagship cafe of Saltmarsh Coffee Co, opened in 2021 on Harbour Street. Twenty-eight seats inside, eight outside. Open seven thirty to five, six days a week, closed on Sundays. Average of two hundred and sixty transactions on a weekday. Managed by Leo Brandt. Daily operations follow the Opening Checklist and Closing Checklist; new staff go through the Barista Training Program. The roaster is in the back room, which customers love and the ventilation does not. The Loyalty App Launch and the post-breakdown maintenance contract are the two current cafe projects.",
+   "excerpt": "The flagship cafe of Saltmarsh Coffee Co, opened in 2021 on Harbour Street. Twenty-eight seats inside, eight outside. Open seven thirty to five, six days a week, closed on Sundays. Average of two hundred and sixty transactions on a weekday. Managed by Leo Brandt. Daily operations follow the Opening Checklist and Closing Checklist; new staff go through the Barista Training Program. The roaster is in the back room, which customers love and the ventilation does not. The Loyalty App Launch and the post-breakdown maintenance contract are the two current cafe projects.",
    "degree": 13
   },
   {
@@ -14,7 +14,7 @@ const GRAPH = {
    "label": "Saltmarsh Coffee Co",
    "group": "business",
    "path": "notes/business/Saltmarsh Coffee Co.md",
-   "excerpt": "Saltmarsh Coffee Co Small specialty coffee roastery and cafe founded by Maya Okafor in 2019. Five people including part-timers. Annual revenue around four hundred and twenty thousand euros, split roughly fifty percent cafe, thirty-five percent wholesale and fifteen percent online and the Subscription Box. Sells through the Harbour Street Cafe, wholesale accounts such as Greenleaf Bistro, The Copper Kettle and Brightside Offices, and online. Main supplier is Finca La Esperanza. Big questions for the next six months: the Second Roaster Purchase, winning Northgate Hotel, and protecting margins after the Q3 2026 Financial Review.",
+   "excerpt": "Small specialty coffee roastery and cafe founded by Maya Okafor in 2019. Five people including part-timers. Annual revenue around four hundred and twenty thousand euros, split roughly fifty percent cafe, thirty-five percent wholesale and fifteen percent online and the Subscription Box. Sells through the Harbour Street Cafe, wholesale accounts such as Greenleaf Bistro, The Copper Kettle and Brightside Offices, and online. Main supplier is Finca La Esperanza. Big questions for the next six months: the Second Roaster Purchase, winning Northgate Hotel, and protecting margins after the Q3 2026 Financial Review.",
    "degree": 29
   },
   {
@@ -22,7 +22,7 @@ const GRAPH = {
    "label": "Brightside Offices",
    "group": "clients",
    "path": "notes/clients/Brightside Offices.md",
-   "excerpt": "Brightside Offices Office coffee client: a co-working building with about two hundred members. Takes twenty kilos a month of the house blend for bean-to-cup machines. Good volume, low effort to serve. The problem is payment. Invoices have been paid between thirty and fifty days late for three consecutive months, which prompted Priya Nair to draft the Late Payment Policy. Their facilities manager changed in July and the new one did not know we existed. A call is planned to reset terms. If the account is lost, the Q3 2026 Financial Review estimates a monthly revenue gap of roughly eleven hundred euros.",
+   "excerpt": "Office coffee client: a co-working building with about two hundred members. Takes twenty kilos a month of the house blend for bean-to-cup machines. Good volume, low effort to serve. The problem is payment. Invoices have been paid between thirty and fifty days late for three consecutive months, which prompted Priya Nair to draft the Late Payment Policy. Their facilities manager changed in July and the new one did not know we existed. A call is planned to reset terms. If the account is lost, the Q3 2026 Financial Review estimates a monthly revenue gap of roughly eleven hundred euros.",
    "degree": 13
   },
   {
@@ -30,7 +30,7 @@ const GRAPH = {
    "label": "Greenleaf Bistro",
    "group": "clients",
    "path": "notes/clients/Greenleaf Bistro.md",
-   "excerpt": "Greenleaf Bistro Wholesale client since 2023. Vegetarian bistro on Canal Road, about forty covers. Orders twelve kilos a week, mostly the house espresso blend, plus a single-origin filter that rotates monthly. Pays on time, every time. Account managed by Sam Whitlock. They asked for barista training for two new hires, which we are delivering through the Barista Training Program at cost. They are interested in co-branding a retail bag, which needs the new label design from the Rebrand Project. Price reviewed in the Pricing Model in August with a three percent increase accepted without pushback.",
+   "excerpt": "Wholesale client since 2023. Vegetarian bistro on Canal Road, about forty covers. Orders twelve kilos a week, mostly the house espresso blend, plus a single-origin filter that rotates monthly. Pays on time, every time. Account managed by Sam Whitlock. They asked for barista training for two new hires, which we are delivering through the Barista Training Program at cost. They are interested in co-branding a retail bag, which needs the new label design from the Rebrand Project. Price reviewed in the Pricing Model in August with a three percent increase accepted without pushback.",
    "degree": 18
   },
   {
@@ -38,7 +38,7 @@ const GRAPH = {
    "label": "Northgate Hotel",
    "group": "clients",
    "path": "notes/clients/Northgate Hotel.md",
-   "excerpt": "Northgate Hotel Prospect, not yet a client. Ninety-room business hotel with a breakfast service and a lobby bar. Estimated volume of thirty-five kilos a week, which would make it our largest account and would push the current roaster close to capacity. Sam Whitlock has had two tasting sessions with their food and beverage manager. They want a custom blend, staff training, and a machine maintenance arrangement. The quote has been run through the Pricing Model at a lower margin than usual on the basis of volume. Winning this account is the main reason the Second Roaster Purchase is being considered now rather than next year.",
+   "excerpt": "Prospect, not yet a client. Ninety-room business hotel with a breakfast service and a lobby bar. Estimated volume of thirty-five kilos a week, which would make it our largest account and would push the current roaster close to capacity. Sam Whitlock has had two tasting sessions with their food and beverage manager. They want a custom blend, staff training, and a machine maintenance arrangement. The quote has been run through the Pricing Model at a lower margin than usual on the basis of volume. Winning this account is the main reason the Second Roaster Purchase is being considered now rather than next year.",
    "degree": 16
   },
   {
@@ -46,7 +46,7 @@ const GRAPH = {
    "label": "The Copper Kettle",
    "group": "clients",
    "path": "notes/clients/The Copper Kettle.md",
-   "excerpt": "The Copper Kettle Independent cafe and bakery in the old market hall. Wholesale client since 2024, eight kilos a week. Owner is friendly but very price sensitive and compares us with two other roasters every quarter. Sam Whitlock manages the account. They complained twice about inconsistent grind on pre-ground bags, which traced back to the old grinder and is one of the arguments in the Second Roaster Purchase proposal for a production grinder too. Delivered on the Friday round in Delivery Routes. Margin on this account is the thinnest of all wholesale clients according to the Q3 2026 Financial Review.",
+   "excerpt": "Independent cafe and bakery in the old market hall. Wholesale client since 2024, eight kilos a week. Owner is friendly but very price sensitive and compares us with two other roasters every quarter. Sam Whitlock manages the account. They complained twice about inconsistent grind on pre-ground bags, which traced back to the old grinder and is one of the arguments in the Second Roaster Purchase proposal for a production grinder too. Delivered on the Friday round in Delivery Routes. Margin on this account is the thinnest of all wholesale clients according to the Q3 2026 Financial Review.",
    "degree": 15
   },
   {
@@ -54,7 +54,7 @@ const GRAPH = {
    "label": "Bank Loan Application",
    "group": "finance",
    "path": "notes/finance/Bank Loan Application.md",
-   "excerpt": "Bank Loan Application Application submitted on 1 October for a forty-five thousand euro equipment loan over five years to fund the Second Roaster Purchase and ventilation work. Supporting documents: two years of accounts, the Q3 2026 Financial Review pack, cash flow forecast and a letter of intent from Northgate Hotel if Sam can get one. The bank indicated a decision in three to four weeks and an interest rate around seven percent. Priya Nair modelled repayments at about nine hundred euros a month, which she considers affordable only if Northgate signs.",
+   "excerpt": "Application submitted on 1 October for a forty-five thousand euro equipment loan over five years to fund the Second Roaster Purchase and ventilation work. Supporting documents: two years of accounts, the Q3 2026 Financial Review pack, cash flow forecast and a letter of intent from Northgate Hotel if Sam can get one. The bank indicated a decision in three to four weeks and an interest rate around seven percent. Priya Nair modelled repayments at about nine hundred euros a month, which she considers affordable only if Northgate signs.",
    "degree": 18
   },
   {
@@ -62,7 +62,7 @@ const GRAPH = {
    "label": "Late Payment Policy",
    "group": "finance",
    "path": "notes/finance/Late Payment Policy.md",
-   "excerpt": "Late Payment Policy Drafted by Priya Nair in September after repeated late payments from Brightside Offices. Standard terms are fourteen days. A friendly reminder goes out at day fifteen, a phone call at day twenty-one, and deliveries pause at day thirty until the balance is cleared. Accounts that are late three times in six months move to payment on order. Statutory late payment interest is reserved for accounts that are over sixty days. The policy will be sent to all wholesale clients with October invoices, after sign-off from Maya Okafor. Recommended in the Q3 2026 Financial Review.",
+   "excerpt": "Drafted by Priya Nair in September after repeated late payments from Brightside Offices. Standard terms are fourteen days. A friendly reminder goes out at day fifteen, a phone call at day twenty-one, and deliveries pause at day thirty until the balance is cleared. Accounts that are late three times in six months move to payment on order. Statutory late payment interest is reserved for accounts that are over sixty days. The policy will be sent to all wholesale clients with October invoices, after sign-off from Maya Okafor. Recommended in the Q3 2026 Financial Review.",
    "degree": 19
   },
   {
@@ -70,7 +70,7 @@ const GRAPH = {
    "label": "Pricing Model",
    "group": "finance",
    "path": "notes/finance/Pricing Model.md",
-   "excerpt": "Pricing Model Spreadsheet built by Priya Nair that produces a per-kilo wholesale price for any blend or single origin. Inputs: green coffee cost per kilo, roast loss of about sixteen percent, packaging, labour per kilo, energy, and delivery cost from Delivery Routes. Target gross margin is forty percent for standard accounts and thirty-two percent for high-volume accounts like Northgate Hotel. Floor price rule: no account below a thirty percent margin. The Q3 2026 Financial Review showed The Copper Kettle has drifted below the floor and needs repricing. Updated monthly with green coffee prices.",
+   "excerpt": "Spreadsheet built by Priya Nair that produces a per-kilo wholesale price for any blend or single origin. Inputs: green coffee cost per kilo, roast loss of about sixteen percent, packaging, labour per kilo, energy, and delivery cost from Delivery Routes. Target gross margin is forty percent for standard accounts and thirty-two percent for high-volume accounts like Northgate Hotel. Floor price rule: no account below a thirty percent margin. The Q3 2026 Financial Review showed The Copper Kettle has drifted below the floor and needs repricing. Updated monthly with green coffee prices.",
    "degree": 18
   },
   {
@@ -78,7 +78,7 @@ const GRAPH = {
    "label": "Northgate Hotel Tasting",
    "group": "meetings",
    "path": "notes/meetings/Northgate Hotel Tasting.md",
-   "excerpt": "Northgate Hotel Tasting Second tasting session at Northgate Hotel on 30 September with their food and beverage manager and head of breakfast. Sam Whitlock brought three blend options. They preferred the medium roast with the Brazil base for breakfast and the house espresso for the lobby bar. Concerns raised: reliability of supply at thirty-five kilos a week, and who services the machines. Sam proposed training through the Barista Training Program and a quarterly machine check. Next step is a written proposal priced through the Pricing Model by mid October.",
+   "excerpt": "Second tasting session at Northgate Hotel on 30 September with their food and beverage manager and head of breakfast. Sam Whitlock brought three blend options. They preferred the medium roast with the Brazil base for breakfast and the house espresso for the lobby bar. Concerns raised: reliability of supply at thirty-five kilos a week, and who services the machines. Sam proposed training through the Barista Training Program and a quarterly machine check. Next step is a written proposal priced through the Pricing Model by mid October.",
    "degree": 16
   },
   {
@@ -86,7 +86,7 @@ const GRAPH = {
    "label": "Q3 2026 Financial Review",
    "group": "meetings",
    "path": "notes/meetings/Q3 2026 Financial Review.md",
-   "excerpt": "Q3 2026 Financial Review Quarterly review led by Priya Nair on 3 October. Revenue for the quarter was one hundred and twelve thousand euros, up nine percent on Q2. Cafe revenue grew, wholesale was flat, and the Subscription Box grew but at a lower margin because of postage. Gross margin on wholesale dropped from forty-one to thirty-seven percent, mainly green coffee prices and the discount given to The Copper Kettle. Overdue receivables are concentrated in Brightside Offices. Cash buffer is just under three months of costs. Recommendations: enforce the Late Payment Policy, reprice using the Pricing Model, and finance the Second Roaster Purchase with debt rather than cash.",
+   "excerpt": "Quarterly review led by Priya Nair on 3 October. Revenue for the quarter was one hundred and twelve thousand euros, up nine percent on Q2. Cafe revenue grew, wholesale was flat, and the Subscription Box grew but at a lower margin because of postage. Gross margin on wholesale dropped from forty-one to thirty-seven percent, mainly green coffee prices and the discount given to The Copper Kettle. Overdue receivables are concentrated in Brightside Offices. Cash buffer is just under three months of costs. Recommendations: enforce the Late Payment Policy, reprice using the Pricing Model, and finance the Second Roaster Purchase with debt rather than cash.",
    "degree": 19
   },
   {
@@ -94,7 +94,7 @@ const GRAPH = {
    "label": "Supplier Call with Finca La Esperanza",
    "group": "meetings",
    "path": "notes/meetings/Supplier Call with Finca La Esperanza.md",
-   "excerpt": "Supplier Call with Finca La Esperanza Video call on 22 September with Elena Ruiz and Maya Okafor. Agenda: harvest outlook, shipping dates, and the anaerobic micro-lot. Harvest is running three weeks late because of rain, so the main container will land in early December instead of mid November. That is a risk for the Holiday Blend Launch; the fallback is to use remaining stock from the previous crop for the base. The anaerobic lot is sixty kilos at a price premium of about forty percent. Elena asked for roast profiles to share with the farm. Follow-up captured in the Weekly Ops Meeting.",
+   "excerpt": "Video call on 22 September with Elena Ruiz and Maya Okafor. Agenda: harvest outlook, shipping dates, and the anaerobic micro-lot. Harvest is running three weeks late because of rain, so the main container will land in early December instead of mid November. That is a risk for the Holiday Blend Launch; the fallback is to use remaining stock from the previous crop for the base. The anaerobic lot is sixty kilos at a price premium of about forty percent. Elena asked for roast profiles to share with the farm. Follow-up captured in the Weekly Ops Meeting.",
    "degree": 14
   },
   {
@@ -102,7 +102,7 @@ const GRAPH = {
    "label": "Weekly Ops Meeting",
    "group": "meetings",
    "path": "notes/meetings/Weekly Ops Meeting.md",
-   "excerpt": "Weekly Ops Meeting Every Monday at nine, thirty minutes, before the cafe gets busy. Attendees: Maya Okafor, Leo Brandt, Priya Nair, Sam Whitlock. Notes from 6 October: the Second Roaster Purchase decision was deferred until the Bank Loan Application comes back. Leo Brandt reported the Espresso Machine Breakdown cost two days of reduced service. Priya Nair will call Brightside Offices about late payment. Sam has a third meeting booked with Northgate Hotel. Action: Maya to confirm the anaerobic lot with Elena Ruiz by Friday.",
+   "excerpt": "Every Monday at nine, thirty minutes, before the cafe gets busy. Attendees: Maya Okafor, Leo Brandt, Priya Nair, Sam Whitlock. Notes from 6 October: the Second Roaster Purchase decision was deferred until the Bank Loan Application comes back. Leo Brandt reported the Espresso Machine Breakdown cost two days of reduced service. Priya Nair will call Brightside Offices about late payment. Sam has a third meeting booked with Northgate Hotel. Action: Maya to confirm the anaerobic lot with Elena Ruiz by Friday.",
    "degree": 29
   },
   {
@@ -110,7 +110,7 @@ const GRAPH = {
    "label": "Barista Training Program",
    "group": "operations",
    "path": "notes/operations/Barista Training Program.md",
-   "excerpt": "Barista Training Program Four-week programme for new baristas, also sold to wholesale clients such as Greenleaf Bistro at cost and offered to Northgate Hotel as part of their proposal. Week one covers the Opening Checklist, Closing Checklist, hygiene and the till. Week two is espresso: dose, yield, time and dialling in. Week three is milk texture and latte art basics. Week four is filter brewing, customer service and a final assessment with Leo Brandt. Trainees shadow for at least six shifts before working solo. Materials are a printed handbook and short videos recorded in the cafe.",
+   "excerpt": "Four-week programme for new baristas, also sold to wholesale clients such as Greenleaf Bistro at cost and offered to Northgate Hotel as part of their proposal. Week one covers the Opening Checklist, Closing Checklist, hygiene and the till. Week two is espresso: dose, yield, time and dialling in. Week three is milk texture and latte art basics. Week four is filter brewing, customer service and a final assessment with Leo Brandt. Trainees shadow for at least six shifts before working solo. Materials are a printed handbook and short videos recorded in the cafe.",
    "degree": 18
   },
   {
@@ -118,7 +118,7 @@ const GRAPH = {
    "label": "Closing Checklist",
    "group": "operations",
    "path": "notes/operations/Closing Checklist.md",
-   "excerpt": "Closing Checklist For the last shift at Harbour Street Cafe. The cafe closes at five; the close takes about forty minutes. Backflush the group heads with detergent, soak the portafilters and baskets, purge and wipe the steam wands, empty and clean the drip trays. Empty the grinder chute but not the hopper. Wipe down all surfaces, mop, take out recycling and compost. Cash up and record the till variance. After the Espresso Machine Breakdown, descaling checks were added on Fridays. Owned by Leo Brandt. Pairs with the Opening Checklist.",
+   "excerpt": "For the last shift at Harbour Street Cafe. The cafe closes at five; the close takes about forty minutes. Backflush the group heads with detergent, soak the portafilters and baskets, purge and wipe the steam wands, empty and clean the drip trays. Empty the grinder chute but not the hopper. Wipe down all surfaces, mop, take out recycling and compost. Cash up and record the till variance. After the Espresso Machine Breakdown, descaling checks were added on Fridays. Owned by Leo Brandt. Pairs with the Opening Checklist.",
    "degree": 9
   },
   {
@@ -126,7 +126,7 @@ const GRAPH = {
    "label": "Delivery Routes",
    "group": "operations",
    "path": "notes/operations/Delivery Routes.md",
-   "excerpt": "Delivery Routes Wholesale deliveries run twice a week in the van, planned by Sam Whitlock. Tuesday round: Greenleaf Bistro, Brightside Offices and two smaller accounts in the north of town, about two and a half hours. Friday round: The Copper Kettle and the market hall stalls, about ninety minutes. Orders close at noon the day before so they can be roasted and rested overnight. If Northgate Hotel signs, it would need a third weekly drop on Thursdays. Fuel and van costs are tracked in the Pricing Model as a per-kilo delivery cost.",
+   "excerpt": "Wholesale deliveries run twice a week in the van, planned by Sam Whitlock. Tuesday round: Greenleaf Bistro, Brightside Offices and two smaller accounts in the north of town, about two and a half hours. Friday round: The Copper Kettle and the market hall stalls, about ninety minutes. Orders close at noon the day before so they can be roasted and rested overnight. If Northgate Hotel signs, it would need a third weekly drop on Thursdays. Fuel and van costs are tracked in the Pricing Model as a per-kilo delivery cost.",
    "degree": 17
   },
   {
@@ -134,7 +134,7 @@ const GRAPH = {
    "label": "Espresso Machine Breakdown",
    "group": "operations",
    "path": "notes/operations/Espresso Machine Breakdown.md",
-   "excerpt": "Espresso Machine Breakdown On 29 September the steam boiler on the cafe espresso machine at Harbour Street Cafe failed mid-morning. Pressure relief valve stuck open; boiler element burned out. The cafe ran on batch brew and one group for two days. Repair cost seven hundred and eighty euros including a call-out on a Sunday. Estimated lost sales around nine hundred euros. Root cause was scale build-up; the machine had not been descaled since March. Actions: weekly descaling check added to the Closing Checklist, and Leo Brandt is getting quotes for an annual maintenance contract. Discussed at the Weekly Ops Meeting.",
+   "excerpt": "On 29 September the steam boiler on the cafe espresso machine at Harbour Street Cafe failed mid-morning. Pressure relief valve stuck open; boiler element burned out. The cafe ran on batch brew and one group for two days. Repair cost seven hundred and eighty euros including a call-out on a Sunday. Estimated lost sales around nine hundred euros. Root cause was scale build-up; the machine had not been descaled since March. Actions: weekly descaling check added to the Closing Checklist, and Leo Brandt is getting quotes for an annual maintenance contract. Discussed at the Weekly Ops Meeting.",
    "degree": 11
   },
   {
@@ -142,7 +142,7 @@ const GRAPH = {
    "label": "Opening Checklist",
    "group": "operations",
    "path": "notes/operations/Opening Checklist.md",
-   "excerpt": "Opening Checklist For the first shift at Harbour Street Cafe. Arrive at six forty-five for a seven thirty open. Turn on the espresso machine first, it needs twenty-five minutes to reach stable temperature. Check the grinder hopper and purge two shots. Dial in the house espresso: eighteen grams in, thirty-six out, twenty-eight to thirty-two seconds. Log the dial-in on the clipboard. Check milk fridge temperature is below four degrees. Count the float. Put out the pastry delivery and check it against the order. Owned by Leo Brandt and taught in week one of the Barista Training Program. Pairs with the Closing Checklist.",
+   "excerpt": "For the first shift at Harbour Street Cafe. Arrive at six forty-five for a seven thirty open. Turn on the espresso machine first, it needs twenty-five minutes to reach stable temperature. Check the grinder hopper and purge two shots. Dial in the house espresso: eighteen grams in, thirty-six out, twenty-eight to thirty-two seconds. Log the dial-in on the clipboard. Check milk fridge temperature is below four degrees. Count the float. Put out the pastry delivery and check it against the order. Owned by Leo Brandt and taught in week one of the Barista Training Program. Pairs with the Closing Checklist.",
    "degree": 11
   },
   {
@@ -150,7 +150,7 @@ const GRAPH = {
    "label": "Elena Ruiz",
    "group": "people",
    "path": "notes/people/Elena Ruiz.md",
-   "excerpt": "Elena Ruiz Export manager at Finca La Esperanza in Huila, Colombia. Main supplier contact for the washed Caturra and the honey-processed Pink Bourbon lots. Communicates mostly by WhatsApp voice notes, in Spanish, and visits Europe once a year in May. Elena agreed to the 2026 forward contract with Maya Okafor and has offered an early look at a small anaerobic lot that could anchor the Holiday Blend Launch. She asked for harvest photos and roast notes to be shared back so the farm can use them in its own marketing.",
+   "excerpt": "Export manager at Finca La Esperanza in Huila, Colombia. Main supplier contact for the washed Caturra and the honey-processed Pink Bourbon lots. Communicates mostly by WhatsApp voice notes, in Spanish, and visits Europe once a year in May. Elena agreed to the 2026 forward contract with Maya Okafor and has offered an early look at a small anaerobic lot that could anchor the Holiday Blend Launch. She asked for harvest photos and roast notes to be shared back so the farm can use them in its own marketing.",
    "degree": 13
   },
   {
@@ -158,7 +158,7 @@ const GRAPH = {
    "label": "Leo Brandt",
    "group": "people",
    "path": "notes/people/Leo Brandt.md",
-   "excerpt": "Leo Brandt Cafe manager at Harbour Street Cafe since March 2022. Runs the rota, trains baristas using the Barista Training Program, and owns the Opening Checklist and Closing Checklist. Previously a shift lead at a chain, so he pushes for consistency and checklists over improvisation. Leo raised the Espresso Machine Breakdown incident and wants a maintenance contract instead of ad hoc repairs. He is also the person most keen on the Loyalty App Launch, because regulars keep asking for a stamp card that does not get lost. Reports to Maya Okafor. Attends the Weekly Ops Meeting every Monday.",
+   "excerpt": "Cafe manager at Harbour Street Cafe since March 2022. Runs the rota, trains baristas using the Barista Training Program, and owns the Opening Checklist and Closing Checklist. Previously a shift lead at a chain, so he pushes for consistency and checklists over improvisation. Leo raised the Espresso Machine Breakdown incident and wants a maintenance contract instead of ad hoc repairs. He is also the person most keen on the Loyalty App Launch, because regulars keep asking for a stamp card that does not get lost. Reports to Maya Okafor. Attends the Weekly Ops Meeting every Monday.",
    "degree": 19
   },
   {
@@ -166,7 +166,7 @@ const GRAPH = {
    "label": "Maya Okafor",
    "group": "people",
    "path": "notes/people/Maya Okafor.md",
-   "excerpt": "Maya Okafor Founder and head roaster of Saltmarsh Coffee Co. Started roasting in a rented garage in 2019 and opened the Harbour Street Cafe in 2021. Owns the roast profiles, green coffee buying and anything that touches flavour. Prefers decisions written down rather than discussed in passing, which is why the Weekly Ops Meeting notes exist at all. She is the main contact for Finca La Esperanza and personally negotiated the 2026 contract. Her current priorities are getting the Second Roaster Purchase approved and stabilising wholesale margins after the Q3 2026 Financial Review showed them slipping. She delegates cafe operations to Leo Brandt and books to Priya Nair.",
+   "excerpt": "Founder and head roaster of Saltmarsh Coffee Co. Started roasting in a rented garage in 2019 and opened the Harbour Street Cafe in 2021. Owns the roast profiles, green coffee buying and anything that touches flavour. Prefers decisions written down rather than discussed in passing, which is why the Weekly Ops Meeting notes exist at all. She is the main contact for Finca La Esperanza and personally negotiated the 2026 contract. Her current priorities are getting the Second Roaster Purchase approved and stabilising wholesale margins after the Q3 2026 Financial Review showed them slipping. She delegates cafe operations to Leo Brandt and books to Priya Nair.",
    "degree": 26
   },
   {
@@ -174,7 +174,7 @@ const GRAPH = {
    "label": "Priya Nair",
    "group": "people",
    "path": "notes/people/Priya Nair.md",
-   "excerpt": "Priya Nair Part-time bookkeeper, three days a week. Handles invoicing for wholesale accounts, payroll, VAT returns and the monthly management accounts. Built the Pricing Model spreadsheet that every wholesale quote now goes through. Priya flagged that Brightside Offices has paid late three months running and drafted the Late Payment Policy. She led the numbers for the Q3 2026 Financial Review and is modelling the cash impact of the Second Roaster Purchase. She is cautious by temperament and has asked that no new capital spend is committed before the Bank Loan Application is decided.",
+   "excerpt": "Part-time bookkeeper, three days a week. Handles invoicing for wholesale accounts, payroll, VAT returns and the monthly management accounts. Built the Pricing Model spreadsheet that every wholesale quote now goes through. Priya flagged that Brightside Offices has paid late three months running and drafted the Late Payment Policy. She led the numbers for the Q3 2026 Financial Review and is modelling the cash impact of the Second Roaster Purchase. She is cautious by temperament and has asked that no new capital spend is committed before the Bank Loan Application is decided.",
    "degree": 17
   },
   {
@@ -182,7 +182,7 @@ const GRAPH = {
    "label": "Sam Whitlock",
    "group": "people",
    "path": "notes/people/Sam Whitlock.md",
-   "excerpt": "Sam Whitlock Wholesale and delivery lead. Drives the van on Tuesday and Friday rounds, manages the wholesale accounts day to day, and is the first call when a cafe partner runs out of beans. Owns the Delivery Routes plan. Sam brought in Greenleaf Bistro and The Copper Kettle and is currently chasing Northgate Hotel, which would be the largest account by volume. He thinks the Subscription Box should be packed on delivery days to save a trip to the post office. Reports to Maya Okafor.",
+   "excerpt": "Wholesale and delivery lead. Drives the van on Tuesday and Friday rounds, manages the wholesale accounts day to day, and is the first call when a cafe partner runs out of beans. Owns the Delivery Routes plan. Sam brought in Greenleaf Bistro and The Copper Kettle and is currently chasing Northgate Hotel, which would be the largest account by volume. He thinks the Subscription Box should be packed on delivery days to save a trip to the post office. Reports to Maya Okafor.",
    "degree": 23
   },
   {
@@ -190,7 +190,7 @@ const GRAPH = {
    "label": "Holiday Blend Launch",
    "group": "projects",
    "path": "notes/projects/Holiday Blend Launch.md",
-   "excerpt": "Holiday Blend Launch Seasonal blend for December, sold in the cafe, online and through the Subscription Box. Last year it sold out in nine days, which left money on the table. This year the base is the washed Caturra from Finca La Esperanza, with a small anaerobic lot offered by Elena Ruiz for a fruit-forward finish. Target is four hundred bags, double last year, which is tight on the current roaster and is cited in the Second Roaster Purchase proposal. Packaging depends on the Rebrand Project. Tasting notes draft: dark cherry, cocoa, orange peel.",
+   "excerpt": "Seasonal blend for December, sold in the cafe, online and through the Subscription Box. Last year it sold out in nine days, which left money on the table. This year the base is the washed Caturra from Finca La Esperanza, with a small anaerobic lot offered by Elena Ruiz for a fruit-forward finish. Target is four hundred bags, double last year, which is tight on the current roaster and is cited in the Second Roaster Purchase proposal. Packaging depends on the Rebrand Project. Tasting notes draft: dark cherry, cocoa, orange peel.",
    "degree": 18
   },
   {
@@ -198,7 +198,7 @@ const GRAPH = {
    "label": "Loyalty App Launch",
    "group": "projects",
    "path": "notes/projects/Loyalty App Launch.md",
-   "excerpt": "Loyalty App Launch Replace the paper stamp card at Harbour Street Cafe with a digital loyalty programme. Shortlisted two off-the-shelf apps that integrate with the till. Target launch is mid November, before the holiday trade. Leo Brandt is the project owner. Rules agreed so far: one stamp per hot drink, tenth drink free, double stamps on Mondays. Open question is whether Subscription Box customers get a cafe discount. Cost is around forty euros a month. The brand assets needed for the app depend on the Rebrand Project, which is the main risk to the date.",
+   "excerpt": "Replace the paper stamp card at Harbour Street Cafe with a digital loyalty programme. Shortlisted two off-the-shelf apps that integrate with the till. Target launch is mid November, before the holiday trade. Leo Brandt is the project owner. Rules agreed so far: one stamp per hot drink, tenth drink free, double stamps on Mondays. Open question is whether Subscription Box customers get a cafe discount. Cost is around forty euros a month. The brand assets needed for the app depend on the Rebrand Project, which is the main risk to the date.",
    "degree": 16
   },
   {
@@ -206,7 +206,7 @@ const GRAPH = {
    "label": "Rebrand Project",
    "group": "projects",
    "path": "notes/projects/Rebrand Project.md",
-   "excerpt": "Rebrand Project Refresh of the logo, bag labels and cafe signage. The original logo was made in an afternoon in 2019 and does not print well on kraft bags. Working with a freelance designer on a fixed fee of three thousand two hundred euros. Two rounds of concepts done; the team picked the tidal line mark. Remaining work is the label system for single origins and the Holiday Blend Launch packaging. Blocks the Loyalty App Launch artwork and the Greenleaf Bistro co-branded bag. Maya Okafor signs off on design. Expected completion is end of October.",
+   "excerpt": "Refresh of the logo, bag labels and cafe signage. The original logo was made in an afternoon in 2019 and does not print well on kraft bags. Working with a freelance designer on a fixed fee of three thousand two hundred euros. Two rounds of concepts done; the team picked the tidal line mark. Remaining work is the label system for single origins and the Holiday Blend Launch packaging. Blocks the Loyalty App Launch artwork and the Greenleaf Bistro co-branded bag. Maya Okafor signs off on design. Expected completion is end of October.",
    "degree": 18
   },
   {
@@ -214,7 +214,7 @@ const GRAPH = {
    "label": "Second Roaster Purchase",
    "group": "projects",
    "path": "notes/projects/Second Roaster Purchase.md",
-   "excerpt": "Second Roaster Purchase Proposal to buy a fifteen kilo drum roaster to sit alongside the current five kilo machine. Quoted price is thirty-eight thousand euros installed, plus about four thousand for ventilation work. Drivers: the current roaster runs six days a week already, Northgate Hotel would add thirty-five kilos weekly, and the Holiday Blend Launch creates a seasonal spike every December. Maya Okafor is in favour. Priya Nair wants it financed through the Bank Loan Application rather than cash, to keep a three month buffer. Decision deferred at the Weekly Ops Meeting on 6 October until the loan outcome is known.",
+   "excerpt": "Proposal to buy a fifteen kilo drum roaster to sit alongside the current five kilo machine. Quoted price is thirty-eight thousand euros installed, plus about four thousand for ventilation work. Drivers: the current roaster runs six days a week already, Northgate Hotel would add thirty-five kilos weekly, and the Holiday Blend Launch creates a seasonal spike every December. Maya Okafor is in favour. Priya Nair wants it financed through the Bank Loan Application rather than cash, to keep a three month buffer. Decision deferred at the Weekly Ops Meeting on 6 October until the loan outcome is known.",
    "degree": 24
   },
   {
@@ -222,7 +222,7 @@ const GRAPH = {
    "label": "Subscription Box",
    "group": "projects",
    "path": "notes/projects/Subscription Box.md",
-   "excerpt": "Subscription Box Monthly coffee subscription launched in February 2026. Two bags of single origin per month, shipped on the first Tuesday. Currently one hundred and forty subscribers with churn around six percent a month. Packed by hand on Mondays. Sam Whitlock proposes packing on delivery days instead. Postage went up eleven percent in September, which the Q3 2026 Financial Review flagged as squeezing the margin. Ideas on the table: raise the price by one euro, offer a quarterly plan, and add a cafe discount tied to the Loyalty App Launch. December box will feature the Holiday Blend Launch.",
+   "excerpt": "Monthly coffee subscription launched in February 2026. Two bags of single origin per month, shipped on the first Tuesday. Currently one hundred and forty subscribers with churn around six percent a month. Packed by hand on Mondays. Sam Whitlock proposes packing on delivery days instead. Postage went up eleven percent in September, which the Q3 2026 Financial Review flagged as squeezing the margin. Ideas on the table: raise the price by one euro, offer a quarterly plan, and add a cafe discount tied to the Loyalty App Launch. December box will feature the Holiday Blend Launch.",
    "degree": 25
   },
   {
@@ -230,7 +230,7 @@ const GRAPH = {
    "label": "Finca La Esperanza",
    "group": "suppliers",
    "path": "notes/suppliers/Finca La Esperanza.md",
-   "excerpt": "Finca La Esperanza Family farm in Huila, Colombia, at seventeen hundred to nineteen hundred metres. Our most important green coffee supplier, about forty percent of annual volume. Direct trade relationship since 2022, contact Elena Ruiz. Lots we buy: washed Caturra as the backbone of the house espresso, and a honey Pink Bourbon for filter. 2026 contract is a forward price of seven euros eighty per kilo, roughly fifteen percent above commodity. Harvest delays this season are covered in the Supplier Call with Finca La Esperanza. Supplies the base for the Holiday Blend Launch. Relationship owned by Maya Okafor.",
+   "excerpt": "Family farm in Huila, Colombia, at seventeen hundred to nineteen hundred metres. Our most important green coffee supplier, about forty percent of annual volume. Direct trade relationship since 2022, contact Elena Ruiz. Lots we buy: washed Caturra as the backbone of the house espresso, and a honey Pink Bourbon for filter. 2026 contract is a forward price of seven euros eighty per kilo, roughly fifteen percent above commodity. Harvest delays this season are covered in the Supplier Call with Finca La Esperanza. Supplies the base for the Holiday Blend Launch. Relationship owned by Maya Okafor.",
    "degree": 13
   },
   {
@@ -238,7 +238,7 @@ const GRAPH = {
    "label": "Harbour Packaging",
    "group": "suppliers",
    "path": "notes/suppliers/Harbour Packaging.md",
-   "excerpt": "Harbour Packaging Supplier of kraft coffee bags with one-way valves, labels and shipping boxes for the Subscription Box. Minimum order of two thousand bags, lead time three weeks. Bag prices rose eight percent in July. They will print the new labels from the Rebrand Project once artwork is final; a proof run costs one hundred and fifty euros. For the Holiday Blend Launch we need four hundred printed sleeves ordered by 10 November at the latest. Invoices go to Priya Nair.",
+   "excerpt": "Supplier of kraft coffee bags with one-way valves, labels and shipping boxes for the Subscription Box. Minimum order of two thousand bags, lead time three weeks. Bag prices rose eight percent in July. They will print the new labels from the Rebrand Project once artwork is final; a proof run costs one hundred and fifty euros. For the Holiday Blend Launch we need four hundred printed sleeves ordered by 10 November at the latest. Invoices go to Priya Nair.",
    "degree": 19
   }
  ],

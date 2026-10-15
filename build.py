@@ -46,12 +46,15 @@ def scan(notes_dir):
     for path in files:
         raw = path.read_text(encoding="utf-8", errors="replace")
         rel_parent = path.parent.relative_to(notes_dir)
+        # The title is already the label; drop a leading "# Title" heading from the text.
+        body = re.sub(r"\A(---\s*\n.*?\n---\s*\n)?\s*#\s+" + re.escape(path.stem) + r"\s*\n",
+                      lambda m: m.group(1) or "", raw, flags=re.S)
         notes.append({
             "label": path.stem,
             "group": path.parent.name if str(rel_parent) != "." else notes_dir.name,
             "path": str(path.relative_to(ROOT) if path.is_relative_to(ROOT) else path),
             "raw": raw,
-            "text": strip_markdown(raw),
+            "text": strip_markdown(body),
             "wikilinks": {w.strip().lower() for w in WIKILINK.findall(raw)},
         })
     return notes

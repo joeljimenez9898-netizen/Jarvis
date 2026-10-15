@@ -30,14 +30,19 @@ CHAT_EFFORT = "low"         # short grounded answers; Opus 5.5 defaults to mediu
 CHAT_MAX_TOKENS = 2000      # covers thinking + answer
 RETRY_MAX_TOKENS = 8000
 
-SYSTEM_PROMPT = """You answer questions about the user's personal notes.
+SYSTEM_PROMPT = """You answer questions about the user's personal notes. Your reply is
+read aloud, and the note it came from is already shown on screen.
 
 Each user turn contains a <notes> block with the most relevant notes, numbered by
 their index, followed by the question. Answer ONLY from those notes and from
 earlier answers in this conversation. Never use outside knowledge.
 
-Answer in two or three plain sentences, no markdown. If the notes do not cover
-the question, say so plainly in one sentence instead of guessing.
+Answer in two or three short plain sentences, no markdown. Summarise; never read a
+note out or quote it at length. If the notes do not cover the question, say so
+plainly in one sentence instead of guessing.
+
+Some turns are marked as small talk (greetings, thanks, jokes). Reply to those in
+one short, friendly sentence without drawing on the notes.
 
 After the answer, on its own final line, write USED: followed by the comma-separated
 index numbers of the notes you actually relied on, or USED: none."""
@@ -55,8 +60,17 @@ _graph_cache = {"mtime": None, "notes": []}
 
 # ── notes ─────────────────────────────────────────────────────────
 
+def _fold(word):
+    """Crude plural folding so "margins" matches "margin"."""
+    if len(word) > 4 and word.endswith("ies"):
+        return word[:-3] + "y"
+    if len(word) > 3 and word.endswith("s") and not word.endswith(("ss", "us", "is")):
+        return word[:-1]
+    return word
+
+
 def tokens(text):
-    return [t for t in re.findall(r"[a-z0-9]+", text.lower())
+    return [_fold(t) for t in re.findall(r"[a-z0-9]+", text.lower())
             if len(t) > 1 and t not in STOPWORDS]
 
 
@@ -96,6 +110,29 @@ def rank(question, notes):
             scored.append((score, note["id"]))
     scored.sort(key=lambda s: (-s[0], s[1]))
     return [i for _, i in scored[:TOP_K]]
+
+
+# Small talk never touches the notes, so it can never move the camera. Greetings
+# are stripped first, so "good morning, who owns the loyalty app?" is still a question.
+GREETING = re.compile(
+    # longer phrases first: "how are you doing" must win over "how are you"
+    r"^(?:(?:how are you doing|how are you|how's it going|how's your day|what's up|"
+    r"who are you|what can you do|are you there|you there|good (?:morning|afternoon|evening|night)|"
+    r"thanks a lot|thank you|thanks|nice one|good one|well done|see you|goodbye|bye|hello|hiya|"
+    r"howdy|hi|hey|yo|morning|evening|cheers|ta|nice|great|cool|okay|ok)"
+    r"(?: (?:there|again|so much|very much|jarvis|galaxy|today|mate))*(?:[ ,.!?]+|$))+")
+JOKE = re.compile(r"\b(?:joke|jokes|pun|puns|riddle|make me laugh|something funny|cheer me up)\b")
+
+
+def classify(question):
+    """Returns (about_notes, question_for_retrieval)."""
+    text = " ".join(question.lower().replace("\u2019", "'").split())
+    if JOKE.search(text):
+        return False, ""
+    rest = GREETING.sub("", text).strip(" ,.!?")
+    if not rest:
+        return False, ""
+    return True, rest
 
 
 # ── model ─────────────────────────────────────────────────────────
@@ -163,13 +200,13 @@ def call_model(key, model, messages):
     raise ChatError("The model returned no text, even with a larger budget.", 502)
 
 
-def parse_answer(text, allowed):
-    used = None
+def parse_answer(text, picked):
+    """Strip the USED line. Returns sources in retrieval-rank order (best first)."""
     match = re.search(r"\n?\s*USED:\s*(.*)\s*$", text, re.I)
-    if match:
-        text = text[:match.start()].strip()
-        used = [int(n) for n in re.findall(r"\d+", match.group(1)) if int(n) in allowed]
-    return text, used
+    if not match:
+        return text.strip(), []
+    cited = {int(n) for n in re.findall(r"\d+", match.group(1))}
+    return text[:match.start()].strip(), [i for i in picked if i in cited]
 
 
 def chat(question, reset=False):
@@ -178,31 +215,36 @@ def chat(question, reset=False):
         if reset:
             _history.clear()
             _last_nodes = []
-        notes = load_notes()
-        picked = rank(question, notes)
-        # Follow-ups ("and who owns it?") have few keywords: top up from last turn.
-        for i in _last_nodes:
-            if len(picked) >= TOP_K:
-                break
-            if i not in picked:
-                picked.append(i)
-
-        context = "\n\n".join(
-            f'<note index="{i}" title="{notes[i]["label"]}">\n{notes[i]["body"].strip()}\n</note>'
-            for i in picked) or "(no notes matched this question)"
-        turn = f"<notes>\n{context}\n</notes>\n\nQuestion: {question}"
-
         key, model = read_config()
+
+        about_notes, query = classify(question)
+        picked = []
+        if about_notes:
+            notes = load_notes()
+            picked = rank(query, notes)
+            # Follow-ups ("and who owns it?") have few keywords: top up from last turn.
+            for i in _last_nodes:
+                if len(picked) >= TOP_K:
+                    break
+                if i not in picked:
+                    picked.append(i)
+            context = "\n\n".join(
+                f'<note index="{i}" title="{notes[i]["label"]}">\n{notes[i]["body"].strip()}\n</note>'
+                for i in picked) or "(no notes matched this question)"
+            turn = f"<notes>\n{context}\n</notes>\n\nQuestion: {question}"
+        else:
+            turn = f"Small talk, no notes needed: {question}"
+
         # History is kept as plain text (no thinking blocks) and only appended to.
         messages = list(_history) + [{"role": "user", "content": turn}]
-        raw = call_model(key, model, messages)
-        answer, used = parse_answer(raw, set(picked))
-        used = picked if used is None else used
+        answer, used = parse_answer(call_model(key, model, messages), picked)
 
         _history.append({"role": "user", "content": f"Question: {question}"})
         _history.append({"role": "assistant", "content": answer})
-        _last_nodes = used or _last_nodes
-        return {"answer": answer, "nodes": used}
+        if used:
+            _last_nodes = used
+        # about_notes is the camera's permission: only true when notes were really used.
+        return {"answer": answer, "nodes": used, "about_notes": bool(about_notes and used)}
 
 
 # ── http ──────────────────────────────────────────────────────────

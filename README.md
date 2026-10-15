@@ -38,6 +38,23 @@ jump to the question bar, "New" to start a fresh conversation.
 Re-run `build.py` whenever your notes change. The server picks up the new
 `graph-data.js` without a restart.
 
+## The galaxy shows its sources
+
+The server first decides whether a message is about your notes. Greetings, thanks and
+jokes are small talk: no notes are sent and `about_notes` comes back false. Only then do
+the sources the answer actually cited (`nodes`, best first) decide the camera:
+
+| sources cited | what happens |
+|---|---|
+| none, or small talk | nothing moves and nothing is relit |
+| 1 to 3 | fly to the top source, light it and its neighbours, open its panel |
+| 4 or more | light the whole cluster where it stands, no flight |
+
+`Focus` in `viewer/index.html` is the only code that moves the camera or changes
+what's lit. Clicks, chips, the legend and voice commands all call `Focus.note`,
+`Focus.cluster` or `Focus.clear`. The spoken answer is at most three sentences. A note is
+read aloud only when you say "read it out".
+
 ## Voice
 
 Built only on the browser's Web Speech API, so no speech service and no cost.
