@@ -35,6 +35,9 @@ jump to the question bar, "New" to start a fresh conversation.
 - **Key safety.** `config.json` sits in the project root. The server only serves
   `viewer/`, binds to 127.0.0.1, and rejects other hosts and origins.
 
+Re-run `build.py` whenever your notes change. The server picks up the new
+`graph-data.js` without a restart.
+
 ## Voice
 
 Built only on the browser's Web Speech API, so no speech service and no cost.
@@ -50,6 +53,3 @@ Listening needs Chrome, Edge or Safari. Firefox and Brave lack the recogniser.
   command that is checked before a sentence reaches the brain. Built in: stop/wait,
   "start over", "close" / "go back", "show me <note>".
 - **Mute.** Open `http://127.0.0.1:4700/?mute=1` and that tab never makes a sound.
-
-Re-run `build.py` whenever your notes change. The server picks up the new
-`graph-data.js` without a restart.
