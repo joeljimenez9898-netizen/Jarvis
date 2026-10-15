@@ -35,5 +35,21 @@ jump to the question bar, "New" to start a fresh conversation.
 - **Key safety.** `config.json` sits in the project root. The server only serves
   `viewer/`, binds to 127.0.0.1, and rejects other hosts and origins.
 
+## Voice
+
+Built only on the browser's Web Speech API, so no speech service and no cost.
+Listening needs Chrome, Edge or Safari. Firefox and Brave lack the recogniser.
+
+- **Speaking.** Every answer is read aloud, in a British English voice when the system has one.
+  Nothing plays until your first click or key press; the greeting is held until then.
+- **Listening.** Click the mic and talk. A phrase is only sent after `FINISH_MS`
+  (900ms, top of `viewer/voice.js`) of silence, so a mid-sentence pause doesn't cut
+  you off. "stop", "wait", "cancel" and similar skip the wait and silence it at once.
+  While it is talking it ignores everything except those words, so it never hears itself.
+- **Voice routes.** `Voice.addRoute(/pattern/, (match, sentence) => ...)` adds a
+  command that is checked before a sentence reaches the brain. Built in: stop/wait,
+  "start over", "close" / "go back", "show me <note>".
+- **Mute.** Open `http://127.0.0.1:4700/?mute=1` and that tab never makes a sound.
+
 Re-run `build.py` whenever your notes change. The server picks up the new
 `graph-data.js` without a restart.

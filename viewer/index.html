@@ -71,6 +71,20 @@
     background: var(--accent); color: #07101f; }
   form button[type=button] { background: transparent; color: var(--muted); padding: 0 10px; font-weight: 400; }
   form button:disabled { opacity: .5; cursor: default; }
+  #mic { display: grid; place-items: center; width: 42px; padding: 0; border-radius: 10px;
+    background: rgba(255,255,255,.06); color: var(--text); }
+  #mic svg { width: 18px; height: 18px; }
+  #mic.on { background: #ff5d73; color: #fff; box-shadow: 0 0 0 0 rgba(255,93,115,.6); animation: pulse 1.4s infinite; }
+  @keyframes pulse { 70% { box-shadow: 0 0 0 10px rgba(255,93,115,0); } 100% { box-shadow: 0 0 0 0 rgba(255,93,115,0); } }
+  #status { display: flex; align-items: center; gap: 8px; margin: 0 4px 8px; font-size: 12px; color: var(--muted);
+    min-height: 18px; text-shadow: 0 1px 4px #000; }
+  #status .dot { width: 8px; height: 8px; border-radius: 50%; background: #56607a; flex: none; }
+  #status[data-mode=listening] .dot { background: #ff5d73; box-shadow: 0 0 8px #ff5d73; }
+  #status[data-mode=thinking] .dot { background: #ffc56e; box-shadow: 0 0 8px #ffc56e; animation: blink 1s steps(2) infinite; }
+  #status[data-mode=speaking] .dot { background: #7ef0c4; box-shadow: 0 0 8px #7ef0c4; }
+  #status[data-mode=listening] .label { color: var(--text); }
+  #status .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #status .muted { margin-left: auto; padding: 1px 8px; border: 1px solid var(--line); border-radius: 999px; font-size: 11px; flex: none; }
 
   #fallback { position: fixed; inset: 0; display: none; place-items: center; text-align: center; padding: 24px; color: var(--muted); }
 
@@ -99,14 +113,19 @@
 
 <div id="ask">
   <div id="answer" class="glass"><div class="q"></div><div class="a"></div><div class="chips"></div></div>
+  <div id="status" data-mode="idle" role="status" aria-live="polite"><span class="dot"></span><span class="label"></span><span class="muted" hidden>muted (?mute=1)</span></div>
   <form id="form" class="glass" autocomplete="off">
     <input id="q" placeholder="Ask your notes anything…" maxlength="2000" aria-label="Question">
     <button type="button" id="reset" title="Start a new conversation">New</button>
+    <button type="button" id="mic" title="Talk (click again to stop listening)" aria-label="Microphone" aria-pressed="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+    </button>
     <button type="submit" id="send">Ask</button>
   </form>
 </div>
 
 <script src="graph-data.js"></script>
+<script src="voice.js"></script>
 <script>
   // If the module below never starts (CDN unreachable, missing data), say why.
   setTimeout(() => {
@@ -316,7 +335,7 @@ await new Promise((resolve, reject) => {
 
   $("close").onclick = clearSelection;
   addEventListener("keydown", e => {
-    if (e.key === "Escape") clearSelection();
+    if (e.key === "Escape") { Voice.stopSpeaking(); clearSelection(); }
     if (e.key === "/" && document.activeElement !== $("q")) { e.preventDefault(); $("q").focus(); }
   });
 
@@ -324,18 +343,20 @@ await new Promise((resolve, reject) => {
   const answer = $("answer");
   let resetNext = false;
 
-  $("reset").onclick = () => {
+  function newConversation() {
     resetNext = true;
     answer.className = "glass";
     clearSelection();
-    $("q").focus();
-  };
+  }
+  $("reset").onclick = () => { newConversation(); $("q").focus(); };
 
-  $("form").onsubmit = async e => {
-    e.preventDefault();
-    const question = $("q").value.trim();
+  // One path to the brain for typed and spoken questions. Every answer is spoken.
+  async function ask(question) {
+    question = question.trim();
     if (!question) return;
+    Voice.stopSpeaking();
     $("send").disabled = true;
+    Voice.setThinking(true);
     answer.className = "glass show thinking";
     answer.querySelector(".q").textContent = question;
     answer.querySelector(".a").textContent = "Searching your notes";
@@ -348,20 +369,50 @@ await new Promise((resolve, reject) => {
       const data = await res.json().catch(() => ({ error: `Server returned ${res.status}` }));
       resetNext = false;
       if (data.error) throw new Error(data.error);
+      Voice.setThinking(false);
       answer.className = "glass show";
       answer.querySelector(".a").textContent = data.answer;
       const used = (data.nodes || []).filter(i => nodes[i]);
       used.forEach(i => answer.querySelector(".chips").appendChild(chip(i)));
-      $("q").value = "";
       if (used.length === 1) select(used[0]);
       else if (used.length) focusSet(new Set(used));
+      Voice.speak(data.answer);
     } catch (err) {
+      Voice.setThinking(false);
       answer.className = "glass show error";
       answer.querySelector(".a").textContent = err.message || "Couldn't reach the server.";
+      Voice.speak("I couldn't get an answer. The reason is on screen.");
     } finally {
       $("send").disabled = false;
     }
+  }
+
+  $("form").onsubmit = e => {
+    e.preventDefault();
+    const question = $("q").value;
+    $("q").value = "";
+    ask(question);
   };
+
+  // ── voice ─────────────────────────────────────────────────────
+  // Commands that never reach the brain. Add more with Voice.addRoute(pattern, handler).
+  Voice.addRoute(/^(?:new conversation|start over|start again|reset)$/, () => {
+    newConversation();
+    Voice.speak("Fresh start.");
+  });
+  Voice.addRoute(/^(?:close|close (?:the )?panel|go back|zoom out|show (?:me )?everything)$/, () => clearSelection());
+  Voice.addRoute(/^(?:show me|open|go to|fly to) (?:the )?(.+)$/, (m, sentence) => {
+    const want = m[1];
+    const hit = nodes.find(n => n.label.toLowerCase() === want)
+      || nodes.find(n => n.label.toLowerCase().includes(want))
+      || nodes.find(n => want.includes(n.label.toLowerCase()));
+    if (hit) { select(hit.id); Voice.speak(hit.label + "."); }
+    else ask(sentence);
+  });
+
+  Voice.init({ ask });
+  // Queued until the first click or key press, then spoken (browsers block audio before that).
+  Voice.speak(`Knowledge galaxy online. ${nodes.length} notes charted. Ask me anything.`);
 
   window.galaxy = { Graph, select, focusSet, clearSelection };  // handy in devtools
 
