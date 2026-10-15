@@ -268,6 +268,7 @@ const FINISH_MS = 900;
   window.Voice = {
     FINISH_MS, MUTED, routes, addRoute, speak, stopSpeaking, init,
     setThinking: on => set({ thinking: !!on, note: "" }),
+    setNote: text => set({ note: String(text || "") }),
     get state() { return { ...state }; },
     _test: { dispatch, onResult, normalise },  // used by the automated check
   };

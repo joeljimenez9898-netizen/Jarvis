@@ -38,6 +38,23 @@ jump to the question bar, "New" to start a fresh conversation.
 Re-run `build.py` whenever your notes change. The server picks up the new
 `graph-data.js` without a restart.
 
+## Personality
+
+The whole character is one commented block at the top of `server.py`:
+
+- `PERSONA` is the system prompt: a dry, polite British butler who says "sir" now and then,
+  gives one witty line plus the facts, and says plainly when the notes don't cover something.
+- `BOOT_GREETING` is the single line spoken on load ("Hello, sir."). The note count on screen
+  comes from the graph data.
+- `CONTROL_TAGS` lists the actions the brain can ask for: `[RESET]`, `[SHOW: title]` and
+  `[REINDEX]`. When asked for one, the model replies with just the tag and the server runs it.
+  To add one, put an entry in `CONTROL_TAGS` and a `@tag_handler("NAME")` function below it.
+- `RECEIPT_LINES` is what gets said after a tag ran or failed. These lines come from the
+  handler's receipt, never from the model, so the assistant can't claim an action it
+  didn't take. Unknown tags and other requests ("email Priya") get a polite refusal.
+
+The New button and the "start over" voice command use the same `RESET` through `POST /action`.
+
 ## The galaxy shows its sources
 
 The server first decides whether a message is about your notes. Greetings, thanks and

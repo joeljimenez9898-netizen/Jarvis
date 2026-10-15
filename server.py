@@ -7,9 +7,83 @@ POST /chat from the notes, using the Anthropic Messages API.
 config.json lives in the project root (never in viewer/), so the API key is
 never reachable from the browser.
 """
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PERSONA: the whole character lives in this block. Rewrite it freely.
+#
+#   PERSONA          the system prompt for every /chat turn
+#   BOOT_GREETING    the one line spoken when the page loads (after the first click)
+#   CONTROL_TAGS     actions the brain asks for with a [TAG]; the server runs them.
+#                    Add a tag here AND a handler with @tag_handler("NAME") below.
+#   RECEIPT_LINES    what is said after a tag really ran (ok) or failed (fail).
+#                    The model never writes these, so it can never claim "done".
+# ═════════════════════════════════════════════════════════════════════════════
+
+BOOT_GREETING = "Hello, sir."
+
+CONTROL_TAGS = {
+    "RESET":   {"usage": "[RESET]",
+                "when": "they want to start over or have this conversation forgotten"},
+    "SHOW":    {"usage": "[SHOW: exact note title]",
+                "when": "they ask to see, open, pull up or go to one specific note"},
+    "REINDEX": {"usage": "[REINDEX]",
+                "when": "they say their notes changed, or asks to rescan or rebuild the index"},
+}
+
+RECEIPT_LINES = {
+    "RESET":   {"ok": "Slate wiped, sir. I remember nothing, professionally.",
+                "fail": "I'm afraid the slate refused to wipe: {reason}."},
+    "SHOW":    {"ok": "{title}, as requested.",
+                "fail": "I can find no note called {title}, sir. I'd rather say so than guess."},
+    "REINDEX": {"ok": "Re-indexed. {count} notes on file; the galaxy will redraw itself.",
+                "fail": "The re-index did not happen: {reason}."},
+    "UNKNOWN": {"fail": "I'm afraid I have no means of doing that, sir."},
+}
+
+PERSONA = """You are a dry, impeccably polite British butler with a razor wit, and you keep
+your employer's notes. You are unflappable, economical, and quietly amused.
+
+Address your employer as "sir" now and then, at most once in a reply and in fewer than half
+of your replies. Overdone, it grates.
+
+Your words are read aloud and the note itself is already on their screen. So:
+- Give ONE witty sentence, then the facts in plain words. One sentence of facts is
+  ideal; two at most. Never recite, quote or narrate the note back.
+- One genuinely funny line beats three bland ones. If nothing funny comes
+  naturally, skip the wit and just be brief. Never force it.
+- Plain spoken English: no markdown, no lists, no emoji.
+
+Each question arrives with a <notes> block of the most relevant notes, numbered by
+index. Answer ONLY from those notes and from earlier turns. No outside knowledge.
+If the notes do not cover the question, say so plainly and with a little dignity,
+in one sentence. Never invent a source, never pad, and never present a related
+note as if it were the answer.
+
+You can only talk. The one way to act is a control tag. When they ask for one of
+these actions, reply with ONLY the tag, exactly as shown, and nothing else:
+{tags}
+The server performs the tag and reports back itself, so never describe the result.
+If they ask for any other action (sending, booking, saving, deleting, reminding),
+say plainly that you can't do it, and offer what you can. Never say anything was
+done, sent, booked, saved or changed unless an earlier turn shows a RECEIPT for
+it with ok=true. Claiming "done" when nothing happened is the one unforgivable sin.
+
+Turns marked as small talk (greetings, thanks, jokes) get one short line in
+character and no notes.
+
+After every reply except a bare tag, add a final line: USED: followed by the
+comma-separated indexes of the notes you actually relied on, or USED: none."""
+
+SYSTEM_PROMPT = PERSONA.replace("{tags}", "\n".join(
+    f"  {t['usage']}  when {t['when']}" for t in CONTROL_TAGS.values()))
+
+# ═════════════════════════════ end of persona ═══════════════════════════════
+
 import json
 import pathlib
 import re
+import subprocess
+import sys
 import threading
 from collections import deque
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -29,23 +103,6 @@ MAX_BODY = 16_000
 CHAT_EFFORT = "low"         # short grounded answers; Opus 5.5 defaults to medium
 CHAT_MAX_TOKENS = 2000      # covers thinking + answer
 RETRY_MAX_TOKENS = 8000
-
-SYSTEM_PROMPT = """You answer questions about the user's personal notes. Your reply is
-read aloud, and the note it came from is already shown on screen.
-
-Each user turn contains a <notes> block with the most relevant notes, numbered by
-their index, followed by the question. Answer ONLY from those notes and from
-earlier answers in this conversation. Never use outside knowledge.
-
-Answer in two or three short plain sentences, no markdown. Summarise; never read a
-note out or quote it at length. If the notes do not cover the question, say so
-plainly in one sentence instead of guessing.
-
-Some turns are marked as small talk (greetings, thanks, jokes). Reply to those in
-one short, friendly sentence without drawing on the notes.
-
-After the answer, on its own final line, write USED: followed by the comma-separated
-index numbers of the notes you actually relied on, or USED: none."""
 
 STOPWORDS = set("""a an and are as at be but by can could did do does for from had has have
 how i if in into is it its me my of on or our so that the their them then there these they
@@ -143,6 +200,13 @@ class ChatError(Exception):
         self.status = status
 
 
+def _config():
+    try:
+        return json.loads(CONFIG.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
 def read_config():
     try:
         cfg = json.loads(CONFIG.read_text(encoding="utf-8"))
@@ -209,12 +273,102 @@ def parse_answer(text, picked):
     return text[:match.start()].strip(), [i for i in picked if i in cited]
 
 
-def chat(question, reset=False):
+# ── control tags ──────────────────────────────────────────────────
+# A handler does the real work and returns a receipt: {"ok": bool, ...fields for
+# RECEIPT_LINES}. Only a receipt ever produces a "done" line.
+
+TAG_RE = re.compile(r"\[([A-Z][A-Z_]*)(?::\s*([^\]]*))?\]")
+_tag_handlers = {}
+
+
+def tag_handler(name):
+    def register(fn):
+        _tag_handlers[name] = fn
+        return fn
+    return register
+
+
+def find_tag(text):
+    """A reply that is (or contains) a known tag is an action; prose around it is ignored,
+    so the model can't sneak a claim of success in next to the tag."""
+    for m in TAG_RE.finditer(text):
+        if m.group(1) in CONTROL_TAGS:
+            return m.group(1), (m.group(2) or "").strip()
+    m = re.match(r"\s*\[([A-Z][A-Z_]*)(?::[^\]]*)?\]\s*$", text)
+    return (m.group(1), "") if m else (None, "")     # unknown bare tag -> UNKNOWN
+
+
+def run_tag(tag, arg=""):
+    """Execute a tag. Returns (spoken line, receipt). Caller holds _lock."""
+    handler = _tag_handlers.get(tag)
+    if tag not in CONTROL_TAGS or handler is None:
+        receipt = {"tag": tag, "ok": False, "reason": "no such action"}
+        return RECEIPT_LINES["UNKNOWN"]["fail"], receipt
+    try:
+        receipt = handler(arg)
+    except Exception as e:  # noqa: BLE001 — a failed action is reported, not raised
+        receipt = {"ok": False, "reason": str(e) or e.__class__.__name__}
+    receipt = {"tag": tag, "arg": arg, **receipt}
+    lines = RECEIPT_LINES.get(tag, {})
+    template = lines.get("ok" if receipt["ok"] else "fail") or (
+        "Done." if receipt["ok"] else "That did not happen: {reason}.")
+    try:
+        line = template.format(**{"title": arg, "reason": "unknown error", **receipt})
+    except (KeyError, IndexError):
+        line = template
+    return line, receipt
+
+
+def _reset_history():
+    global _last_nodes
+    _history.clear()
+    _last_nodes = []
+
+
+@tag_handler("RESET")
+def _tag_reset(arg):
+    _reset_history()
+    return {"ok": not _history}
+
+
+@tag_handler("SHOW")
+def _tag_show(arg):
+    want = arg.lower().strip(" .\"'")
+    notes = load_notes()
+    hit = (next((n for n in notes if n["label"].lower() == want), None)
+           or next((n for n in notes if want and want in n["label"].lower()), None))
+    if not hit:
+        return {"ok": False, "title": arg or "by that name"}
+    return {"ok": True, "title": hit["label"], "nodes": [hit["id"]]}
+
+
+@tag_handler("REINDEX")
+def _tag_reindex(arg):
+    cmd = [sys.executable, str(ROOT / "build.py")]
+    notes_dir = _config().get("notes_dir")
+    if notes_dir:
+        cmd.append(str(notes_dir))
+    done = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=120)
+    if done.returncode != 0:
+        return {"ok": False, "reason": (done.stderr or done.stdout).strip()[-200:] or "build.py failed"}
+    count = len(load_notes())
+    _reset_history()            # indexes may have shifted; old citations are stale
+    return {"ok": True, "count": count, "reload": True}
+
+
+assert set(CONTROL_TAGS) <= set(_tag_handlers), "every CONTROL_TAG needs a @tag_handler"
+
+
+def action_response(tag, arg=""):
+    line, receipt = run_tag(tag, arg)
+    nodes = receipt.get("nodes", []) if receipt["ok"] else []
+    return {"answer": line, "nodes": nodes, "about_notes": bool(nodes),
+            "action": {k: v for k, v in receipt.items() if k in ("tag", "arg", "ok", "reason", "reload", "count")}}
+
+
+def chat(question):
     global _last_nodes
     with _lock:
-        if reset:
-            _history.clear()
-            _last_nodes = []
         key, model = read_config()
 
         about_notes, query = classify(question)
@@ -238,6 +392,19 @@ def chat(question, reset=False):
         # History is kept as plain text (no thinking blocks) and only appended to.
         messages = list(_history) + [{"role": "user", "content": turn}]
         answer, used = parse_answer(call_model(key, model, messages), picked)
+
+        tag, arg = find_tag(answer)
+        if tag:
+            result = action_response(tag, arg)
+            if tag != "RESET":
+                a = result["action"]
+                _history.append({"role": "user", "content": f"Question: {question}"})
+                _history.append({"role": "assistant", "content":
+                                 f"[{tag}{': ' + arg if arg else ''}] RECEIPT ok={str(a['ok']).lower()}"
+                                 f"{' reason=' + a['reason'] if a.get('reason') else ''}"})
+            if result["nodes"]:
+                _last_nodes = result["nodes"]
+            return result
 
         _history.append({"role": "user", "content": f"Question: {question}"})
         _history.append({"role": "assistant", "content": answer})
@@ -272,6 +439,8 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if not self._host_ok():
             return self.send_error(403, "invalid host")
+        if self.path == "/api/boot":
+            return self._json({"greeting": BOOT_GREETING})
         return super().do_GET()
 
     def do_HEAD(self):
@@ -283,7 +452,7 @@ class Handler(SimpleHTTPRequestHandler):
         return self.send_error(404, "not found")
 
     def do_POST(self):
-        if self.path != "/chat":
+        if self.path not in ("/chat", "/action"):
             return self._json({"error": "not found"}, 404)
         origin = self.headers.get("Origin")
         if not self._host_ok() or (origin and origin not in
@@ -300,13 +469,21 @@ class Handler(SimpleHTTPRequestHandler):
         try:
             data = json.loads(self.rfile.read(length))
             question = str(data.get("question", "")).strip()[:2000]
+            tag = str(data.get("tag", "")).strip().upper()
         except (json.JSONDecodeError, AttributeError):
             return self._json({"error": "invalid JSON"}, 400)
+
+        # Buttons and voice commands run the same tags the brain asks for.
+        if self.path == "/action":
+            if tag not in CONTROL_TAGS:
+                return self._json({"error": f"unknown action {tag!r}"}, 400)
+            with _lock:
+                return self._json(action_response(tag, str(data.get("arg", ""))[:200]))
+
         if not question:
             return self._json({"error": "empty question"}, 400)
-
         try:
-            return self._json(chat(question, reset=bool(data.get("reset"))))
+            return self._json(chat(question))
         except ChatError as e:
             return self._json({"error": str(e), "answer": "", "nodes": []}, e.status)
         except Exception as e:  # noqa: BLE001 — never crash the request thread

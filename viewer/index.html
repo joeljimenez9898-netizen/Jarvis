@@ -166,7 +166,7 @@ await new Promise((resolve, reject) => {
   const groups = [...new Set(nodes.map(n => n.group))].sort();
   const colour = Object.fromEntries(groups.map((g, i) => [g, PALETTE[i % PALETTE.length]]));
 
-  $("stats").textContent = `${nodes.length} notes · ${links.length} connections · ${groups.length} groups`;
+  $("stats").textContent = `${nodes.length} notes indexed · ${links.length} connections · ${groups.length} groups`;
   const legend = $("legend");
   groups.forEach(g => {
     const row = document.createElement("div");
@@ -372,12 +372,25 @@ await new Promise((resolve, reject) => {
 
   // ── chat ──────────────────────────────────────────────────────
   const answer = $("answer");
-  let resetNext = false;
+  // Runs a server action (the same tags the brain uses) and only speaks its receipt.
+  async function runAction(tag, arg = "") {
+    try {
+      const res = await fetch("/action", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tag, arg }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      return data;
+    } catch (err) {
+      return { answer: `That did not happen: ${err.message}`, nodes: [], action: { tag, ok: false } };
+    }
+  }
 
-  function newConversation() {
-    resetNext = true;
-    answer.className = "glass";
-    Focus.clear();
+  async function newConversation() {
+    const data = await runAction("RESET");
+    if (data.action.ok) { answer.className = "glass"; Focus.clear(); }
+    Voice.speak(data.answer);
   }
   $("reset").onclick = () => { newConversation(); $("q").focus(); };
 
@@ -403,10 +416,9 @@ await new Promise((resolve, reject) => {
     try {
       const res = await fetch("/chat", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, reset: resetNext }),
+        body: JSON.stringify({ question }),
       });
       const data = await res.json().catch(() => ({ error: `Server returned ${res.status}` }));
-      resetNext = false;
       if (data.error) throw new Error(data.error);
       Voice.setThinking(false);
       answer.className = "glass show";
@@ -415,7 +427,9 @@ await new Promise((resolve, reject) => {
       if (data.about_notes) used.forEach(i => answer.querySelector(".chips").appendChild(chip(i)));
       // Decide the camera first, then talk: the panel is open while the answer is spoken.
       lastFocus = Focus.fromAnswer({ about_notes: !!data.about_notes, nodes: used });
-      Voice.speak(spoken(data.answer));
+      const said = Voice.speak(spoken(data.answer));
+      // A server action that rebuilt the index: new graph data needs a fresh page.
+      if (data.action && data.action.ok && data.action.reload) said.then(() => location.reload());
     } catch (err) {
       Voice.setThinking(false);
       answer.className = "glass show error";
@@ -435,10 +449,7 @@ await new Promise((resolve, reject) => {
 
   // ── voice ─────────────────────────────────────────────────────
   // Commands that never reach the brain. Add more with Voice.addRoute(pattern, handler).
-  Voice.addRoute(/^(?:new conversation|start over|start again|reset)$/, () => {
-    newConversation();
-    Voice.speak("Fresh start.");
-  });
+  Voice.addRoute(/^(?:new conversation|start over|start again|reset)$/, () => newConversation());
   Voice.addRoute(/^(?:close|close (?:the )?panel|go back|zoom out|show (?:me )?everything)$/, () => Focus.clear());
   Voice.addRoute(/^(?:show me|open|go to|fly to) (?:the )?(.+)$/, (m, sentence) => {
     const want = m[1];
@@ -457,8 +468,12 @@ await new Promise((resolve, reject) => {
   });
 
   Voice.init({ ask });
-  // Queued until the first click or key press, then spoken (browsers block audio before that).
-  Voice.speak(`Knowledge galaxy online. ${nodes.length} notes charted. Ask me anything.`);
+  // Boot: one short spoken line from the persona; the real note count goes on screen.
+  // The line is queued until the first click or key press (browsers block audio before that).
+  fetch("/api/boot").then(r => r.json()).then(({ greeting }) => {
+    Voice.setNote(`${greeting} ${nodes.length} notes indexed.`);
+    Voice.speak(greeting);
+  }).catch(() => Voice.setNote(`${nodes.length} notes indexed.`));
 
   window.galaxy = { Graph, Focus, view, get lastFocus() { return lastFocus; } };  // devtools + tests
 
