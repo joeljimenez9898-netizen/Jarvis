@@ -50,6 +50,23 @@ still using the profile is killed, and the folder is deleted. Try it with
 `python3 browser.py https://nodejs.org/en --headless`. Set `JARVIS_TEARDOWN_HEADLESS=1` to keep
 teardown windows off your screen.
 
+Each teardown captures five kinds of evidence. Every line is labelled with who captured it:
+REA, Jarvis's own browser reads, or Jarvis scanning the code REA captured.
+
+1. **Watch while scrolling** (REA). `inspect-web-page` runs for 7 s with script sources included,
+   while Jarvis scrolls 16 wheel steps, so scroll effects and lazy-loaded files fire while REA watches.
+2. **Read the code** (REA, plus a Jarvis scan). `analyze-web-bundle` reports which file loads which,
+   and the routes. Jarvis then scans the captured code for the names it hands the graphics card
+   (`nearCoCBuffer` means depth of field) and the effect names it registers (`BloomEffect`).
+3. **Snapshot** (REA). Jarvis wheels back to the top, then REA runs `capture-web-screenshot`. The PNG
+   is saved in `~/.jarvis-tools/rea/evidence/<job>/`.
+4. **Asset log** (Jarvis browser). Every file from every origin, read from the browser's own timeline:
+   sizes, grouped by kind, the 12 largest. Files whose server hides their size are counted, not guessed.
+5. **Fingerprints** (Jarvis scan). License banners in comments (three.js revision, GSAP, postprocessing,
+   …) plus code markers. They live in one table in `evidence.py`, ordered 3D engine, animation, smooth
+   scroll, effects, compression, then build tools. Runtime globals such as `window.__THREE__`
+   corroborate them.
+
 To upgrade REA, change `PINNED_REA` in
 `teardown.py` and re-run the install with the new version. Nothing ever installs "latest".
 

@@ -486,10 +486,45 @@ def teardown_live():
     a = data.get("action") or {}
     if status != 200 or not data.get("ok"):
         raise Fail(f"{data.get('answer') or data}")
-    if a.get("title") != "Knowledge Galaxy" or not a.get("evidence_id"):
-        raise Fail(f"observed the wrong page or no evidence: title={a.get('title')!r}, evidence={a.get('evidence_id')}")
-    return (f"{a['title']}: loaded in {a['load_seconds']}s; {a['scripts']} scripts, {a['resources']} resources, "
-            f"{a['dom_nodes']} DOM nodes (evidence {a['evidence_id'][:14]}…)")
+    if a.get("title") != "Knowledge Galaxy" or not a.get("evidence_dir"):
+        raise Fail(f"observed the wrong page or no evidence: title={a.get('title')!r}, dir={a.get('evidence_dir')}")
+    folder = pathlib.Path(a["evidence_dir"])
+    try:
+        ev = json.loads((folder / "evidence.json").read_text())
+        problems = evidence_problems(ev, folder)
+    finally:
+        import shutil
+        shutil.rmtree(folder, ignore_errors=True)       # preflight's own test evidence
+    if problems:
+        raise Fail("evidence incomplete or unattributed: " + "; ".join(problems))
+    return (f"{a['title']}: loaded in {a['load_seconds']}s; 5 steps captured, every line attributed "
+            f"({len(ev['scripts'])} scripts, {ev['assets']['files']} files, screenshot "
+            f"{ev['screenshot']['width']}x{ev['screenshot']['height']})")
+
+
+def evidence_problems(ev, folder):
+    """The five steps are all there, and every line says who captured it."""
+    who = {"REA", "Jarvis browser", "Jarvis scan of REA-captured code"}
+    problems = []
+    if (ev.get("target") or {}).get("by") != "REA":
+        problems.append("1: no REA target")
+    if not ev.get("scripts") or any(x.get("by") != "REA" for x in ev["scripts"]):
+        problems.append("1: scripts missing or not attributed to REA")
+    if not isinstance(ev.get("routes"), list) or any(x.get("by") != "REA" for x in ev.get("loads", [])):
+        problems.append("2: routes/loads missing or misattributed")
+    if (ev.get("gpu") or {}).get("by") != "Jarvis scan of REA-captured code":
+        problems.append("2: GPU strings missing or misattributed")
+    shot = ev.get("screenshot") or {}
+    png = folder / "screenshot.png"
+    if shot.get("by") != "REA" or not png.is_file() or not png.read_bytes().startswith(b"\x89PNG"):
+        problems.append("3: no decoded PNG screenshot from REA")
+    assets = ev.get("assets") or {}
+    if assets.get("by") != "Jarvis browser" or not assets.get("files") or \
+            any(f.get("by") != "Jarvis browser" for f in assets.get("all", [])):
+        problems.append("4: asset log missing or misattributed")
+    if any(r.get("by") not in who for r in ev.get("stack", []) + ev.get("other_banners", [])):
+        problems.append("5: fingerprint rows without attribution")
+    return problems
 
 
 @check("Owned browser: a public page opens, loads, scrolls and closes clean")

@@ -307,7 +307,9 @@ class OwnedBrowser:
                 # an observation browser shouldn't phone home: no updates, sync or prefetch
                 "--disable-background-networking", "--disable-component-update", "--disable-sync"]
         if self.headless:
-            args.append("--headless=new")
+            # Headless has no GPU; without software GL a 3D site would show its no-WebGL
+            # fallback and the teardown would be of the wrong page. Windowed runs use the GPU.
+            args += ["--headless=new", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"]
         if platform.system() == "Linux" and hasattr(os, "geteuid") and os.geteuid() == 0:
             args.append("--no-sandbox")                     # Chrome refuses to run as root otherwise
         args.append(self.url)

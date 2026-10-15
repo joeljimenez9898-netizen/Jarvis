@@ -33,3 +33,6 @@ call against the running system, not a mock.
   always closed with the profile folder deleted. `DevToolsSocket` allows only
   Runtime.evaluate (read-only) and Input.dispatchMouseEvent of type mouseWheel. Tests run it
   with `headless=True`.
+- Teardown evidence (`evidence.py`) labels every item with `by`: "REA", "Jarvis browser", or
+  "Jarvis scan of REA-captured code". Never merge or relabel them. Fingerprint patterns live
+  in the one `FINGERPRINTS` table, and banner patterns only match inside comments.

@@ -39,6 +39,7 @@ import urllib.request
 PINNED_REA = "6.5.0"
 REA_HOME = pathlib.Path(os.environ.get("JARVIS_TOOLS", "~/.jarvis-tools")).expanduser() / "rea"
 REA_SCRIPT = REA_HOME / "node_modules" / "rea-agents" / "scripts" / "rea.mjs"
+EVIDENCE_DIR = REA_HOME / "evidence"        # screenshots and evidence.json, one folder per job
 INSTALL_CMD = (f"mkdir -p ~/.jarvis-tools/rea && cd ~/.jarvis-tools/rea && "
                f"npm install rea-agents@{PINNED_REA} --save-exact --ignore-scripts")
 
@@ -299,32 +300,20 @@ def teardown(url, headless=False):
         raise NotReady(info["fix"])          # then say what to install
     url = check_url(url)                     # then where it really resolves
     from browser import OwnedBrowser
+    import evidence
     with OwnedBrowser(url, headless=headless, chrome=info["chrome"]["path"]) as page:
-        landed = page.target.get("url", url)
-        check_url(landed)                    # a redirect must not land somewhere off-limits
-        facts = page.evaluate("({title: document.title, height: document.documentElement.scrollHeight,"
-                              " images: document.images.length, links: document.links.length})")
-        evidence = run_rea("inspect-web-page", page.endpoint, page.target_id,
-                           "--observation-ms", str(OBSERVE_MS))
-        load_seconds, job_id = page.load_seconds, page.job_id
-    result = evidence.get("normalized_result") or {}
-    target = result.get("target") or {}
-    scripts = (result.get("scripts") or {}).get("total", 0)
+        check_url(page.target.get("url", url))   # a redirect must not land somewhere off-limits
+        ev = evidence.capture(page, run_rea, EVIDENCE_DIR / page.job_id)
+    stack = ", ".join(f"{r['name']} {r['version']}" if r.get("version") else r["name"]
+                      for r in ev["stack"] if r["layer"] in ("3D engine", "animation", "smooth scroll",
+                                                             "visual effects")) or "nothing I recognise"
     summary = {
-        "title": target.get("title") or "",
-        "url": target.get("url") or landed,
-        "origin": target.get("origin") or "",
-        "dom_nodes": (result.get("dom") or {}).get("total_nodes", 0),
-        "scripts": scripts,
-        "resources": len(result.get("resources") or []),
-        "requests_seen": len((result.get("network") or {}).get("requests") or []),
-        "frames": len(result.get("frames") or []),
-        "storage_keys": len((result.get("storage") or {}).get("local_storage_keys") or []),
-        "load_seconds": load_seconds,
-        "page_height": facts.get("height"),
-        "images": facts.get("images"),
-        "job_id": job_id,
-        "limitations": evidence.get("limitations", [])[:3],
+        "title": "", "url": ev["url"], "origin": "{0.scheme}://{0.netloc}".format(urllib.parse.urlsplit(ev["url"])),
+        "scripts": len(ev["scripts"]), "resources": len(ev["rea_resources"]), "dom_nodes": ev["rea_dom_nodes"],
+        "assets": ev["assets"]["files"], "asset_bytes": ev["assets"]["bytes"], "stack": stack,
+        "routes": len(ev["routes"]), "load_seconds": ev["load_seconds"], "job_id": ev["job_id"],
+        "evidence_dir": str(EVIDENCE_DIR / ev["job_id"]), "screenshot": ev["screenshot"]["path"],
     }
+    summary["title"] = ev.get("title") or summary["origin"]
     return {"url": summary["url"], "title": summary["title"], "origin": summary["origin"],
-            "summary": summary, "evidence_id": evidence.get("evidence_id"), "evidence": evidence}
+            "summary": summary, "evidence_id": ev["job_id"], "evidence": ev, "digest": evidence.digest(ev)}

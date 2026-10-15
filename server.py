@@ -39,8 +39,8 @@ RECEIPT_LINES = {
                 "fail": "I can find no note called {title}, sir. I'd rather say so than guess."},
     "REINDEX": {"ok": "Re-indexed. {count} notes on file; the galaxy will redraw itself.",
                 "fail": "The re-index did not happen: {reason}."},
-    "TEARDOWN": {"ok": "I've looked {title} over, sir: {scripts} scripts, {resources} resources and "
-                       "{dom_nodes} elements, and I touched nothing.",
+    "TEARDOWN": {"ok": "I've looked {title} over, sir: built on {stack}, {scripts} scripts and "
+                       "{assets} files, and I touched nothing.",
                  "missing": "The workshop isn't fitted out yet, sir: {fix}.",
                  "refused": "I won't point the kit at that, sir: {reason}.",
                  "fail": "The teardown fell over, I'm afraid: {reason}."},
@@ -546,7 +546,8 @@ def action_response(tag, arg="", **opts):
             "action": {k: v for k, v in receipt.items() if k in (
                 "tag", "arg", "ok", "reason", "reload", "count", "line", "fix", "title", "url", "origin",
                 "scripts", "resources", "dom_nodes", "requests_seen", "frames", "evidence_id",
-                "load_seconds", "page_height", "images", "job_id")}}
+                "load_seconds", "page_height", "images", "job_id", "stack", "assets", "asset_bytes",
+                "routes", "evidence_dir", "screenshot")}}
 
 
 def select_notes(question):
