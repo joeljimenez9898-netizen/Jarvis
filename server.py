@@ -1087,7 +1087,8 @@ class Handler(SimpleHTTPRequestHandler):
         if url.path == "/teardown/diag":
             return self._json(bay_diag())
         if url.path == "/teardown/job":
-            job = _jobs.get(query.get("id", [""])[0]) or _current_job
+            asked = query.get("id", [None])[0]
+            job = _jobs.get(asked) if asked is not None else _current_job   # an unknown id is a 404
             return self._json(job.to_json() if job else {"error": "no teardown yet"}, 200 if job else 404)
         if url.path.startswith("/api/teardowns/"):
             return self._teardown_api(url.path, query)
