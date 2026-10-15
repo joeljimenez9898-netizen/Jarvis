@@ -29,3 +29,7 @@ call against the running system, not a mock.
 - The teardown bay (REA) only observes: `teardown.ALLOWED_COMMANDS` holds passive website
   commands only, and `check_url()` keeps it to websites the user may look at. REA is pinned
   in `teardown.PINNED_REA` and never installed as "latest" at runtime.
+- Teardowns use `browser.OwnedBrowser` only: a fresh profile per job, loopback port 9333,
+  always closed with the profile folder deleted. `DevToolsSocket` allows only
+  Runtime.evaluate (read-only) and Input.dispatchMouseEvent of type mouseWheel. Tests run it
+  with `headless=True`.

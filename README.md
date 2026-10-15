@@ -40,7 +40,17 @@ and what's missing. Say "tear down example.com", or `POST /teardown {"url": ...}
 The law, enforced in `teardown.py`: only REA's passive website commands may run. Pages open in
 a headless Chrome with a fresh profile (no logins, no cookies), and nothing sends input.
 Addresses must be http(s), with no credentials and no private-network or cloud-metadata
-hosts. Localhost is allowed, for your own projects. To upgrade REA, change `PINNED_REA` in
+hosts. Localhost is allowed, for your own projects. Teardowns run in a browser Jarvis owns (`browser.py`, standard library only). Each job gets a
+brand-new Chrome profile in `~/.jarvis-tools/rea/profiles/<job id>`, so it never touches your
+everyday Chrome, cookies or logins. A fresh profile also means no cache, so file sizes are
+honest. Chrome listens on 127.0.0.1:9333 at 1280×820. Jarvis waits for the page to finish
+loading plus 2.5 seconds for intro animations. Its small DevTools client does two things only:
+read page facts and send mouse-wheel scrolls. When the job ends, Chrome is closed, anything
+still using the profile is killed, and the folder is deleted. Try it with
+`python3 browser.py https://nodejs.org/en --headless`. Set `JARVIS_TEARDOWN_HEADLESS=1` to keep
+teardown windows off your screen.
+
+To upgrade REA, change `PINNED_REA` in
 `teardown.py` and re-run the install with the new version. Nothing ever installs "latest".
 
 ## Preflight

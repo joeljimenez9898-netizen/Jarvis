@@ -482,13 +482,53 @@ def teardown_live():
     if not (CTX.get("bay") or {}).get("ready"):
         raise Warn("skipped: the bay isn't ready (see above)")
     # Our own project is a page we may always look at, and it needs no internet.
-    status, data = post_json("/teardown", {"url": BASE + "/"}, timeout=180)
+    status, data = post_json("/teardown", {"url": BASE + "/", "headless": True}, timeout=180)
     a = data.get("action") or {}
     if status != 200 or not data.get("ok"):
         raise Fail(f"{data.get('answer') or data}")
     if a.get("title") != "Knowledge Galaxy" or not a.get("evidence_id"):
         raise Fail(f"observed the wrong page or no evidence: title={a.get('title')!r}, evidence={a.get('evidence_id')}")
-    return f"{a['title']}: {a['scripts']} scripts, {a['resources']} resources, {a['dom_nodes']} DOM nodes (evidence {a['evidence_id'][:14]}…)"
+    return (f"{a['title']}: loaded in {a['load_seconds']}s; {a['scripts']} scripts, {a['resources']} resources, "
+            f"{a['dom_nodes']} DOM nodes (evidence {a['evidence_id'][:14]}…)")
+
+
+@check("Owned browser: a public page opens, loads, scrolls and closes clean")
+def owned_browser_public():
+    if not (CTX.get("bay") or {}).get("ready"):
+        raise Warn("skipped: the bay isn't ready")
+    sys.path.insert(0, str(ROOT))
+    import browser
+    url = os.environ.get("PREFLIGHT_PUBLIC_URL", "https://nodejs.org/en")
+    b = browser.OwnedBrowser(url, headless=True)
+    try:
+        with b:
+            title, seconds = b.title, b.load_seconds
+            y0 = b.evaluate("window.scrollY")
+            b.scroll(400, steps=3)
+            time.sleep(0.5)
+            moved = b.evaluate("window.scrollY") - y0
+    except browser.BrowserError as e:
+        if "didn't load" in str(e) or "didn't finish" in str(e):
+            raise Warn(f"couldn't reach {url} (no internet? set PREFLIGHT_PUBLIC_URL): {e}")
+        raise Fail(str(e))
+    r = b.cleanup_report or {}
+    if r.get("leftover") or not r.get("folder_removed"):
+        raise Fail(f"browser NOT cleaned up: {r}")
+    if moved <= 0:
+        raise Warn(f"{title!r} loaded in {seconds}s but wheel scrolling didn't move it")
+    return f"{title!r} loaded in {seconds}s, wheel-scrolled {moved}px, closed; profile deleted"
+
+
+@check("No Chrome left behind: no process holds a Jarvis profile, no profile folders remain")
+def no_chrome_left():
+    sys.path.insert(0, str(ROOT))
+    import browser
+    holders = browser.processes_using(browser.PROFILES)
+    leftovers = [p.name for p in browser.PROFILES.iterdir()] if browser.PROFILES.exists() else []
+    if holders or leftovers:
+        raise Fail(f"Chrome processes still using {browser.PROFILES}: {holders or 'none'}; "
+                   f"leftover profile folders: {leftovers or 'none'}")
+    return f"0 processes, 0 folders in {browser.PROFILES}"
 
 
 # ── runner ──────────────────────────────────────────────────────────

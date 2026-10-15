@@ -94,6 +94,7 @@ SYSTEM_PROMPT = PERSONA.replace("{tags}", "\n".join(
 import datetime
 import hashlib
 import json
+import os
 import pathlib
 import re
 import subprocess
@@ -451,14 +452,14 @@ def find_tag(text):
     return (m.group(1), "") if m else (None, "")     # unknown bare tag -> UNKNOWN
 
 
-def run_tag(tag, arg=""):
+def run_tag(tag, arg="", **opts):
     """Execute a tag. Returns (spoken line, receipt). Caller holds _lock."""
     handler = _tag_handlers.get(tag)
     if tag not in CONTROL_TAGS or handler is None:
         receipt = {"tag": tag, "ok": False, "reason": "no such action"}
         return RECEIPT_LINES["UNKNOWN"]["fail"], receipt
     try:
-        receipt = handler(arg)
+        receipt = handler(arg, **opts)
     except Exception as e:  # noqa: BLE001 — a failed action is reported, not raised
         receipt = {"ok": False, "reason": str(e) or e.__class__.__name__}
     receipt = {"tag": tag, "arg": arg, **receipt}
@@ -516,12 +517,15 @@ def bay_diag():
     return bay.diag()
 
 
+TEARDOWN_HEADLESS = os.environ.get("JARVIS_TEARDOWN_HEADLESS") == "1"
+
+
 @tag_handler("TEARDOWN")
-def _tag_teardown(arg):
+def _tag_teardown(arg, headless=None):
     if bay is None:
         return {"ok": False, "line": "missing", "fix": "the teardown bay (teardown.py) isn't loaded"}
     try:
-        result = bay.teardown(arg)
+        result = bay.teardown(arg, headless=TEARDOWN_HEADLESS if headless is None else headless)
     except bay.LawError as e:
         return {"ok": False, "line": "refused", "reason": str(e)}
     except bay.NotReady as e:
@@ -535,13 +539,14 @@ def _tag_teardown(arg):
 assert set(CONTROL_TAGS) <= set(_tag_handlers), "every CONTROL_TAG needs a @tag_handler"
 
 
-def action_response(tag, arg=""):
-    line, receipt = run_tag(tag, arg)
+def action_response(tag, arg="", **opts):
+    line, receipt = run_tag(tag, arg, **opts)
     nodes = receipt.get("nodes", []) if receipt["ok"] else []
     return {"answer": line, "nodes": nodes, "about_notes": bool(nodes),
             "action": {k: v for k, v in receipt.items() if k in (
                 "tag", "arg", "ok", "reason", "reload", "count", "line", "fix", "title", "url", "origin",
-                "scripts", "resources", "dom_nodes", "requests_seen", "frames", "evidence_id")}}
+                "scripts", "resources", "dom_nodes", "requests_seen", "frames", "evidence_id",
+                "load_seconds", "page_height", "images", "job_id")}}
 
 
 def select_notes(question):
@@ -673,7 +678,8 @@ class Handler(SimpleHTTPRequestHandler):
 
         if self.path == "/teardown":
             # Same handler the brain's [TEARDOWN: ...] tag uses; no lock (it doesn't touch history).
-            result = action_response("TEARDOWN", str(data.get("url", ""))[:500])
+            result = action_response("TEARDOWN", str(data.get("url", ""))[:500],
+                                     headless=bool(data["headless"]) if "headless" in data else None)
             return self._json({"ok": result["action"]["ok"], **result})
 
         if self.path == "/api/recall":

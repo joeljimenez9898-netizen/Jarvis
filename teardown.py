@@ -17,8 +17,9 @@ THE LAW
     * check_url(): http(s) only; no credentials in the URL; no private-network,
       link-local or cloud-metadata addresses. Loopback is allowed for the user's
       own projects running locally.
-    * Chrome runs headless with a fresh throwaway profile: no cookies, no logins,
-      no extensions. Jarvis opens the page and REA watches; nothing sends input.
+    * browser.OwnedBrowser: Chrome with a fresh throwaway profile per job (no cookies,
+      no logins, no extensions), loopback DevTools only, always closed and deleted.
+      The only input ever sent is mouse-wheel scrolling; no clicks, no typing.
 """
 import glob
 import ipaddress
@@ -53,7 +54,6 @@ ALLOWED_COMMANDS = {
     "discover-webmcp-tools",    # tools the page itself declares
 }
 
-PAGE_SETTLE_S = 4.0         # let the page load before REA attaches
 OBSERVE_MS = 1500           # how long REA watches
 REA_TIMEOUT_S = 120
 
@@ -230,6 +230,14 @@ def parse_url(url):
     return urllib.parse.urlunsplit(parts)
 
 
+def _is_ip(host):
+    try:
+        ipaddress.ip_address(host)
+        return True
+    except ValueError:
+        return False
+
+
 def check_url(url):
     """The whole law: syntax, then where the host actually resolves. Returns the URL."""
     url = parse_url(url)
@@ -238,7 +246,12 @@ def check_url(url):
     try:
         infos = socket.getaddrinfo(host, parts.port or (443 if parts.scheme == "https" else 80))
     except socket.gaierror:
-        raise LawError(f"{host} doesn't resolve to anything")
+        # Behind an HTTPS proxy that resolves names itself (common in sandboxes), local DNS
+        # can fail for real public sites. The proxy can't reach this machine's private
+        # network, and the landed URL is checked again after loading.
+        if _is_ip(host) or not (os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")):
+            raise LawError(f"{host} doesn't resolve to anything")
+        return url
     for info in infos:
         ip = ipaddress.ip_address(info[4][0])
         if ip.is_loopback:
@@ -276,82 +289,24 @@ def run_rea(command, *args, timeout=REA_TIMEOUT_S):
 
 # ── one teardown ──────────────────────────────────────────────────
 
-def _free_port():
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
-
-
-def _cdp(port, path, method="GET"):
-    req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", method=method)
-    with urllib.request.urlopen(req, timeout=5) as r:
-        return json.loads(r.read())
-
-
-class HeadlessChrome:
-    """Chrome on a loopback debugging port with a throwaway profile; removed on exit."""
-
-    def __init__(self, chrome):
-        self.chrome, self.port, self.proc, self.profile = chrome, _free_port(), None, None
-
-    def __enter__(self):
-        self.profile = tempfile.mkdtemp(prefix="jarvis-chrome-")
-        args = [self.chrome, "--headless=new", "--remote-debugging-address=127.0.0.1",
-                f"--remote-debugging-port={self.port}", f"--user-data-dir={self.profile}",
-                "--no-first-run", "--no-default-browser-check", "--disable-extensions",
-                "--disable-sync", "--mute-audio", "--disable-background-networking"]
-        if platform.system() == "Linux" and hasattr(os, "geteuid") and os.geteuid() == 0:
-            args.append("--no-sandbox")      # Chrome refuses to run as root otherwise
-        self.proc = subprocess.Popen(args + ["about:blank"], stdout=subprocess.DEVNULL,
-                                     stderr=subprocess.DEVNULL)
-        deadline = time.monotonic() + 15
-        while time.monotonic() < deadline:
-            if self.proc.poll() is not None:
-                raise RuntimeError(f"Chrome exited at startup (code {self.proc.returncode})")
-            try:
-                _cdp(self.port, "/json/version")
-                return self
-            except OSError:
-                time.sleep(0.2)
-        raise RuntimeError("Chrome didn't open its debugging port in time")
-
-    def open(self, url):
-        target = _cdp(self.port, "/json/new?" + urllib.parse.quote(url, safe=":/?&=%#"), method="PUT")
-        return target["id"]
-
-    def target(self, target_id):
-        return next((t for t in _cdp(self.port, "/json/list") if t.get("id") == target_id), None)
-
-    @property
-    def endpoint(self):
-        return f"http://127.0.0.1:{self.port}"
-
-    def __exit__(self, *exc):
-        if self.proc and self.proc.poll() is None:
-            self.proc.terminate()
-            try:
-                self.proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.proc.kill()
-        if self.profile:
-            shutil.rmtree(self.profile, ignore_errors=True)
-
-
-def teardown(url):
+def teardown(url, headless=False):
     """Observe one website. Returns {"url", "title", "origin", "summary", "evidence"}.
+    headless=True runs the same browser with no window (tests).
     Raises LawError (refused), NotReady (missing tooling) or RuntimeError (it broke)."""
     url = parse_url(url)                     # refuse the obviously off-limits first
     info = diag()
     if not info["ready"]:
         raise NotReady(info["fix"])          # then say what to install
     url = check_url(url)                     # then where it really resolves
-    with HeadlessChrome(info["chrome"]["path"]) as chrome:
-        target_id = chrome.open(url)
-        time.sleep(PAGE_SETTLE_S)
-        landed = (chrome.target(target_id) or {}).get("url", url)
+    from browser import OwnedBrowser
+    with OwnedBrowser(url, headless=headless, chrome=info["chrome"]["path"]) as page:
+        landed = page.target.get("url", url)
         check_url(landed)                    # a redirect must not land somewhere off-limits
-        evidence = run_rea("inspect-web-page", chrome.endpoint, target_id,
+        facts = page.evaluate("({title: document.title, height: document.documentElement.scrollHeight,"
+                              " images: document.images.length, links: document.links.length})")
+        evidence = run_rea("inspect-web-page", page.endpoint, page.target_id,
                            "--observation-ms", str(OBSERVE_MS))
+        load_seconds, job_id = page.load_seconds, page.job_id
     result = evidence.get("normalized_result") or {}
     target = result.get("target") or {}
     scripts = (result.get("scripts") or {}).get("total", 0)
@@ -365,6 +320,10 @@ def teardown(url):
         "requests_seen": len((result.get("network") or {}).get("requests") or []),
         "frames": len(result.get("frames") or []),
         "storage_keys": len((result.get("storage") or {}).get("local_storage_keys") or []),
+        "load_seconds": load_seconds,
+        "page_height": facts.get("height"),
+        "images": facts.get("images"),
+        "job_id": job_id,
         "limitations": evidence.get("limitations", [])[:3],
     }
     return {"url": summary["url"], "title": summary["title"], "origin": summary["origin"],
