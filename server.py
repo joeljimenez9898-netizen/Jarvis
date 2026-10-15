@@ -136,8 +136,9 @@ tell much many also than just more most should been being over under up out""".s
 
 # Fingerprint of the code this process loaded. preflight.py compares it with the files
 # on disk to catch a server that was never restarted after an edit.
+CODE_MODULES = ("server.py", "build.py", "teardown.py", "browser.py", "evidence.py")
 CODE_SHA = hashlib.sha256(b"".join(
-    (ROOT / f).read_bytes() for f in ("server.py", "build.py"))).hexdigest()[:16]
+    (ROOT / f).read_bytes() for f in CODE_MODULES if (ROOT / f).exists())).hexdigest()[:16]
 
 _lock = threading.Lock()
 _history = deque(maxlen=HISTORY_TURNS * 2)

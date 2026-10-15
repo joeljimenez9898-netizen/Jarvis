@@ -128,8 +128,9 @@ def parse_graph(raw):
 
 def code_sha():
     # Same recipe as server.CODE_SHA.
+    files = ("server.py", "build.py", "teardown.py", "browser.py", "evidence.py")
     return hashlib.sha256(b"".join((ROOT / f).read_bytes()
-                                   for f in ("server.py", "build.py"))).hexdigest()[:16]
+                                   for f in files if (ROOT / f).exists())).hexdigest()[:16]
 
 
 # ── the checks, in order ────────────────────────────────────────────
