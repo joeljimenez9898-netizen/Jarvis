@@ -63,6 +63,10 @@ class LawError(Exception):
     """Refused: outside what REA is allowed to do or look at."""
 
 
+class Cancelled(Exception):
+    """The user cancelled the teardown."""
+
+
 class NotReady(Exception):
     """The bay is missing something. .fix is one short instruction."""
     def __init__(self, fix):
@@ -262,8 +266,9 @@ def check_url(url):
     return url
 
 
-def run_rea(command, *args, timeout=REA_TIMEOUT_S):
-    """Run one REA command and return its parsed JSON. Only ALLOWED_COMMANDS."""
+def run_rea(command, *args, timeout=REA_TIMEOUT_S, cancel=None):
+    """Run one REA command and return its parsed JSON. Only ALLOWED_COMMANDS.
+    `cancel` (a threading.Event) kills REA mid-run."""
     if command not in ALLOWED_COMMANDS:
         raise LawError(f"REA command {command!r} is not an observation command")
     info = diag()
@@ -276,8 +281,21 @@ def run_rea(command, *args, timeout=REA_TIMEOUT_S):
         if os.environ.get(keep):
             env[keep] = os.environ[keep]
     with tempfile.TemporaryDirectory(prefix="jarvis-rea-") as cwd:
-        done = subprocess.run([node, str(REA_SCRIPT), command, *args, "--json"], cwd=cwd, env=env,
-                              capture_output=True, text=True, timeout=timeout)
+        proc = subprocess.Popen([node, str(REA_SCRIPT), command, *args, "--json"], cwd=cwd, env=env,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                out, err = proc.communicate(timeout=0.5)
+                break
+            except subprocess.TimeoutExpired:
+                if (cancel and cancel.is_set()) or time.monotonic() > deadline:
+                    proc.kill()
+                    proc.communicate()
+                    if cancel and cancel.is_set():
+                        raise Cancelled()
+                    raise RuntimeError(f"REA {command} took longer than {timeout}s")
+        done = subprocess.CompletedProcess(proc.args, proc.returncode, out, err)
     try:
         data = json.loads(done.stdout)
     except json.JSONDecodeError:
@@ -290,9 +308,11 @@ def run_rea(command, *args, timeout=REA_TIMEOUT_S):
 
 # ── one teardown ──────────────────────────────────────────────────
 
-def teardown(url, headless=False):
+def teardown(url, headless=False, step=None, cancel=None):
     """Observe one website. Returns {"url", "title", "origin", "summary", "evidence"}.
     headless=True runs the same browser with no window (tests).
+    step(name) reports progress: open, load, watch, read, snapshot, assets, stack.
+    cancel (threading.Event) stops it at the next step, or kills REA mid-command.
     Raises LawError (refused), NotReady (missing tooling) or RuntimeError (it broke)."""
     url = parse_url(url)                     # refuse the obviously off-limits first
     info = diag()
@@ -301,9 +321,19 @@ def teardown(url, headless=False):
     url = check_url(url)                     # then where it really resolves
     from browser import OwnedBrowser
     import evidence
-    with OwnedBrowser(url, headless=headless, chrome=info["chrome"]["path"]) as page:
+
+    def at(name):
+        if cancel and cancel.is_set():
+            raise Cancelled()
+        if step:
+            step(name)
+
+    def rea(*a, **k):
+        return run_rea(*a, cancel=cancel, **k)
+
+    with OwnedBrowser(url, headless=headless, chrome=info["chrome"]["path"], on_step=at) as page:
         check_url(page.target.get("url", url))   # a redirect must not land somewhere off-limits
-        ev = evidence.capture(page, run_rea, EVIDENCE_DIR / page.job_id)
+        ev = evidence.capture(page, rea, EVIDENCE_DIR / page.job_id, step=at)
     stack = ", ".join(f"{r['name']} {r['version']}" if r.get("version") else r["name"]
                       for r in ev["stack"] if r["layer"] in ("3D engine", "animation", "smooth scroll",
                                                              "visual effects")) or "nothing I recognise"

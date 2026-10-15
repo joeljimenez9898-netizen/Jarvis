@@ -294,9 +294,11 @@ def gpu_strings(scripts):
             "effects": sorted(effects)}
 
 
-def capture(page, run_rea, out_dir):
+def capture(page, run_rea, out_dir, step=None):
     """Run the five steps on an OwnedBrowser `page`. Saves the screenshot and the full
-    evidence JSON in out_dir. Returns the evidence dict."""
+    evidence JSON in out_dir. Returns the evidence dict. step(name) is called as each
+    stage begins: "watch", "read", "snapshot", "assets", "stack"."""
+    step = step or (lambda name: None)
     out_dir = pathlib.Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     ep = page.endpoint
@@ -307,6 +309,7 @@ def capture(page, run_rea, out_dir):
     ev["timings_s"] = timings
 
     # 1. WATCH WHILE SCROLLING
+    step("watch")
     targets = run_rea("list-browser-targets", ep)
     found = (targets.get("normalized_result") or {}).get("targets") or []
     target_id = next((t["target_id"] for t in found if t.get("target_id") == page.target_id),
@@ -340,6 +343,7 @@ def capture(page, run_rea, out_dir):
 
     timings["watch"] = round(time.monotonic() - _t, 1); _t = time.monotonic()
     # 2. READ THE CODE
+    step("read")
     bundle = run_rea("analyze-web-bundle", ep, target_id, timeout=180)
     br = bundle.get("normalized_result") or {}
     obs = br.get("observations") or {}
@@ -364,6 +368,7 @@ def capture(page, run_rea, out_dir):
 
     timings["read_code"] = round(time.monotonic() - _t, 1); _t = time.monotonic()
     # 3. SNAPSHOT (back to the top with the wheel first)
+    step("snapshot")
     for _ in range(60):
         if (page.evaluate("window.scrollY") or 0) <= 0:
             break
@@ -382,10 +387,12 @@ def capture(page, run_rea, out_dir):
 
     timings["snapshot"] = round(time.monotonic() - _t, 1); _t = time.monotonic()
     # 4. THE ASSET LOG (Jarvis's own browser read; REA saw only its origin, from when it attached)
+    step("assets")
     ev["assets"] = asset_log(page)
 
     timings["asset_log"] = round(time.monotonic() - _t, 1); _t = time.monotonic()
     # 5. FINGERPRINTS
+    step("stack")
     runtime = page.evaluate(RUNTIME_PROBE)
     ev["runtime_globals"] = {"by": JARVIS_BROWSER, **(runtime or {})}
     ev["stack"], ev["other_banners"] = fingerprints(scripts, runtime)
@@ -466,6 +473,9 @@ LIMITS = [
 ]
 
 
+DIGEST_TAG = {REA: "[REA]", JARVIS_BROWSER: "[Jarvis browser]", JARVIS_SCAN: "[Jarvis scan]"}
+
+
 def brain_digest(ev, question):
     host = urllib.parse.urlsplit(ev["url"]).hostname or ev["url"]
     page_origin = "{0.scheme}://{0.netloc}".format(urllib.parse.urlsplit(ev["url"]))
@@ -499,8 +509,8 @@ def brain_digest(ev, question):
         [f"[Jarvis scan] {s['meaning']}: {', '.join(s['names'][:5])}" for s in g["signals"]]
         + ([f"[Jarvis scan] hand-written uniforms: {', '.join(g['custom_named'])}"] if g["custom_named"] else [])
         + ([f"[Jarvis scan] effect names in code: {', '.join(g['effects'])}"] if g.get("effects") else []), cap=20)
-    sec("STACK", [f"[{r['by']}] {r['layer']}: {r['name']} {r['version'] or '(no version in banner)'}"
-                  + (f" — runtime agrees: {r['runtime']['version']} [{r['runtime']['by']}]" if r.get("runtime") else "")
+    sec("STACK", [f"{DIGEST_TAG[r['by']]} {r['layer']}: {r['name']} {r['version'] or '(no version in banner)'}"
+                  + (f" — runtime agrees: {r['runtime']['version']} {DIGEST_TAG[r['runtime']['by']]}" if r.get("runtime") else "")
                   + (f" — found in {r['file']}" if r.get("file") else "")
                   for r in ev["stack"]] or ["[Jarvis scan] no known banners or markers"])
     if ev.get("rea_vendors"):

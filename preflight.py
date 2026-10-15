@@ -453,6 +453,38 @@ def teardown_ready():
     return f"REA {rea['installed']} (pinned {rea['pinned']}), Node {node.get('version')}, Chrome: {chrome.get('path')}"
 
 
+@check("Teardown kit offline checks: addresses, fingerprints, attribution, containment")
+def kit_offline():
+    sys.path.insert(0, str(ROOT))
+    import kitcheck
+    results = kitcheck.run()
+    failed = [f"{n}: {d}" for n, ok, d in results if ok is False]
+    skipped = [f"{n}: {d}" for n, ok, d in results if ok is None]
+    if failed:
+        raise Fail("; ".join(failed))
+    if skipped:
+        raise Warn("; ".join(skipped))
+    return f"{len(results)} offline checks pass"
+
+
+@check("Teardown endpoints refuse anything outside the teardowns folder")
+def teardown_endpoints_contained():
+    cfg = load_config()
+    secrets_in = [x.encode() for x in (str(cfg.get("anthropic_api_key", "")), "anthropic_api_key") if x]
+    probes = ["/api/teardowns/note?index=../config.json", "/api/teardowns/snapshot?index=../config.json",
+              "/api/teardowns/note?index=..%2F..%2Fconfig.json", "/api/teardowns/snapshot?index=-1",
+              "/api/teardowns/note?index=0", "/api/teardowns/../../config.json",
+              "/api/teardowns/%2e%2e/%2e%2e/config.json", "/teardown/job?id=../../config.json"]
+    leaks = []
+    for path in probes:
+        status, body = raw_get(path)
+        if status == 200 or any(x in body for x in secrets_in):
+            leaks.append(f"{path} -> HTTP {status}" + (" WITH THE KEY" if any(x in body for x in secrets_in) else ""))
+    if leaks:
+        raise Fail("!!! TEARDOWN ENDPOINTS SERVED SOMETHING THEY SHOULDN'T: " + "; ".join(leaks))
+    return f"{len(probes)} traversal attempts refused (400/404), nothing leaked"
+
+
 @check("Teardown law: off-limits targets are refused")
 def teardown_law():
     off_limits = ["file:///etc/passwd", "javascript:alert(1)", "http://192.168.1.1/",
@@ -614,7 +646,7 @@ def owned_browser_public():
     return f"{title!r} loaded in {seconds}s, wheel-scrolled {moved}px, closed; profile deleted"
 
 
-@check("No Chrome left behind: no process holds a Jarvis profile, no profile folders remain")
+@check("No investigation Chrome running: no process holds a Jarvis profile, no profile folders remain")
 def no_chrome_left():
     sys.path.insert(0, str(ROOT))
     import browser

@@ -86,6 +86,45 @@
   #status .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #status .muted { margin-left: auto; padding: 1px 8px; border: 1px solid var(--line); border-radius: 999px; font-size: 11px; flex: none; }
 
+  /* teardown card: top-left, under the legend; sized by fitCard() so it never covers anything */
+  #td-card { position: fixed; left: 20px; width: 320px; padding: 12px 14px; display: none; overflow: hidden; }
+  #td-card.show { display: block; }
+  #td-card .head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  #td-card .host { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #td-card .via { font-size: 10px; letter-spacing: .08em; padding: 1px 7px; border-radius: 999px;
+    border: 1px solid var(--accent); color: var(--accent); flex: none; }
+  #td-card .x { margin-left: auto; background: none; border: 0; color: var(--muted); font-size: 18px; cursor: pointer; }
+  #td-card ol { list-style: none; margin: 0; padding: 0; font-size: 12.5px; }
+  #td-card li { display: flex; gap: 8px; align-items: center; padding: 2px 0; color: var(--muted); }
+  #td-card li i { width: 14px; text-align: center; font-style: normal; flex: none; }
+  #td-card li.now { color: var(--text); }
+  #td-card li.now i::before { content: "◌"; display: inline-block; animation: spin 1s linear infinite; }
+  #td-card li.done i::before { content: "✓"; color: #7ef0c4; }
+  #td-card li.todo i::before { content: "·"; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #td-card .done-line { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  #td-card .done-line.err { color: var(--warn); }
+  #td-card img { width: 100%; border-radius: 8px; border: 1px solid var(--line); display: block; margin-bottom: 8px; }
+  #td-card .chips { margin-bottom: 8px; }
+  #td-card .totals { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  #td-card button.read { width: 100%; border: 0; border-radius: 9px; padding: 8px; font: inherit; font-weight: 600;
+    background: var(--accent); color: #07101f; cursor: pointer; }
+  #td-reader { position: fixed; inset: 0; display: none; place-items: center; background: rgba(0,0,0,.55); z-index: 5; }
+  #td-reader.show { display: grid; }
+  #td-reader .sheet { width: min(820px, calc(100vw - 32px)); max-height: calc(100vh - 48px); display: flex; flex-direction: column; }
+  #td-reader article { overflow-y: auto; padding: 22px 28px; line-height: 1.6; }
+  #td-reader article h1 { font-size: 22px; margin: 0 0 8px; } #td-reader article h2 { font-size: 16px; margin: 22px 0 6px; color: var(--accent); }
+  #td-reader article h3 { font-size: 13px; margin: 16px 0 6px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  #td-reader article img { max-width: 100%; border-radius: 8px; border: 1px solid var(--line); }
+  #td-reader article table { border-collapse: collapse; font-size: 12px; width: 100%; }
+  #td-reader article td, #td-reader article th { border: 1px solid var(--line); padding: 4px 6px; text-align: left; }
+  #td-reader article code { font-size: 12px; background: rgba(255,255,255,.06); padding: 1px 4px; border-radius: 4px; }
+  #td-reader article blockquote { margin: 8px 0; padding-left: 10px; border-left: 2px solid var(--line); color: var(--muted); }
+  #td-reader .bar { display: flex; gap: 8px; justify-content: flex-end; padding: 10px 14px; border-top: 1px solid var(--line); }
+  #td-reader .bar a, #td-reader .bar button { border: 0; border-radius: 9px; padding: 8px 14px; font: inherit; cursor: pointer;
+    text-decoration: none; background: rgba(255,255,255,.08); color: var(--text); }
+  #td-reader .bar a { background: var(--accent); color: #07101f; font-weight: 600; }
+
   #fallback { position: fixed; inset: 0; display: none; place-items: center; text-align: center; padding: 24px; color: var(--muted); }
 
   @media (max-width: 640px) {
@@ -111,6 +150,15 @@
   <div class="chips" id="p-links"></div>
 </aside>
 
+<section id="td-card" class="glass" aria-live="polite">
+  <div class="head"><span class="host"></span><span class="via">via REA</span><button class="x" aria-label="Close">×</button></div>
+  <div class="body"></div>
+</section>
+<div id="td-reader" role="dialog" aria-modal="true">
+  <div class="sheet glass"><article></article>
+    <div class="bar"><a class="obsidian" href="#">Open in Obsidian</a><button class="close">Close</button></div></div>
+</div>
+
 <div id="ask">
   <div id="answer" class="glass"><div class="q"></div><div class="a"></div><div class="chips"></div></div>
   <div id="status" data-mode="idle" role="status" aria-live="polite"><span class="dot"></span><span class="label"></span><span class="muted" hidden>muted (?mute=1)</span></div>
@@ -126,6 +174,7 @@
 
 <script src="graph-data.js"></script>
 <script src="voice.js"></script>
+<script src="intent.js"></script>
 <script>
   // If the module below never starts (CDN unreachable, missing data), say why.
   setTimeout(() => {
@@ -506,26 +555,6 @@ await new Promise((resolve, reject) => {
     return true;
   }
 
-  // "tear down <site>": straight to the bay; the bay's own brain call writes the analysis.
-  async function teardownSite(sentence, url) {
-    Voice.stopSpeaking();
-    Voice.setThinking(true);
-    answer.className = "glass show thinking";
-    answer.querySelector(".q").textContent = sentence;
-    answer.querySelector(".a").textContent = "Taking it apart";
-    answer.querySelector(".chips").replaceChildren();
-    let data;
-    try {
-      const res = await fetch("/teardown", { method: "POST", headers: { "Content-Type": "application/json" },
-                                             body: JSON.stringify({ url, question: sentence }) });
-      data = await res.json();
-    } catch {
-      data = { answer: "I'm afraid the teardown didn't come back: the server didn't answer.", births: [] };
-    }
-    Voice.setThinking(false);
-    showAndSpeak(data);
-  }
-
   async function showAndSpeak(data) {
     const ok = !data.error && (data.ok !== false || (data.births || []).length);
     answer.className = ok ? "glass show" : "glass show error";
@@ -544,6 +573,7 @@ await new Promise((resolve, reject) => {
     question = question.trim();
     if (!question) return;
     if (REMEMBER.test(question)) return remember(question);
+    if (Voice.tryRoutes(question)) return;      // the same routes as speech: teardowns, commands
     Voice.stopSpeaking();
     $("send").disabled = true;
     Voice.setThinking(true);
@@ -566,6 +596,13 @@ await new Promise((resolve, reject) => {
       // Decide the camera first, then talk: the panel is open while the answer is spoken.
       lastFocus = Focus.fromAnswer({ about_notes: !!data.about_notes, nodes: used });
       if ((data.births || []).length) { await showAndSpeak(data); return; }
+      if (data.action && data.action.job) {      // the brain asked for a teardown: follow it on the card
+        answer.className = "glass show";
+        answer.querySelector(".a").textContent = data.answer;
+        Voice.speak(data.answer);
+        follow(data.action.job, data.action.host);
+        return;
+      }
       const said = Voice.speak(spoken(data.answer));
       // A server action that rebuilt the index: new graph data needs a fresh page.
       if (data.action && data.action.ok && data.action.reload) said.then(() => location.reload());
@@ -586,27 +623,218 @@ await new Promise((resolve, reject) => {
     ask(question);
   };
 
+  // ── teardowns: one sentence, out loud, with something to watch ──
+  // Only sentences that NAME a site start a teardown here; anything else goes on to the brain,
+  // which can reply [TEARDOWN:SITE|QUESTION] itself ("reverse engineer Stripe's homepage").
+  const { teardownIntent } = window.TeardownIntent;     // viewer/intent.js
+
+  const card = $("td-card"), cardBody = card.querySelector(".body");
+  let followed = null, pollTimer = null, cardIndex = null;
+
+  // Never cover the answer or the other panels: measure them, shrink to fit, snapshot goes first.
+  function fitCard() {
+    if (!card.classList.contains("show")) return;
+    const pad = 12, rect = el => el.getBoundingClientRect();
+    const legend = $("legend"), title = $("title");
+    const top = Math.max(rect(title).bottom, getComputedStyle(legend).display !== "none" ? rect(legend).bottom : 0) + pad;
+    let bottom = innerHeight - pad;
+    const ask = $("ask"), askBox = rect(ask);
+    const panel = $("panel"), panelOpen = panel.classList.contains("open");
+    let width = 320;
+    if (panelOpen) width = Math.min(width, rect(panel).left - 20 - pad);
+    card.style.top = top + "px";
+    card.style.width = Math.max(180, width) + "px";
+    if (askBox.left < 20 + Math.max(180, width) + pad) bottom = Math.min(bottom, askBox.top - pad);
+    const room = bottom - top;
+    const img = card.querySelector("img"), chips = card.querySelector(".chips");
+    card.style.maxHeight = "";
+    [img, chips].forEach(x => x && (x.style.display = ""));
+    if (card.scrollHeight > room && img) img.style.display = "none";          // snapshot first
+    if (card.scrollHeight > room && chips) chips.style.display = "none";      // then the chips
+    card.style.maxHeight = Math.max(60, room) + "px";
+    card.style.overflowY = card.scrollHeight > room ? "auto" : "hidden";
+    card.style.display = room < 60 ? "none" : "";
+  }
+  addEventListener("resize", fitCard);
+  new MutationObserver(fitCard).observe(answer, { attributes: true, childList: true, subtree: true });
+  new MutationObserver(fitCard).observe($("panel"), { attributes: true });
+
+  function showCard(host) {
+    card.querySelector(".host").textContent = host;
+    card.classList.add("show");
+  }
+
+  function renderSteps(job) {
+    showCard(job.host);
+    const ol = document.createElement("ol");
+    job.steps.forEach((label, i) => {
+      const li = document.createElement("li");
+      li.className = i < job.step ? "done" : i === job.step ? "now" : "todo";
+      li.innerHTML = "<i></i><span></span>";
+      li.querySelector("span").textContent = label;
+      ol.appendChild(li);
+    });
+    cardBody.replaceChildren(ol);
+    fitCard();
+  }
+
+  function renderDone(c, seconds, failure) {
+    showCard(c ? c.host : (followed && followed.host) || "teardown");
+    cardIndex = c ? c.index : null;
+    const parts = [];
+    const line = document.createElement("div");
+    line.className = "done-line" + (failure ? " err" : "");
+    line.textContent = failure || (seconds != null ? `Taken apart in ${seconds} s` : "Taken apart")
+      + (c && !c.analysed && !failure ? " · evidence only" : "");
+    parts.push(line);
+    if (c) {
+      if (c.snapshot) {
+        const img = new Image();
+        img.alt = `Snapshot of ${c.host}`;
+        img.src = `/api/teardowns/snapshot?index=${c.index}`;
+        img.onload = fitCard;
+        parts.push(img);
+      }
+      if (c.chips.length) {
+        const chips = document.createElement("div");
+        chips.className = "chips";
+        c.chips.slice(0, 10).forEach(t => { const b = document.createElement("span"); b.className = "chip"; b.textContent = t; chips.appendChild(b); });
+        parts.push(chips);
+      }
+      if (c.totals) { const t = document.createElement("div"); t.className = "totals"; t.textContent = c.totals; parts.push(t); }
+      const read = document.createElement("button");
+      read.className = "read"; read.textContent = "Read the full teardown"; read.onclick = () => openReader();
+      parts.push(read);
+    }
+    cardBody.replaceChildren(...parts);
+    fitCard();
+  }
+
+  async function startTeardown(url, question) {
+    let r;
+    try {
+      r = await (await fetch("/teardown/start", { method: "POST", headers: { "Content-Type": "application/json" },
+                                                  body: JSON.stringify({ url, question }) })).json();
+    } catch { r = { answer: "I'm afraid the teardown bay didn't answer, sir." }; }
+    answer.className = "glass show" + (r.ok ? "" : " error");
+    answer.querySelector(".q").textContent = question;
+    answer.querySelector(".a").textContent = r.answer || r.error || "";
+    answer.querySelector(".chips").replaceChildren();
+    Voice.speak(r.answer || "");
+    if (r.action && r.action.job) follow(r.action.job, r.action.host);
+  }
+
+  function follow(id, host) {
+    followed = { id, host, born: false };
+    clearTimeout(pollTimer);
+    const tick = async () => {
+      let job;
+      try { job = await (await fetch(`/teardown/job?id=${id}`)).json(); } catch { pollTimer = setTimeout(tick, 1500); return; }
+      if (job.state === "running") { renderSteps(job); pollTimer = setTimeout(tick, 700); return; }
+      const failure = job.state === "done" ? null : job.answer;
+      renderDone(job.card, job.finished_in, failure);
+      if (!followed.born && (job.births || []).length) {
+        followed.born = true;
+        if (!(await birth(job.births))) { Voice.speak(job.answer + " The galaxy needs redrawing.").then(() => location.reload()); return; }
+      }
+      answer.className = "glass show" + (failure ? " error" : "");
+      answer.querySelector(".q").textContent = `Teardown · ${job.host}`;
+      answer.querySelector(".a").textContent = job.answer;
+      Voice.speak(spoken(job.answer));
+    };
+    tick();
+  }
+
+  async function showLatest() {
+    let r;
+    try { r = await (await fetch("/api/teardowns/latest")).json(); } catch { r = {}; }
+    if (!r.card) { Voice.speak("There's no teardown on file yet, sir."); return; }
+    renderDone(r.card, r.card.took_s);
+    Focus.note(r.card.index);
+    Voice.speak(`The last one I took apart, sir: ${r.card.host}.`);
+  }
+
+  async function cancelTeardown() {
+    const r = await (await fetch("/teardown/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })).json();
+    Voice.speak(r.answer);
+  }
+
+  // ── the reader: the whole note, rendered safely (no HTML from the note is trusted)
+  const reader = $("td-reader");
+  function md(text) {
+    const esc = t => t.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const inline = t => esc(t)
+      .replace(/!\[([^\]]*)\]\((\/api\/teardowns\/snapshot\?index=\d+)\)/g, '<img alt="$1" src="$2">')
+      .replace(/\[\[([^\]]+)\]\]/g, "<b>$1</b>")
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/\*([^*]+)\*/g, "<em>$1</em>")
+      .replace(/`([^`]+)`/g, "<code>$1</code>");
+    const out = [], lines = text.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      if (/^#{1,3} /.test(l)) { const n = l.match(/^#+/)[0].length; out.push(`<h${n}>${inline(l.slice(n + 1))}</h${n}>`); }
+      else if (/^\|/.test(l)) {
+        const rows = [];
+        while (i < lines.length && /^\|/.test(lines[i])) rows.push(lines[i++]);
+        i--;
+        out.push("<table>" + rows.filter(r => !/^\|[-\s|]+\|$/.test(r)).map((r, k) =>
+          "<tr>" + r.replace(/^\||\|$/g, "").split("|").map(c => k ? `<td>${inline(c.trim())}</td>` : `<th>${inline(c.trim())}</th>`).join("") + "</tr>").join("") + "</table>");
+      }
+      else if (/^\s*(?:[-*]|\d+\.) /.test(l)) {
+        const ordered = /^\s*\d+\./.test(l), items = [];
+        while (i < lines.length && /^\s*(?:[-*]|\d+\.) /.test(lines[i])) items.push(lines[i++].replace(/^\s*(?:[-*]|\d+\.) /, ""));
+        i--;
+        out.push(`<${ordered ? "ol" : "ul"}>${items.map(x => `<li>${inline(x)}</li>`).join("")}</${ordered ? "ol" : "ul"}>`);
+      }
+      else if (/^> /.test(l)) out.push(`<blockquote>${inline(l.slice(2))}</blockquote>`);
+      else if (l.trim()) out.push(`<p>${inline(l)}</p>`);
+    }
+    return out.join("");
+  }
+
+  async function openReader(index = cardIndex) {
+    if (index == null) { Voice.speak("There's no teardown open to read, sir."); return; }
+    const r = await (await fetch(`/api/teardowns/note?index=${index}`)).json();
+    reader.querySelector("article").innerHTML = md(r.markdown || "");
+    reader.querySelector(".obsidian").href = r.card.obsidian;
+    reader.classList.add("show");
+  }
+  const closeReader = () => reader.classList.remove("show");
+  reader.querySelector(".close").onclick = closeReader;
+  reader.onclick = e => { if (e.target === reader) closeReader(); };
+  card.querySelector(".x").onclick = () => { card.classList.remove("show"); };
+
+  // a teardown already running when the page loads (a reload mid-job) is picked up again
+  fetch("/teardown/job").then(r => r.ok ? r.json() : null).then(j => j && j.state === "running" && follow(j.id, j.host)).catch(() => {});
+
   // ── voice ─────────────────────────────────────────────────────
   // Commands that never reach the brain. Add more with Voice.addRoute(pattern, handler).
   Voice.addRoute(/^(?:new conversation|start over|start again|reset)$/, () => newConversation());
   Voice.addRoute(/^remember that\b/, (m, sentence) => remember(sentence));
-  // Routes see punctuation-free text, so the address comes from the original sentence
-  // ("nodejs.org", or speech's "nodejs dot org"). No address: let the brain sort it out.
-  Voice.addRoute(/^(?:tear down|take apart|reverse engineer|look under the hood of)\b/, (m, sentence) => {
-    const said = sentence.replace(/\s+dot\s+/gi, ".");
-    const site = said.match(/\b((?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:\/\S*)?)/i);
-    if (site) teardownSite(sentence, site[1].replace(/[.,!?]+$/, ""));
-    else ask(sentence);
-  });
   Voice.addRoute(/^(?:close|close (?:the )?panel|go back|zoom out|show (?:me )?everything)$/, () => Focus.clear());
   Voice.addRoute(/^(?:show me|open|go to|fly to) (?:the )?(.+)$/, (m, sentence) => {
     const want = m[1];
     const hit = nodes.find(n => n.label.toLowerCase() === want)
       || nodes.find(n => n.label.toLowerCase().includes(want))
       || nodes.find(n => want.includes(n.label.toLowerCase()));
-    if (hit) { Focus.note(hit.id); Voice.speak(hit.label + "."); }
-    else ask(sentence);
+    if (!hit) return false;                 // not a note: decline, the brain gets it
+    Focus.note(hit.id);
+    Voice.speak(hit.label + ".");
   });
+
+  // Teardown routes go first: "show me the last teardown" must not be taken for "show me <note>".
+  const TEARDOWN_PREFIX = /^(?:(?:hey |ok )?jarvis )?(?:please |can you |could you )?(?:reverse engineer|tear down|take apart|dissect|look under the hood of|how (?:does|did|do|is|was)|what(?:s| is| was))\b/;
+  Voice.addRoute(/^(?:cancel|stop|abort) the teardown$/, () => { cancelTeardown(); }, { first: true });
+  Voice.addRoute(/^close the (?:full )?teardown$/, () => {
+    if (reader.classList.contains("show")) closeReader(); else card.classList.remove("show");
+  }, { first: true });
+  Voice.addRoute(/^(?:open|read|show me) the full teardown$/, () => { openReader(); }, { first: true });
+  Voice.addRoute(/^(?:show me|open|bring up) the (?:last|latest|newest|most recent) teardown$/, () => { showLatest(); }, { first: true });
+  Voice.addRoute(TEARDOWN_PREFIX, (m, sentence) => {
+    const intent = teardownIntent(sentence);
+    if (!intent) return false;                 // no site named: decline, the brain gets it
+    startTeardown(intent.url, intent.question);
+  }, { first: true });
 
   // The only way a note is read aloud: you ask for it.
   Voice.addRoute(/^(?:read|read out|read me) (?:it|that|this|the note|this note|that note|me the note)(?: (?:out|aloud|to me|please))*$/, () => {
@@ -623,7 +851,7 @@ await new Promise((resolve, reject) => {
     Voice.speak(greeting);
   }).catch(() => Voice.setNote(`${nodes.length} notes indexed.`));
 
-  window.galaxy = { Graph, Focus, view, addNote, get lastFocus() { return lastFocus; } };  // devtools + tests
+  window.galaxy = { Graph, Focus, view, addNote, teardownIntent, fitCard, get lastFocus() { return lastFocus; } };  // devtools + tests
 
   function escapeHtml(s) {
     return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

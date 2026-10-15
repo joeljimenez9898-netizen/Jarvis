@@ -78,6 +78,24 @@ go through the same `add_note()` / `addNote()` doors as "remember that", so they
 can be cited by the next question. If the brain is unavailable, the evidence is still filed as
 an "evidence only" note, and Jarvis says why. Only one teardown runs at a time.
 
+**By voice.** Sentences that name a site start a teardown straight away: "reverse engineer
+igloo dot inc", "tear down linear.app", "how does stripe.com do that", "what is example.com built
+with", or "this site" / "this page" (on a Mac, your front Chrome tab that isn't Jarvis; elsewhere it
+asks which site). Spoken "dot", "slash" and "colon" become `.`, `/` and `:`, and localhost is allowed.
+Anything else ("tear down the old shed") goes to the brain, which answers
+`[TEARDOWN:SITE|QUESTION]` when it's really a teardown. The parser lives in `viewer/intent.js`.
+
+**The card.** It sits top-left, under the legend, labelled with the site and "via REA", and shows
+the 8 steps live. When done it folds to "Taken apart in N s", the snapshot, up to 10 stack chips,
+the totals and "Read the full teardown", which opens the note with Open in Obsidian. It shrinks to
+fit and never covers the answer or other panels (the snapshot goes first). Say "show me the last
+teardown", "open the full teardown", "close the teardown" or "cancel the teardown".
+
+**Proving it.** `python3 kitcheck.py` runs the offline checks in about a second: addresses,
+fingerprints, digest attribution, and snapshot containment. `python3 drill.py [url]` runs one real
+headless teardown and puts everything back exactly as it was. A crashed teardown's Chrome is
+cleaned up when the server next starts.
+
 To upgrade REA, change `PINNED_REA` in
 `teardown.py` and re-run the install with the new version. Nothing ever installs "latest".
 

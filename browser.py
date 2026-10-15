@@ -235,6 +235,50 @@ def _kill(pid):
         pass
 
 
+def sweep_orphans():
+    """After a crash: kill anything still holding an investigation profile, delete stale profile
+    folders. Never touches the user's own Chrome (its profile isn't under PROFILES).
+    Returns {"killed": [...], "removed": [...]}."""
+    report = {"killed": [], "removed": []}
+    if not PROFILES.exists():
+        return report
+    for folder in [p for p in PROFILES.iterdir() if p.is_dir()]:
+        if _owner_alive(folder):
+            continue                                    # a live teardown, possibly another process's
+        for _ in range(3):
+            pids = processes_using(folder)
+            if not pids:
+                break
+            for pid in pids:
+                _kill(pid)
+            report["killed"] += pids
+            time.sleep(0.5)
+        shutil.rmtree(folder, ignore_errors=True)
+        if not folder.exists():
+            report["removed"].append(folder.name)
+    return report
+
+
+OWNER_FILE = "jarvis-owner.pid"
+
+
+def _owner_alive(folder):
+    """True if the process that created this profile is still running (so it isn't an orphan)."""
+    try:
+        pid = int((folder / OWNER_FILE).read_text().strip())
+    except (OSError, ValueError):
+        return False
+    if pid == os.getpid():
+        return True
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
 def _json(path, timeout=2):
     with urllib.request.urlopen(f"http://127.0.0.1:{CDP_PORT}{path}", timeout=timeout) as r:
         return json.loads(r.read())
@@ -250,8 +294,9 @@ def _same_site(host, want):
 class OwnedBrowser:
     """Chrome on 127.0.0.1:9333 with a fresh profile, opened at `url`, loaded and settled."""
 
-    def __init__(self, url, headless=False, chrome=None, settle_s=INTRO_SETTLE_S):
+    def __init__(self, url, headless=False, chrome=None, settle_s=INTRO_SETTLE_S, on_step=None):
         self.url, self.headless, self.settle_s = url, headless, settle_s
+        self.on_step = on_step or (lambda name: None)     # "open", then "load"
         self.chrome = chrome or _default_chrome()
         self.job_id = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6]
         self.profile = PROFILES / self.job_id
@@ -293,12 +338,15 @@ class OwnedBrowser:
                 raise
 
     def _launch(self):
+        sweep_orphans()                                     # crash leftovers only: owners that are dead
         with socket.socket() as probe:                      # anything at all on the port?
             probe.settimeout(1)
             if probe.connect_ex(("127.0.0.1", CDP_PORT)) == 0:
                 raise BrowserError(f"something is already listening on port {CDP_PORT} "
                                    f"(another Chrome with remote debugging?). Close it and retry.")
+        self.on_step("open")
         self.profile.mkdir(parents=True, exist_ok=False)
+        (self.profile / OWNER_FILE).write_text(str(os.getpid()))
         w, h = WINDOW
         args = [self.chrome, f"--user-data-dir={self.profile}",
                 f"--remote-debugging-port={CDP_PORT}", "--remote-debugging-address=127.0.0.1",
@@ -333,6 +381,7 @@ class OwnedBrowser:
                     raise BrowserError(f"Chrome's DevTools didn't answer within {STARTUP_TIMEOUT_S}s")
                 time.sleep(0.2)
 
+        self.on_step("load")
         # 2. the page target for this site (www and redirects allowed)
         want = urllib.parse.urlsplit(self.url).hostname
         deadline = started + LOAD_TIMEOUT_S

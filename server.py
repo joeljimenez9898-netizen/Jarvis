@@ -28,8 +28,10 @@ CONTROL_TAGS = {
                 "when": "they ask to see, open, pull up or go to one specific note"},
     "REINDEX": {"usage": "[REINDEX]",
                 "when": "they say their notes changed, or asks to rescan or rebuild the index"},
-    "TEARDOWN": {"usage": "[TEARDOWN: website address | what they want to know]",
-                 "when": "they ask to tear down, reverse engineer or look under the hood of a website"},
+    "TEARDOWN": {"usage": "[TEARDOWN:SITE|QUESTION]",
+                 "when": "they ask to tear down, reverse engineer or look under the hood of a website. "
+                         "SITE is its address (stripe.com), or the word this for the tab they're looking "
+                         "at; QUESTION is what they want to know"},
 }
 
 RECEIPT_LINES = {
@@ -43,9 +45,13 @@ RECEIPT_LINES = {
                  "evidence_only": "I've taken it apart and filed the evidence, sir, but I couldn't think "
                                   "it through: {reason}.",
                  "busy": "I'm already taking one apart, sir.",
+                 "started": "Right away, sir. Taking {host} apart; the panel will show you how it goes.",
+                 "which": "Which site, sir? Say its name, as in stripe dot com.",
+                 "cancelled": "Stopped, sir. Nothing was filed.",
                  "missing": "The workshop isn't fitted out yet, sir: {fix}.",
                  "refused": "I won't point the kit at that, sir: {reason}.",
                  "fail": "The teardown fell over, I'm afraid: {reason}."},
+    "TEARDOWN_CANCEL": {"ok": "Stopping it now, sir.", "fail": "Nothing's being taken apart, sir."},
     "UNKNOWN": {"fail": "I'm afraid I have no means of doing that, sir."},
     # Captures ("remember that ...") are not a tag, but they speak through receipts too.
     "REMEMBER": {"ok": "Committed to memory, sir: {title}.",
@@ -142,6 +148,9 @@ import re
 import subprocess
 import sys
 import threading
+import uuid
+import time
+import platform
 import urllib.parse
 from collections import deque
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -532,14 +541,17 @@ def run_tag(tag, arg="", **opts):
     except Exception as e:  # noqa: BLE001 — a failed action is reported, not raised
         receipt = {"ok": False, "reason": str(e) or e.__class__.__name__}
     receipt = {"tag": tag, "arg": arg, **receipt}
+    return receipt_line(tag, receipt, arg), receipt
+
+
+def receipt_line(tag, receipt, arg=""):
     lines = RECEIPT_LINES.get(tag, {})
     template = lines.get(receipt.get("line") or ("ok" if receipt["ok"] else "fail")) or (
         "Done." if receipt["ok"] else "That did not happen: {reason}.")
     try:
-        line = template.format(**{"title": arg, "reason": "unknown error", **receipt})
+        return template.format(**{"title": arg, "reason": "unknown error", **receipt})
     except (KeyError, IndexError):
-        line = template
-    return line, receipt
+        return template
 
 
 def _reset_history():
@@ -591,7 +603,6 @@ def bay_diag():
 TEARDOWN_HEADLESS = os.environ.get("JARVIS_TEARDOWN_HEADLESS") == "1"
 
 
-_teardown_running = threading.Lock()      # one teardown at a time
 TEARDOWN_TOKENS, TEARDOWN_RETRY_TOKENS = 8000, 16000   # thinking and answer share this budget
 TEARDOWN_EFFORT = "medium"
 
@@ -669,7 +680,7 @@ def _evidence_section(ev, digest_chars, flags=None):
     ids = "\n".join(f"- `{op}`: `{eid}`" for op, eid in ev.get("rea_evidence_ids", {}).items() if eid)
     return (f"## Evidence\n\n### Stack\n\n" + "\n".join(rows) +
             f"\n\n### Totals (Jarvis browser)\n\n{a['files']} files, {evidence._size(a['bytes'])} sized, "
-            f"from {len(a['by_origin'])} origin(s): {kinds}.\n"
+            f"from {len(a['by_origin'])} origin{'' if len(a['by_origin']) == 1 else 's'}: {kinds}.\n"
             + "".join(f"\n> {n}" for n in a["notes"]) +
             f"\n\n### REA evidence ids\n\n{ids}\n\n"
             f"Captured {ev['captured_at']} · job `{ev['job_id']}` · loaded in {ev['load_seconds']}s · "
@@ -703,79 +714,258 @@ def ensure_rea_note():
                     markdown=REA_CONCEPT_NOTE)
 
 
-def run_teardown(url, question="", headless=None):
-    """Evidence -> digest -> one brain call -> note(s) -> spoken line. Returns a receipt."""
-    if not _teardown_running.acquire(blocking=False):
-        return {"ok": False, "line": "busy"}
+TEARDOWN_STEPS = ["Opening the site in a clean browser", "Waiting for it to load",
+                  "REA is watching while I scroll", "REA is reading the code", "Taking a snapshot",
+                  "Listing everything it loaded", "Identifying the stack", "Writing the teardown"]
+_STEP = {"open": 0, "load": 1, "watch": 2, "read": 3, "snapshot": 4, "assets": 5, "stack": 6, "write": 7}
+THIS_WORDS = {"this", "this site", "this page", "this tab", "the current tab", "current tab"}
+
+
+class TeardownJob:
+    def __init__(self, url, question, headless):
+        self.id = uuid.uuid4().hex[:12]
+        self.url, self.question, self.headless = url, question, headless
+        self.host = urllib.parse.urlsplit(url if "://" in url else "https://" + url).hostname or url
+        self.started = time.monotonic()
+        self.step, self.state, self.result = -1, "running", None
+        self.cancel = threading.Event()
+        self.thread = threading.Thread(target=self._run, name=f"teardown-{self.id}", daemon=True)
+
+    def elapsed(self):
+        return round(time.monotonic() - self.started)
+
+    def at(self, name):
+        if self.cancel.is_set():
+            raise bay.Cancelled()
+        self.step = _STEP[name]
+
+    def _run(self):
+        try:
+            self.result = _teardown_work(self)
+        except bay.Cancelled:
+            self.result = {"ok": False, "line": "cancelled"}
+        except Exception as e:  # noqa: BLE001 — a job reports, it never crashes the server
+            self.result = {"ok": False, "reason": str(e)[:200] or e.__class__.__name__}
+        self.finished = self.elapsed()
+        self.state = ("cancelled" if self.result.get("line") == "cancelled"
+                      else "done" if self.result.get("ok") else "failed")
+        receipt = {"tag": "TEARDOWN", "arg": self.url, **self.result}
+        self.answer = receipt_line("TEARDOWN", receipt, self.url)
+        with _lock:
+            _history.append({"role": "user", "content": f"Tear down {self.url}: {self.question}"})
+            _history.append({"role": "assistant", "content":
+                             f"[TEARDOWN: {self.url}] RECEIPT ok={str(self.state == 'done').lower()} "
+                             f"state={self.state}" + (f" note={self.result.get('note')}" if self.result.get("note") else "")})
+
+    def to_json(self):
+        out = {"id": self.id, "host": self.host, "state": self.state, "step": self.step,
+               "steps": TEARDOWN_STEPS, "elapsed": self.elapsed()}
+        if self.state != "running":
+            out.update(answer=self.answer, finished_in=self.finished, births=self.result.get("births", []))
+            if self.result.get("births"):
+                out["card"] = teardown_card(self.result["births"][-1]["index"])
+        return out
+
+
+_jobs, _current_job, _jobs_lock = {}, None, threading.Lock()
+
+
+def resolve_this():
+    """The address of the user's front Chrome tab (macOS only), never Jarvis's own tab."""
+    if platform.system() != "Darwin":
+        return None
+    script = ('tell application "Google Chrome"\n set out to ""\n'
+              ' repeat with w in windows\n set out to out & (URL of active tab of w) & linefeed\n end repeat\n'
+              ' repeat with t in tabs of front window\n set out to out & (URL of t) & linefeed\n end repeat\n'
+              ' return out\nend tell')
     try:
+        done = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in done.stdout.splitlines():
+        parts = urllib.parse.urlsplit(line.strip())
+        if parts.scheme in ("http", "https") and parts.netloc not in (f"127.0.0.1:{PORT}", f"localhost:{PORT}"):
+            return line.strip()
+    return None
+
+
+def start_teardown(url, question="", headless=None):
+    """Start a teardown in the background. Returns a receipt with the job id, at once."""
+    global _current_job
+    with _jobs_lock:
+        if _current_job and _current_job.state == "running":
+            return {"ok": False, "line": "busy"}
         if bay is None:
             return {"ok": False, "line": "missing", "fix": "the teardown bay (teardown.py) isn't loaded"}
+        url = (url or "").strip().strip(".,!?")
+        if url.lower() in THIS_WORDS or not url:
+            url = resolve_this()
+            if not url:
+                return {"ok": False, "line": "which"}
         try:
-            result = bay.teardown(url, headless=TEARDOWN_HEADLESS if headless is None else headless)
+            bay.parse_url(url)                      # refuse the obviously off-limits at once
         except bay.LawError as e:
             return {"ok": False, "line": "refused", "reason": str(e)}
-        except bay.NotReady as e:
-            return {"ok": False, "line": "missing", "fix": e.fix}
-        except Exception as e:  # noqa: BLE001 — reported in character, never a crash
-            return {"ok": False, "reason": str(e)[:200] or e.__class__.__name__}
+        info = bay.diag()
+        if not info["ready"]:
+            return {"ok": False, "line": "missing", "fix": info["fix"]}
+        job = TeardownJob(url, question, TEARDOWN_HEADLESS if headless is None else headless)
+        _jobs[job.id] = _current_job = job
+        job.thread.start()
+    return {"ok": True, "line": "started", "host": job.host, "job": job.id}
 
-        ev, summary = result["evidence"], result["summary"]
-        host = urllib.parse.urlsplit(ev["url"]).hostname or "site"
-        digest = evidence.brain_digest(ev, question)
 
-        # one call to the current brain
-        brain, brain_error = None, None
-        try:
-            key, model = read_config()
-            raw = call_model(key, model, [{"role": "user", "content": f"DIGEST\n\n{digest}"}],
-                             system=TEARDOWN_BRAIN, max_tokens=TEARDOWN_TOKENS,
-                             retry_tokens=TEARDOWN_RETRY_TOKENS, effort=TEARDOWN_EFFORT, timeout=300)
-            brain = parse_teardown(raw)
-        except ChatError as e:
-            brain_error = ("there's no API key in config.json yet" if "PUT-YOUR-KEY-HERE" in str(e)
-                           else str(e).rstrip("."))
-        except ValueError as e:
-            brain_error = str(e)
+def cancel_teardown():
+    job = _current_job
+    if job and job.state == "running":
+        job.cancel.set()
+        return {"ok": True, "job": job.id}
+    return {"ok": False}
 
-        label = brain["label"] if brain else f"Teardown · {host}"
-        flags = check_against_digest(brain["note"] + "\n" + brain["spoken"] + "\n" + brain["summary"], digest) \
-            if brain else None
-        body = brain["note"] if brain else _evidence_only_note(ev, brain_error)
-        shot = pathlib.Path(ev["screenshot"]["path"]).read_bytes()
-        markdown = (f"**{label}** · [[REA]] · {ev['url']}\n\n"
-                    f"![Snapshot of {host}](assets/{LABEL_URL_SLOT}.png)\n\n{body.strip()}\n\n"
-                    f"{_evidence_section(ev, len(digest), flags)}")
-        births = []
-        try:
-            rea = ensure_rea_note()
-            if rea:
-                births.append(rea)
-            births.append(add_note(brain["summary"] if brain else f"Teardown of {host}: {summary['stack']}",
-                                   folder="captures/teardowns", title=f"{host}-{datetime.date.today().isoformat()}",
-                                   kind="teardown", markdown=markdown, attachments={f"assets/{LABEL_SLOT}.png": shot},
-                                   meta={"label": label, "url": ev["url"], "job": ev["job_id"],
-                                         "analysed": bool(brain)}))
-        except CaptureError as e:
-            return {"ok": False, "reason": f"the evidence was captured but the note wasn't written: {e.reason}",
-                    "births": births}
-        note = births[-1]
-        out = {"ok": True, "births": births, "note": note["path"], "label": label, "title": summary["title"],
-               "analysed": bool(brain), "digest_chars": len(digest), "evidence_dir": summary["evidence_dir"],
-               "stack": summary["stack"]}
-        if brain:
-            out.update(spoken=speakable(brain["spoken"]), summary=brain["summary"],
-                       missing_sections=brain["missing_sections"], unsupported=flags)
-        else:
-            out.update(line="evidence_only", reason=brain_error)
-        return out
-    finally:
-        _teardown_running.release()
+
+def run_teardown(url, question="", headless=None):
+    """Synchronous: start, wait, return the finished receipt (used by POST /teardown and preflight)."""
+    started = start_teardown(url, question, headless)
+    if not started.get("ok"):
+        return started
+    job = _jobs[started["job"]]
+    job.thread.join()
+    return {**job.result, "job": job.id}
+
+
+def _teardown_work(job):
+    """Evidence -> digest -> one brain call -> note(s). Returns a receipt."""
+    question = job.question
+    try:
+        result = bay.teardown(job.url, headless=job.headless, step=job.at, cancel=job.cancel)
+    except bay.LawError as e:
+        return {"ok": False, "line": "refused", "reason": str(e)}
+    except bay.NotReady as e:
+        return {"ok": False, "line": "missing", "fix": e.fix}
+
+    ev, summary = result["evidence"], result["summary"]
+    host = urllib.parse.urlsplit(ev["url"]).hostname or "site"
+    digest = evidence.brain_digest(ev, question)
+
+    job.at("write")
+    # one call to the current brain
+    brain, brain_error = None, None
+    try:
+        key, model = read_config()
+        raw = call_model(key, model, [{"role": "user", "content": f"DIGEST\n\n{digest}"}],
+                         system=TEARDOWN_BRAIN, max_tokens=TEARDOWN_TOKENS,
+                         retry_tokens=TEARDOWN_RETRY_TOKENS, effort=TEARDOWN_EFFORT, timeout=300)
+        brain = parse_teardown(raw)
+    except ChatError as e:
+        brain_error = ("I've no API key yet" if "PUT-YOUR-KEY-HERE" in str(e)
+                       else str(e).rstrip("."))
+    except ValueError as e:
+        brain_error = str(e)
+
+    label = brain["label"] if brain else f"Teardown · {host}"
+    flags = check_against_digest(brain["note"] + "\n" + brain["spoken"] + "\n" + brain["summary"], digest) \
+        if brain else None
+    body = brain["note"] if brain else _evidence_only_note(ev, brain_error)
+    shot = pathlib.Path(ev["screenshot"]["path"]).read_bytes()
+    markdown = (f"**{label}** · [[REA]] · {ev['url']}\n\n"
+                f"![Snapshot of {host}](assets/{LABEL_URL_SLOT}.png)\n\n{body.strip()}\n\n"
+                f"{_evidence_section(ev, len(digest), flags)}")
+    if job.cancel.is_set():
+        raise bay.Cancelled()
+    births = []
+    try:
+        rea = ensure_rea_note()
+        if rea:
+            births.append(rea)
+        births.append(add_note(brain["summary"] if brain else f"Teardown of {host}: {summary['stack']}",
+                               folder="captures/teardowns", title=f"{host}-{datetime.date.today().isoformat()}",
+                               kind="teardown", markdown=markdown, attachments={f"assets/{LABEL_SLOT}.png": shot},
+                               meta={"label": label, "url": ev["url"], "job": ev["job_id"],
+                                     "analysed": bool(brain), "took_s": job.elapsed()}))
+    except CaptureError as e:
+        return {"ok": False, "reason": f"the evidence was captured but the note wasn't written: {e.reason}",
+                "births": births}
+    note = births[-1]
+    out = {"ok": True, "births": births, "note": note["path"], "label": label, "title": summary["title"],
+           "analysed": bool(brain), "digest_chars": len(digest), "evidence_dir": summary["evidence_dir"],
+           "stack": summary["stack"]}
+    if brain:
+        out.update(spoken=speakable(brain["spoken"]), summary=brain["summary"],
+                   missing_sections=brain["missing_sections"], unsupported=flags)
+    else:
+        out.update(line="evidence_only", reason=brain_error)
+    return out
+
+
+def _teardown_note_path(index):
+    nodes = build.read_graph()["nodes"]
+    if not 0 <= index < len(nodes) or nodes[index]["group"] != "teardowns":
+        return None
+    p = pathlib.Path(nodes[index]["path"])
+    return p if p.is_absolute() else ROOT / p
+
+
+def teardown_card(index):
+    """What the panel shows, read from the note on disk (so it survives a restart)."""
+    path = _teardown_note_path(index)
+    if not path or not path.exists():
+        return None
+    text = path.read_text(encoding="utf-8")
+    front = dict(re.findall(r"^(\w+): (.*)$", text.split("\n---", 1)[0], re.M))
+    clean = lambda v: json.loads(v) if v.startswith('"') else v
+    url = clean(front.get("url", ""))
+    chips = []
+    table = re.search(r"### Stack\n\n(.*?)\n\n", text, re.S)
+    for row in (table.group(1).splitlines()[2:] if table else []):
+        cells = [c.strip() for c in row.strip("|").split("|")]
+        if len(cells) >= 3 and cells[1] != "nothing recognised":
+            chips.append(cells[1] + ("" if cells[2] in ("—", "") else f" {cells[2]}"))
+    totals = re.search(r"### Totals \(Jarvis browser\)\n\n([^:\n]+)", text)
+    rel = path.relative_to(notes_dir()).with_suffix("") if path.is_relative_to(notes_dir()) else path.stem
+    vault = notes_dir().name
+    return {"index": index, "host": urllib.parse.urlsplit(url).hostname or path.stem, "label": clean(front.get("label", "")),
+            "took_s": int(front["took_s"]) if front.get("took_s", "").isdigit() else None,
+            "analysed": front.get("analysed") == "True", "chips": chips[:10],
+            "totals": re.sub(r"\b1 origins\b", "1 origin", totals.group(1).replace(" origin(s)", " origins")).strip()
+                      if totals else "",
+            "snapshot": bool(re.search(r"!\[[^\]]*\]\(assets/[^)]+\)", text)),
+            "obsidian": "obsidian://open?vault=" + urllib.parse.quote(vault) + "&file=" + urllib.parse.quote(str(rel))}
+
+
+def latest_teardown_index():
+    folder = notes_dir() / "captures" / "teardowns"
+    notes = sorted(folder.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True) if folder.is_dir() else []
+    graph = build.read_graph()["nodes"]
+    for p in notes:
+        for n in graph:
+            np_ = pathlib.Path(n["path"])
+            if (np_ if np_.is_absolute() else ROOT / np_).resolve() == p.resolve():
+                return n["id"]
+    return None
+
+
+def teardown_markdown(index):
+    """The full note for the reader: frontmatter dropped, the snapshot pointed at the API."""
+    path = _teardown_note_path(index)
+    text = path.read_text(encoding="utf-8")
+    text = re.sub(r"\A---\n.*?\n---\n+", "", text, flags=re.S)
+    return re.sub(r"\]\(assets/[^)]+\.png\)", f"](/api/teardowns/snapshot?index={index})", text)
+
+
+def teardown_snapshot(index):
+    path = _teardown_note_path(index)
+    m = re.search(r"\]\((assets/[^)]+\.png)\)", path.read_text(encoding="utf-8")) if path else None
+    if not m:
+        return None
+    img = (path.parent / urllib.parse.unquote(m.group(1))).resolve()
+    return img.read_bytes() if img.is_relative_to(path.parent.resolve()) and img.exists() else None
 
 
 @tag_handler("TEARDOWN")
-def _tag_teardown(arg, headless=None, question=None):
+def _tag_teardown(arg, headless=None, question=None, wait=False):
     url, _, asked = arg.partition("|")
-    return run_teardown(url.strip(), question if question is not None else asked.strip(), headless)
+    q = question if question is not None else asked.strip()
+    return (run_teardown if wait else start_teardown)(url.strip(), q, headless)
 
 
 assert set(CONTROL_TAGS) <= set(_tag_handlers), "every CONTROL_TAG needs a @tag_handler"
@@ -791,7 +981,7 @@ def action_response(tag, arg="", **opts):
                 "scripts", "resources", "dom_nodes", "requests_seen", "frames", "evidence_id",
                 "load_seconds", "page_height", "images", "job_id", "stack", "assets", "asset_bytes",
                 "routes", "evidence_dir", "screenshot", "note", "label", "analysed", "summary",
-                "digest_chars", "missing_sections", "unsupported")}}
+                "digest_chars", "missing_sections", "unsupported", "job", "host")}}
 
 
 def select_notes(question):
@@ -890,11 +1080,42 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_error(403, "invalid host")
         if not self._path_ok():
             return self.send_error(400, "bad path")
-        if self.path == "/api/boot":
+        url = urllib.parse.urlsplit(self.path)
+        query = urllib.parse.parse_qs(url.query)
+        if url.path == "/api/boot":
             return self._json({"greeting": BOOT_GREETING, "code": CODE_SHA})
-        if self.path == "/teardown/diag":
+        if url.path == "/teardown/diag":
             return self._json(bay_diag())
+        if url.path == "/teardown/job":
+            job = _jobs.get(query.get("id", [""])[0]) or _current_job
+            return self._json(job.to_json() if job else {"error": "no teardown yet"}, 200 if job else 404)
+        if url.path.startswith("/api/teardowns/"):
+            return self._teardown_api(url.path, query)
         return super().do_GET()
+
+    def _teardown_api(self, path, query):
+        if path == "/api/teardowns/latest":
+            index = latest_teardown_index()
+            card = teardown_card(index) if index is not None else None
+            return self._json({"card": card} if card else {"error": "no teardowns yet"}, 200 if card else 404)
+        try:
+            index = int(query.get("index", [""])[0])
+        except ValueError:
+            return self._json({"error": "index required"}, 400)
+        if _teardown_note_path(index) is None:             # only teardown notes, by graph index
+            return self._json({"error": "not a teardown"}, 404)
+        if path == "/api/teardowns/note":
+            return self._json({"card": teardown_card(index), "markdown": teardown_markdown(index)})
+        if path == "/api/teardowns/snapshot":
+            png = teardown_snapshot(index)
+            if not png:
+                return self._json({"error": "no snapshot"}, 404)
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(png)))
+            self.end_headers()
+            return self.wfile.write(png)
+        return self._json({"error": "not found"}, 404)
 
     def do_HEAD(self):
         if not self._host_ok():
@@ -907,7 +1128,8 @@ class Handler(SimpleHTTPRequestHandler):
         return self.send_error(404, "not found")
 
     def do_POST(self):
-        if self.path not in ("/chat", "/action", "/remember", "/api/recall", "/teardown"):
+        if self.path not in ("/chat", "/action", "/remember", "/api/recall", "/teardown",
+                             "/teardown/start", "/teardown/cancel"):
             return self._json({"error": "not found"}, 404)
         origin = self.headers.get("Origin")
         if not self._host_ok() or (origin and origin not in
@@ -932,8 +1154,17 @@ class Handler(SimpleHTTPRequestHandler):
             # Same handler the brain's [TEARDOWN: ...] tag uses; no lock (it doesn't touch history).
             result = action_response("TEARDOWN", str(data.get("url", ""))[:500],
                                      headless=bool(data["headless"]) if "headless" in data else None,
+                                     question=str(data.get("question", ""))[:1000], wait=True)
+            return self._json({"ok": result["action"]["ok"], **result})
+
+        if self.path == "/teardown/start":
+            result = action_response("TEARDOWN", str(data.get("url", ""))[:500],
+                                     headless=bool(data["headless"]) if "headless" in data else None,
                                      question=str(data.get("question", ""))[:1000])
             return self._json({"ok": result["action"]["ok"], **result})
+        if self.path == "/teardown/cancel":
+            receipt = cancel_teardown()
+            return self._json({"ok": receipt["ok"], "answer": receipt_line("TEARDOWN_CANCEL", receipt)})
 
         if self.path == "/api/recall":
             with _lock:
@@ -972,6 +1203,14 @@ class Handler(SimpleHTTPRequestHandler):
 def main():
     if not GRAPH_FILE.exists():
         raise SystemExit("viewer/graph-data.js missing: run python3 build.py first")
+    try:                                    # a crash mid-teardown can leave Chrome running
+        import browser
+        swept = browser.sweep_orphans()
+        if swept["killed"] or swept["removed"]:
+            print(f"Cleaned up after a crashed teardown: {len(swept['killed'])} Chrome processes, "
+                  f"{len(swept['removed'])} profile folders")
+    except Exception as e:  # noqa: BLE001 — the galaxy runs without the bay
+        print(f"(teardown cleanup skipped: {e})")
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Knowledge galaxy on http://{HOST}:{PORT}  (Ctrl+C to stop)")
     try:

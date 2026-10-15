@@ -39,3 +39,5 @@ call against the running system, not a mock.
 - A teardown note is born through `add_note()` (markdown + attachments) and `addNote()`,
   [[REA]] first if new. Its Evidence section and automatic claim check are written by Jarvis,
   never by the brain. One teardown at a time (`_teardown_running`).
+- Voice routes decline by returning `false`, never by calling `ask()` (ask runs the routes, so that loops).
+- Before any teardown on camera: `python3 drill.py` must pass, and it must leave the graph byte-identical.

@@ -150,23 +150,31 @@ const FINISH_MS = 900;
   if (synth && "onvoiceschanged" in synth) synth.onvoiceschanged = () => synth.getVoices();
 
   // ── voice routes ──────────────────────────────────────────────
-  // Each route: { pattern: RegExp, handler(match, sentence) }. First match wins and
-  // the sentence never reaches the brain. Add new commands with Voice.addRoute().
+  // Each route: { pattern: RegExp, handler(match, sentence) }. The first route that matches
+  // AND doesn't decline (returns false) handles the sentence, and it never reaches the brain.
+  // Add new commands with Voice.addRoute(pattern, handler, { first: true } to go ahead of the rest).
   const routes = [];
-  function addRoute(pattern, handler) { routes.push({ pattern, handler }); }
+  function addRoute(pattern, handler, { first = false } = {}) {
+    (first ? routes.unshift : routes.push).call(routes, { pattern, handler });
+  }
 
   function normalise(text) {
     return text.toLowerCase().replace(/[^\p{L}\p{N}' ]+/gu, " ").replace(/\s+/g, " ").trim();
   }
 
-  function dispatch(sentence) {
+  /** Run a sentence through the routes. True if one handled it. Typed questions use it too. */
+  function tryRoutes(sentence) {
     const clean = normalise(sentence);
-    if (!clean) return;
+    if (!clean) return true;
     for (const route of routes) {
       const m = clean.match(route.pattern);
-      if (m) { route.handler(m, sentence); return; }
+      if (m && route.handler(m, sentence) !== false) return true;
     }
-    ask(sentence);
+    return false;
+  }
+
+  function dispatch(sentence) {
+    if (!tryRoutes(sentence)) ask(sentence);
   }
 
   addRoute(INTERRUPT, () => { stopSpeaking(); set({ note: "Stopped." }); });
@@ -278,7 +286,7 @@ const FINISH_MS = 900;
   }
 
   window.Voice = {
-    FINISH_MS, MUTED, routes, addRoute, speak, utter, stopSpeaking, init,
+    FINISH_MS, MUTED, routes, addRoute, tryRoutes, speak, utter, stopSpeaking, init,
     setThinking: on => set({ thinking: !!on, note: "" }),
     setNote: text => set({ note: String(text || "") }),
     get state() { return { ...state }; },
