@@ -26,3 +26,6 @@ call against the running system, not a mock.
   it checks `?mute=1` first.
 - The persona, control tags and receipt lines live in the block at the top of
   `server.py`.
+- The teardown bay (REA) only observes: `teardown.ALLOWED_COMMANDS` holds passive website
+  commands only, and `check_url()` keeps it to websites the user may look at. REA is pinned
+  in `teardown.PINNED_REA` and never installed as "latest" at runtime.

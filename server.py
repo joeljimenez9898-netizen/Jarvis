@@ -28,6 +28,8 @@ CONTROL_TAGS = {
                 "when": "they ask to see, open, pull up or go to one specific note"},
     "REINDEX": {"usage": "[REINDEX]",
                 "when": "they say their notes changed, or asks to rescan or rebuild the index"},
+    "TEARDOWN": {"usage": "[TEARDOWN: website address]",
+                 "when": "they ask to tear down, reverse engineer or look under the hood of a website"},
 }
 
 RECEIPT_LINES = {
@@ -37,6 +39,11 @@ RECEIPT_LINES = {
                 "fail": "I can find no note called {title}, sir. I'd rather say so than guess."},
     "REINDEX": {"ok": "Re-indexed. {count} notes on file; the galaxy will redraw itself.",
                 "fail": "The re-index did not happen: {reason}."},
+    "TEARDOWN": {"ok": "I've looked {title} over, sir: {scripts} scripts, {resources} resources and "
+                       "{dom_nodes} elements, and I touched nothing.",
+                 "missing": "The workshop isn't fitted out yet, sir: {fix}.",
+                 "refused": "I won't point the kit at that, sir: {reason}.",
+                 "fail": "The teardown fell over, I'm afraid: {reason}."},
     "UNKNOWN": {"fail": "I'm afraid I have no means of doing that, sir."},
     # Captures ("remember that ...") are not a tag, but they speak through receipts too.
     "REMEMBER": {"ok": "Committed to memory, sir: {title}.",
@@ -99,6 +106,13 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import anthropic
 
 import build
+
+# The teardown bay is optional: Jarvis boots and answers without it.
+try:
+    import teardown as bay
+    BAY_ERROR = None
+except Exception as _e:  # noqa: BLE001 — any import problem just disables the bay
+    bay, BAY_ERROR = None, f"{_e.__class__.__name__}: {_e}"
 
 ROOT = build.ROOT
 VIEWER = ROOT / "viewer"
@@ -449,7 +463,7 @@ def run_tag(tag, arg=""):
         receipt = {"ok": False, "reason": str(e) or e.__class__.__name__}
     receipt = {"tag": tag, "arg": arg, **receipt}
     lines = RECEIPT_LINES.get(tag, {})
-    template = lines.get("ok" if receipt["ok"] else "fail") or (
+    template = lines.get(receipt.get("line") or ("ok" if receipt["ok"] else "fail")) or (
         "Done." if receipt["ok"] else "That did not happen: {reason}.")
     try:
         line = template.format(**{"title": arg, "reason": "unknown error", **receipt})
@@ -495,6 +509,29 @@ def _tag_reindex(arg):
     return {"ok": True, "count": count, "reload": True}
 
 
+def bay_diag():
+    if bay is None:
+        return {"ready": False, "problems": [f"teardown.py could not be loaded ({BAY_ERROR})."],
+                "fix": "restore teardown.py next to server.py"}
+    return bay.diag()
+
+
+@tag_handler("TEARDOWN")
+def _tag_teardown(arg):
+    if bay is None:
+        return {"ok": False, "line": "missing", "fix": "the teardown bay (teardown.py) isn't loaded"}
+    try:
+        result = bay.teardown(arg)
+    except bay.LawError as e:
+        return {"ok": False, "line": "refused", "reason": str(e)}
+    except bay.NotReady as e:
+        return {"ok": False, "line": "missing", "fix": e.fix}
+    except Exception as e:  # noqa: BLE001 — reported in character, never a crash
+        return {"ok": False, "reason": str(e)[:200] or e.__class__.__name__}
+    return {"ok": True, **result["summary"], "title": result["title"] or result["origin"],
+            "evidence_id": result["evidence_id"]}
+
+
 assert set(CONTROL_TAGS) <= set(_tag_handlers), "every CONTROL_TAG needs a @tag_handler"
 
 
@@ -502,7 +539,9 @@ def action_response(tag, arg=""):
     line, receipt = run_tag(tag, arg)
     nodes = receipt.get("nodes", []) if receipt["ok"] else []
     return {"answer": line, "nodes": nodes, "about_notes": bool(nodes),
-            "action": {k: v for k, v in receipt.items() if k in ("tag", "arg", "ok", "reason", "reload", "count")}}
+            "action": {k: v for k, v in receipt.items() if k in (
+                "tag", "arg", "ok", "reason", "reload", "count", "line", "fix", "title", "url", "origin",
+                "scripts", "resources", "dom_nodes", "requests_seen", "frames", "evidence_id")}}
 
 
 def select_notes(question):
@@ -596,6 +635,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_error(400, "bad path")
         if self.path == "/api/boot":
             return self._json({"greeting": BOOT_GREETING, "code": CODE_SHA})
+        if self.path == "/teardown/diag":
+            return self._json(bay_diag())
         return super().do_GET()
 
     def do_HEAD(self):
@@ -609,7 +650,7 @@ class Handler(SimpleHTTPRequestHandler):
         return self.send_error(404, "not found")
 
     def do_POST(self):
-        if self.path not in ("/chat", "/action", "/remember", "/api/recall"):
+        if self.path not in ("/chat", "/action", "/remember", "/api/recall", "/teardown"):
             return self._json({"error": "not found"}, 404)
         origin = self.headers.get("Origin")
         if not self._host_ok() or (origin and origin not in
@@ -629,6 +670,11 @@ class Handler(SimpleHTTPRequestHandler):
             tag = str(data.get("tag", "")).strip().upper()
         except (json.JSONDecodeError, AttributeError):
             return self._json({"error": "invalid JSON"}, 400)
+
+        if self.path == "/teardown":
+            # Same handler the brain's [TEARDOWN: ...] tag uses; no lock (it doesn't touch history).
+            result = action_response("TEARDOWN", str(data.get("url", ""))[:500])
+            return self._json({"ok": result["action"]["ok"], **result})
 
         if self.path == "/api/recall":
             with _lock:

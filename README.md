@@ -22,6 +22,27 @@ python3 server.py
 Open http://127.0.0.1:4700. Click a star to fly to it, Esc to go back, `/` to
 jump to the question bar, "New" to start a fresh conversation.
 
+## Teardown bay (REA)
+
+Jarvis can take a website apart with [REA](https://github.com/morluto/rea) (MIT, npm
+`rea-agents`), by observation only. REA is installed outside the project, pinned:
+
+```bash
+npm view rea-agents repository.url        # must be github.com/morluto/rea
+mkdir -p ~/.jarvis-tools/rea && cd ~/.jarvis-tools/rea
+npm install rea-agents@6.5.0 --save-exact --ignore-scripts
+```
+
+It needs Node.js 22.19+ (or 24.11+, or 26+) and Google Chrome. `teardown.py` finds both even
+when the server starts without your shell's PATH. `GET /teardown/diag` reports what's ready
+and what's missing. Say "tear down example.com", or `POST /teardown {"url": ...}`.
+
+The law, enforced in `teardown.py`: only REA's passive website commands may run. Pages open in
+a headless Chrome with a fresh profile (no logins, no cookies), and nothing sends input.
+Addresses must be http(s), with no credentials and no private-network or cloud-metadata
+hosts. Localhost is allowed, for your own projects. To upgrade REA, change `PINNED_REA` in
+`teardown.py` and re-run the install with the new version. Nothing ever installs "latest".
+
 ## Preflight
 
 ```bash

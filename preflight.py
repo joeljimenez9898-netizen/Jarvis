@@ -436,6 +436,61 @@ def mute_is_silent():
     return "muted tab: 0 engine calls after a click, speak() and utter(); unmuted control: reached the engine"
 
 
+@check("Teardown bay: REA ready and pinned")
+def teardown_ready():
+    status, _, raw = http("GET", "/teardown/diag")
+    if status != 200:
+        raise Fail(f"/teardown/diag returned HTTP {status}")
+    d = json.loads(raw)
+    CTX["bay"] = d
+    rea = d.get("rea") or {}
+    if rea.get("installed") and rea.get("installed") != rea.get("pinned"):
+        raise Fail(f"REA {rea['installed']} is installed but Jarvis is pinned to {rea['pinned']}: {d.get('fix')}")
+    if not d.get("ready"):
+        raise Warn("bay not ready (Jarvis still works without it): " + " ".join(d.get("problems", [])))
+    node, chrome = d.get("node") or {}, d.get("chrome") or {}
+    return f"REA {rea['installed']} (pinned {rea['pinned']}), Node {node.get('version')}, Chrome: {chrome.get('path')}"
+
+
+@check("Teardown law: off-limits targets are refused")
+def teardown_law():
+    off_limits = ["file:///etc/passwd", "javascript:alert(1)", "http://192.168.1.1/",
+                  "http://169.254.169.254/latest/meta-data", "https://user:pw@example.com",
+                  "ftp://example.com", "http://0.0.0.0:8080"]
+    let_through = []
+    for url in off_limits:
+        status, data = post_json("/teardown", {"url": url}, timeout=30)
+        if data.get("ok") or (data.get("action") or {}).get("line") != "refused":
+            let_through.append(f"{url} -> {data.get('answer') or data}")
+    if let_through:
+        raise Fail("NOT refused: " + "; ".join(let_through))
+    sys.path.insert(0, str(ROOT))
+    try:
+        import teardown
+    except ImportError:
+        return f"{len(off_limits)} off-limits targets refused (teardown.py not importable here)"
+    acting = {"capture-browser-scenario", "capture-electron-scenario", "capture-native-ui-scenario",
+              "debug-with-gdb", "debug-with-rizin", "cutter-command", "execute-rizin-command",
+              "observe-web-session", "observe-web-execution", "capture-process"}
+    if teardown.ALLOWED_COMMANDS & acting:
+        raise Fail(f"teardown.py allows REA commands that act: {sorted(teardown.ALLOWED_COMMANDS & acting)}")
+    return f"{len(off_limits)} off-limits targets refused; REA limited to {len(teardown.ALLOWED_COMMANDS)} observation commands"
+
+
+@check("Teardown runs live: Chrome + REA observe a real page")
+def teardown_live():
+    if not (CTX.get("bay") or {}).get("ready"):
+        raise Warn("skipped: the bay isn't ready (see above)")
+    # Our own project is a page we may always look at, and it needs no internet.
+    status, data = post_json("/teardown", {"url": BASE + "/"}, timeout=180)
+    a = data.get("action") or {}
+    if status != 200 or not data.get("ok"):
+        raise Fail(f"{data.get('answer') or data}")
+    if a.get("title") != "Knowledge Galaxy" or not a.get("evidence_id"):
+        raise Fail(f"observed the wrong page or no evidence: title={a.get('title')!r}, evidence={a.get('evidence_id')}")
+    return f"{a['title']}: {a['scripts']} scripts, {a['resources']} resources, {a['dom_nodes']} DOM nodes (evidence {a['evidence_id'][:14]}…)"
+
+
 # ── runner ──────────────────────────────────────────────────────────
 
 def main():
