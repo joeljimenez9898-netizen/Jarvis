@@ -85,12 +85,14 @@ SYSTEM_PROMPT = PERSONA.replace("{tags}", "\n".join(
 # ═════════════════════════════ end of persona ═══════════════════════════════
 
 import datetime
+import hashlib
 import json
 import pathlib
 import re
 import subprocess
 import sys
 import threading
+import urllib.parse
 from collections import deque
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
@@ -116,6 +118,11 @@ STOPWORDS = set("""a an and are as at be but by can could did do does for from h
 how i if in into is it its me my of on or our so that the their them then there these they
 this to was we were what when where which who whom why will with would you your about any
 tell much many also than just more most should been being over under up out""".split())
+
+# Fingerprint of the code this process loaded. preflight.py compares it with the files
+# on disk to catch a server that was never restarted after an edit.
+CODE_SHA = hashlib.sha256(b"".join(
+    (ROOT / f).read_bytes() for f in ("server.py", "build.py"))).hexdigest()[:16]
 
 _lock = threading.Lock()
 _history = deque(maxlen=HISTORY_TURNS * 2)
@@ -498,22 +505,31 @@ def action_response(tag, arg=""):
             "action": {k: v for k, v in receipt.items() if k in ("tag", "arg", "ok", "reason", "reload", "count")}}
 
 
+def select_notes(question):
+    """Exactly the notes /chat would send for this question: (about_notes, [indexes])."""
+    about_notes, query = classify(question)
+    if not about_notes:
+        return False, []
+    notes = load_notes()
+    picked = rank(query, notes)
+    # Follow-ups ("and who owns it?") have few keywords: top up from last turn.
+    # Indexes can go stale if a note was removed since, so check they still exist.
+    for i in _last_nodes:
+        if len(picked) >= TOP_K:
+            break
+        if i < len(notes) and i not in picked:
+            picked.append(i)
+    return True, picked
+
+
 def chat(question):
     global _last_nodes
     with _lock:
         key, model = read_config()
 
-        about_notes, query = classify(question)
-        picked = []
+        about_notes, picked = select_notes(question)
         if about_notes:
             notes = load_notes()
-            picked = rank(query, notes)
-            # Follow-ups ("and who owns it?") have few keywords: top up from last turn.
-            for i in _last_nodes:
-                if len(picked) >= TOP_K:
-                    break
-                if i not in picked:
-                    picked.append(i)
             context = "\n\n".join(
                 f'<note index="{i}" title="{notes[i]["label"]}">\n{notes[i]["body"].strip()}\n</note>'
                 for i in picked) or "(no notes matched this question)"
@@ -568,23 +584,32 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _path_ok(self):
+        # A NUL byte (e.g. /config.json%00.js) makes open() raise mid-request, which used
+        # to drop the connection. Refuse it cleanly instead.
+        return "\x00" not in urllib.parse.unquote(self.path)
+
     def do_GET(self):
         if not self._host_ok():
             return self.send_error(403, "invalid host")
+        if not self._path_ok():
+            return self.send_error(400, "bad path")
         if self.path == "/api/boot":
-            return self._json({"greeting": BOOT_GREETING})
+            return self._json({"greeting": BOOT_GREETING, "code": CODE_SHA})
         return super().do_GET()
 
     def do_HEAD(self):
         if not self._host_ok():
             return self.send_error(403, "invalid host")
+        if not self._path_ok():
+            return self.send_error(400, "bad path")
         return super().do_HEAD()
 
     def list_directory(self, path):
         return self.send_error(404, "not found")
 
     def do_POST(self):
-        if self.path not in ("/chat", "/action", "/remember"):
+        if self.path not in ("/chat", "/action", "/remember", "/api/recall"):
             return self._json({"error": "not found"}, 404)
         origin = self.headers.get("Origin")
         if not self._host_ok() or (origin and origin not in
@@ -604,6 +629,13 @@ class Handler(SimpleHTTPRequestHandler):
             tag = str(data.get("tag", "")).strip().upper()
         except (json.JSONDecodeError, AttributeError):
             return self._json({"error": "invalid JSON"}, 400)
+
+        if self.path == "/api/recall":
+            with _lock:
+                about, picked = select_notes(question)
+                notes = load_notes()
+                return self._json({"about_notes": about,
+                                   "notes": [{"index": i, "label": notes[i]["label"]} for i in picked]})
 
         if self.path == "/remember":
             try:

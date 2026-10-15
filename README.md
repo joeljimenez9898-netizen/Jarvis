@@ -22,6 +22,24 @@ python3 server.py
 Open http://127.0.0.1:4700. Click a star to fly to it, Esc to go back, `/` to
 jump to the question bar, "New" to start a fresh conversation.
 
+## Preflight
+
+```bash
+python3 server.py          # terminal 1
+python3 preflight.py       # terminal 2
+```
+
+`preflight.py` runs every live chain end to end against the running system: no mocks. It checks
+that the server is up, the graph loads, `/chat` answers, the API key and model are real, and
+`/remember` writes a note that the next question can retrieve (the test note is removed
+afterwards). It also checks that the served files match the disk and the server isn't running
+stale code, that `config.json` can't be reached from the browser, and that a `?mute=1` tab
+stays silent in a real browser. It ends with `N pass, N fail, N warn` and exits non-zero on
+any failure.
+
+The live mute check needs Playwright (`pip install playwright && playwright install chromium`).
+Without it, that check only verifies the source and reports a warning.
+
 ## How it fits together
 
 - **Indexer.** Every `.md` file becomes a node: label from the filename, group

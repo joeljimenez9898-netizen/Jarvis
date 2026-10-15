@@ -75,9 +75,21 @@ const FINISH_MS = 900;
     return out.map(s => s.trim()).filter(Boolean);
   }
 
-  /** The only function in the app that produces sound. Resolves when done. */
+  /**
+   * The ONE place that hands anything to the speech engine. Every sound, including the
+   * silent unlock primer, goes through here, so ?mute=1 can't be routed around.
+   * Returns false when it refused.
+   */
+  function utter(u) {
+    if (MUTED) return false;                      // ?mute=1: this tab never speaks
+    if (!synth) return false;
+    synth.speak(u);
+    return true;
+  }
+
+  /** Speak a line (queued until the first user gesture). Resolves when done. */
   function speak(text) {
-    if (MUTED) return Promise.resolve();          // ?mute=1: this tab never speaks
+    if (MUTED) return Promise.resolve();          // nothing to queue or wait for
     text = String(text || "").trim();
     if (!synth || !text) return Promise.resolve();
     if (!unlocked) {                               // browsers block audio before a gesture
@@ -102,7 +114,7 @@ const FINISH_MS = 900;
         u.rate = 1; u.pitch = 1;
         live.add(u);
         u.onend = u.onerror = () => { live.delete(u); done(); };
-        synth.speak(u);
+        if (!utter(u)) { live.delete(u); done(); }
       }
       if (synth.paused) synth.resume();
     });
@@ -124,7 +136,7 @@ const FINISH_MS = 900;
     // Speaking inside the gesture is what unlocks audio in Chrome and Safari.
     const primer = new SpeechSynthesisUtterance(" ");
     primer.volume = 0;
-    synth.speak(primer);
+    utter(primer);
     const pending = queued.splice(0);
     // Let the gesture finish, then play what was waiting (only the latest line matters).
     setTimeout(() => {
@@ -266,7 +278,7 @@ const FINISH_MS = 900;
   }
 
   window.Voice = {
-    FINISH_MS, MUTED, routes, addRoute, speak, stopSpeaking, init,
+    FINISH_MS, MUTED, routes, addRoute, speak, utter, stopSpeaking, init,
     setThinking: on => set({ thinking: !!on, note: "" }),
     setNote: text => set({ note: String(text || "") }),
     get state() { return { ...state }; },
