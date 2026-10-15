@@ -38,6 +38,19 @@ jump to the question bar, "New" to start a fresh conversation.
 Re-run `build.py` whenever your notes change. The server picks up the new
 `graph-data.js` without a restart.
 
+## Growing the brain by voice
+
+Say or type anything starting with "remember that" and it becomes a real note:
+
+- `server.py` → `add_note()` writes `notes/captures/<first few words>.md` with today's date,
+  links it with the same rules `build.py` uses, appends it to `viewer/graph-data.js`, and adds
+  it to the live search index. The next question can cite it without re-running `build.py`.
+- `viewer/index.html` → `addNote()` places it beside its most related note, pulses it and
+  flies the camera to it, all without a reload.
+- Anything that adds notes at runtime should go through these two functions.
+- A capture never fails silently. If the write fails, or the file is saved but couldn't be
+  indexed, it says so out loud.
+
 ## Personality
 
 The whole character is one commented block at the top of `server.py`:

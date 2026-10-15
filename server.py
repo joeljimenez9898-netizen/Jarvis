@@ -38,6 +38,11 @@ RECEIPT_LINES = {
     "REINDEX": {"ok": "Re-indexed. {count} notes on file; the galaxy will redraw itself.",
                 "fail": "The re-index did not happen: {reason}."},
     "UNKNOWN": {"fail": "I'm afraid I have no means of doing that, sir."},
+    # Captures ("remember that ...") are not a tag, but they speak through receipts too.
+    "REMEMBER": {"ok": "Committed to memory, sir: {title}.",
+                 "fail": "I'm afraid that was not written down: {reason}.",
+                 "partial": "I wrote it down but couldn't file it in the index: {reason}. Say rescan and I'll try again.",
+                 "empty": "Remember what, sir?"},
 }
 
 PERSONA = """You are a dry, impeccably polite British butler with a razor wit, and you keep
@@ -79,6 +84,7 @@ SYSTEM_PROMPT = PERSONA.replace("{tags}", "\n".join(
 
 # ═════════════════════════════ end of persona ═══════════════════════════════
 
+import datetime
 import json
 import pathlib
 import re
@@ -90,7 +96,9 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 import anthropic
 
-ROOT = pathlib.Path(__file__).resolve().parent
+import build
+
+ROOT = build.ROOT
 VIEWER = ROOT / "viewer"
 CONFIG = ROOT / "config.json"
 GRAPH_FILE = VIEWER / "graph-data.js"
@@ -131,6 +139,11 @@ def tokens(text):
             if len(t) > 1 and t not in STOPWORDS]
 
 
+def _index_entry(i, label, body):
+    return {"id": i, "label": label, "body": body,
+            "title_tokens": set(tokens(label)), "body_tokens": tokens(body)}
+
+
 def load_notes():
     """Nodes from graph-data.js (so indexes match the viewer) + full note text."""
     mtime = GRAPH_FILE.stat().st_mtime
@@ -145,9 +158,7 @@ def load_notes():
                 body = path.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 body = node["excerpt"]
-            notes.append({"id": node["id"], "label": node["label"], "body": body,
-                          "title_tokens": set(tokens(node["label"])),
-                          "body_tokens": tokens(body)})
+            notes.append(_index_entry(node["id"], node["label"], body))
         _graph_cache.update(mtime=mtime, notes=notes)
     return _graph_cache["notes"]
 
@@ -190,6 +201,127 @@ def classify(question):
     if not rest:
         return False, ""
     return True, rest
+
+
+# ── captures: the ONE door for new notes ────────────────────────
+# Everything that births a note at runtime goes through add_note(): it writes the file,
+# links it exactly as build.py would, appends it to graph-data.js, and adds it to the
+# live search index so the very next /chat can cite it. No re-run of build.py needed.
+
+class CaptureError(Exception):
+    def __init__(self, reason, written=False, path=None):
+        super().__init__(reason)
+        self.reason, self.written, self.path = reason, written, path
+
+
+def notes_dir():
+    configured = _config().get("notes_dir")
+    return pathlib.Path(configured).expanduser() if configured else ROOT / "notes"
+
+
+def make_title(text, words=6):
+    parts = re.findall(r"[\w'’-]+", text)
+    while parts and parts[0].lower() in {"the", "a", "an", "that", "to"}:
+        parts.pop(0)
+    title = " ".join(parts[:words]).strip(" -'’")[:60].strip()
+    return (title[:1].upper() + title[1:]) if title else "Capture"
+
+
+def add_note(text, folder="captures", title=None, kind="capture"):
+    """Write, link, append, index. Returns {index, node, links, anchor, path}.
+    Raises CaptureError; .written says whether the file exists despite the failure.
+    Caller holds _lock."""
+    global _last_nodes
+    text = " ".join(str(text).split())
+    if not text:
+        raise CaptureError("there was nothing to write down")
+    sentence = text[:1].upper() + text[1:]
+    if sentence[-1] not in ".!?":
+        sentence += "."
+    title = re.sub(r'[\\/:*?"<>|]+', " ", title or make_title(text)).strip() or "Capture"
+
+    # 1. the file
+    graph = build.read_graph()
+    taken = {n["label"].lower() for n in graph["nodes"]}
+    try:
+        base = notes_dir()
+        if not base.is_dir():
+            raise CaptureError(f"the notes folder {base} doesn't exist")
+        folder_path = base / folder
+        folder_path.mkdir(parents=True, exist_ok=True)
+        label, n = title, 2
+        while label.lower() in taken or (folder_path / f"{label}.md").exists():
+            label, n = f"{title} ({n})", n + 1
+        path = folder_path / f"{label}.md"
+        today = datetime.date.today()
+        content = (f"---\ntype: {kind}\ndate: {today.isoformat()}\n---\n\n# {label}\n\n"
+                   f"{sentence}\n\nCaptured {today.day} {today:%B %Y}.\n")
+        with open(path, "x", encoding="utf-8") as fh:
+            fh.write(content)
+        if path.read_text(encoding="utf-8") != content:
+            raise CaptureError("the file didn't read back the way it was written", True, path)
+    except CaptureError:
+        raise
+    except OSError as e:
+        raise CaptureError(e.strerror or str(e))
+
+    # 2. link it, append it, index it. The file exists from here on.
+    try:
+        index = len(graph["nodes"])
+        records = []
+        for node in graph["nodes"]:
+            p = pathlib.Path(node["path"])
+            p = p if p.is_absolute() else ROOT / p
+            try:
+                records.append(build.read_note(p, p.parent))
+            except OSError:   # file gone since the last build: link on what we know
+                records.append({"label": node["label"], "text": node["excerpt"], "wikilinks": set()})
+        record = build.read_note(path, base)
+        new_links = build.links_for(index, records + [record])
+        node = build.make_node(index, record, len(new_links))
+        for link in new_links:
+            other = link["source"] if link["target"] == index else link["target"]
+            graph["nodes"][other]["degree"] += 1
+        graph["nodes"].append(node)
+        graph["links"].extend(new_links)
+
+        # Born next to its most related neighbour: best retrieval score among its links.
+        notes = load_notes()
+        ranked = rank(text, notes)
+        linked = {l["source"] if l["target"] == index else l["target"] for l in new_links}
+        anchor = next((i for i in ranked if i in linked), None)
+        if anchor is None:
+            anchor = next(iter(sorted(linked)), ranked[0] if ranked else None)
+
+        build.write_graph(graph["nodes"], graph["links"])
+        # Live search index: append directly, and mark the cache current for the new file.
+        notes.append(_index_entry(index, label, path.read_text(encoding="utf-8")))
+        _graph_cache["mtime"] = GRAPH_FILE.stat().st_mtime
+    except Exception as e:  # noqa: BLE001 — the file is safe; say exactly what didn't happen
+        reason = (e.strerror if isinstance(e, OSError) and e.strerror else str(e)) or e.__class__.__name__
+        raise CaptureError(reason, True, path)
+
+    _last_nodes = [index]
+    return {"index": index, "node": node, "links": new_links, "anchor": anchor,
+            "path": node["path"]}
+
+
+def remember(text):
+    """The /remember endpoint's work: one capture, one spoken receipt line."""
+    lines = RECEIPT_LINES["REMEMBER"]
+    content = re.sub(r"^\s*remember(?:\s+that)?\b[\s,.:;]*", "", text, flags=re.I).strip(" ,.:;")
+    if not content:
+        return 400, {"ok": False, "answer": lines["empty"], "error": "nothing to remember"}
+    with _lock:
+        try:
+            result = add_note(content)
+        except CaptureError as e:
+            line = (lines["partial"] if e.written else lines["fail"]).format(reason=e.reason)
+            return 500, {"ok": False, "answer": line, "error": e.reason, "written": e.written}
+        _history.append({"role": "user", "content": f"Remember that {content}"})
+        _history.append({"role": "assistant", "content":
+                         f"[REMEMBER] RECEIPT ok=true title={result['node']['label']} index={result['index']}"})
+    return 200, {"ok": True, "answer": lines["ok"].format(title=result["node"]["label"]), **result}
 
 
 # ── model ─────────────────────────────────────────────────────────
@@ -452,7 +584,7 @@ class Handler(SimpleHTTPRequestHandler):
         return self.send_error(404, "not found")
 
     def do_POST(self):
-        if self.path not in ("/chat", "/action"):
+        if self.path not in ("/chat", "/action", "/remember"):
             return self._json({"error": "not found"}, 404)
         origin = self.headers.get("Origin")
         if not self._host_ok() or (origin and origin not in
@@ -472,6 +604,15 @@ class Handler(SimpleHTTPRequestHandler):
             tag = str(data.get("tag", "")).strip().upper()
         except (json.JSONDecodeError, AttributeError):
             return self._json({"error": "invalid JSON"}, 400)
+
+        if self.path == "/remember":
+            try:
+                status, payload = remember(str(data.get("text", ""))[:4000])
+            except Exception as e:  # noqa: BLE001 — a capture never fails silently
+                self.log_error("remember failed: %r", e)
+                status, payload = 500, {"ok": False, "error": str(e),
+                                        "answer": RECEIPT_LINES["REMEMBER"]["fail"].format(reason="an internal error")}
+            return self._json(payload, status)
 
         # Buttons and voice commands run the same tags the brain asks for.
         if self.path == "/action":

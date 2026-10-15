@@ -165,19 +165,27 @@ await new Promise((resolve, reject) => {
   const PALETTE = ["#6ea8ff", "#ff7eb6", "#7ef0c4", "#ffc56e", "#b48cff", "#6ee7ff", "#ff8f6e", "#d4f06e", "#f2a6ff", "#9aa8ff"];
   const groups = [...new Set(nodes.map(n => n.group))].sort();
   const colour = Object.fromEntries(groups.map((g, i) => [g, PALETTE[i % PALETTE.length]]));
-
-  $("stats").textContent = `${nodes.length} notes indexed · ${links.length} connections · ${groups.length} groups`;
   const legend = $("legend");
-  groups.forEach(g => {
-    const row = document.createElement("div");
-    const count = nodes.filter(n => n.group === g).length;
-    row.innerHTML = `<i></i><b></b><span class="n">${count}</span>`;
-    row.querySelector("i").style.cssText = `background:${colour[g]};color:${colour[g]}`;
-    row.querySelector("b").textContent = g;
-    row.querySelector("b").style.fontWeight = "400";
-    row.onclick = () => Focus.cluster(nodes.filter(n => n.group === g).map(n => n.id), { frame: true });
-    legend.appendChild(row);
-  });
+  const legendRows = {};
+
+  function renderLegend() {
+    $("stats").textContent = `${nodes.length} notes indexed · ${links.length} connections · ${groups.length} groups`;
+    groups.forEach(g => {
+      if (!colour[g]) colour[g] = PALETTE[groups.indexOf(g) % PALETTE.length];
+      let row = legendRows[g];
+      if (!row) {
+        row = legendRows[g] = document.createElement("div");
+        row.innerHTML = `<i></i><b></b><span class="n"></span>`;
+        row.querySelector("i").style.cssText = `background:${colour[g]};color:${colour[g]}`;
+        row.querySelector("b").textContent = g;
+        row.querySelector("b").style.fontWeight = "400";
+        row.onclick = () => Focus.cluster(nodes.filter(n => n.group === g).map(n => n.id), { frame: true });
+        legend.appendChild(row);
+      }
+      row.querySelector(".n").textContent = nodes.filter(n => n.group === g).length;
+    });
+  }
+  renderLegend();
 
   // ── glowing node objects ──────────────────────────────────────
   const glowTexture = (() => {
@@ -324,19 +332,66 @@ await new Promise((resolve, reject) => {
     get current() { return view.centre; },
   };
 
+  const glowScale = n => (2.2 + Math.sqrt(n.degree || 0) * 0.9) * (n.id === view.centre ? 11 : 7);
+
   function paint() {
     nodes.forEach(n => {
       if (!n.__core) return;
       const on = lit(n.id), centre = n.id === view.centre;
       n.__core.material.opacity = on ? 1 : 0.12;
       n.__glow.material.opacity = on ? (centre ? 1.4 : 0.9) : 0.05;
-      n.__glow.scale.setScalar((2.2 + Math.sqrt(n.degree || 0) * 0.9) * (centre ? 11 : 7));
+      n.__glow.scale.setScalar(glowScale(n));
     });
     Graph.linkColor(Graph.linkColor()).linkWidth(Graph.linkWidth())
       .linkDirectionalParticles(Graph.linkDirectionalParticles());
   }
 
   setTimeout(() => Focus.overview(), 2500);
+
+  // ── new notes: the ONE viewer door ────────────────────────────
+  // Every note born at runtime comes through addNote(): it is placed at its most related
+  // node, linked exactly as the server linked it, pulses, and the camera flies to it.
+  // Returns false if this tab's graph is out of step with the server (caller reloads).
+  function addNote(node, newLinks = [], anchor = null) {
+    if (node.id !== nodes.length) return false;
+    if (!groups.includes(node.group)) groups.push(node.group);
+
+    const a = nodes[anchor];
+    // Beside the anchor, not on it: two nodes in the same spot repel violently.
+    const t = Math.random() * Math.PI * 2, u = Math.acos(2 * Math.random() - 1), r = 14;
+    const at = a ? { x: a.x + r * Math.sin(u) * Math.cos(t), y: a.y + r * Math.sin(u) * Math.sin(t), z: a.z + r * Math.cos(u) }
+                 : { x: 0, y: 0, z: 0 };
+    // Pinned at its birthplace (fx/fy/fz) through the pulse and the flight; otherwise the
+    // repulsion from the neighbour it was born beside flings it away on the first tick.
+    Object.assign(node, at, { fx: at.x, fy: at.y, fz: at.z });
+    nodes.push(node);                       // nodes === GRAPH.nodes, so lookups by index work
+    neighbours.push(new Set());
+    for (const l of newLinks) {
+      links.push({ ...l });
+      GRAPH.links.push(l);
+      neighbours[l.source].add(l.target);
+      neighbours[l.target].add(l.source);
+      const other = l.source === node.id ? l.target : l.source;
+      nodes[other].degree = (nodes[other].degree || 0) + 1;
+    }
+    Graph.graphData({ nodes, links });
+    renderLegend();
+    pulse(node);
+    setTimeout(() => Focus.note(node.id), 700);
+    setTimeout(() => { node.fx = node.fy = node.fz = undefined; Graph.d3ReheatSimulation(); }, 700 + 1700);
+    return true;
+  }
+
+  function pulse(n, ms = 1600) {
+    const start = performance.now();
+    (function frame(t) {
+      if (!n.__glow) return requestAnimationFrame(frame);    // object not built yet
+      const k = Math.min((t - start) / ms, 1);
+      n.__glow.scale.setScalar(glowScale(n) * (1 + 1.8 * Math.sin(Math.PI * k)));
+      n.__glow.material.opacity = 0.9 + 0.8 * Math.sin(Math.PI * k);
+      if (k < 1) requestAnimationFrame(frame); else paint();
+    })(start);
+  }
 
   function chip(id) {
     const n = nodes[id], b = document.createElement("button");
@@ -355,6 +410,7 @@ await new Promise((resolve, reject) => {
     $("p-excerpt").textContent = n.excerpt;
     const box = $("p-links"); box.replaceChildren();
     [...neighbours[n.id]].sort((a, b) => nodes[a].label.localeCompare(nodes[b].label)).forEach(i => box.appendChild(chip(i)));
+    if (!neighbours[n.id].size) box.textContent = "No links yet. Mention another note's title and it will join up.";
     $("panel").classList.add("open");
     document.body.classList.add("panel-open");
   }
@@ -402,10 +458,47 @@ await new Promise((resolve, reject) => {
     return sentences.slice(0, 3).join(" ").trim();
   }
 
+  // "remember that ..." -> a real note on disk, live in the galaxy. Never fails silently.
+  const REMEMBER = /^\s*remember that\b/i;
+
+  async function remember(text) {
+    Voice.stopSpeaking();
+    answer.className = "glass show thinking";
+    answer.querySelector(".q").textContent = text;
+    answer.querySelector(".a").textContent = "Writing it down";
+    answer.querySelector(".chips").replaceChildren();
+    let data;
+    try {
+      const res = await fetch("/remember", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      data = await res.json();
+    } catch {
+      data = { ok: false, answer: "I'm afraid that was not written down: the server didn't answer." };
+    }
+    if (!data.ok) {
+      answer.className = "glass show error";
+      answer.querySelector(".a").textContent = data.answer || data.error || "Not written down.";
+      Voice.speak(data.answer || "I'm afraid that was not written down.");
+      return;
+    }
+    answer.className = "glass show";
+    answer.querySelector(".a").textContent = data.answer;
+    if (!addNote(data.node, data.links, data.anchor)) {
+      // Saved and indexed on the server, but this tab's galaxy is stale: redraw it.
+      Voice.speak(data.answer + " The galaxy needs redrawing.").then(() => location.reload());
+      return;
+    }
+    answer.querySelector(".chips").appendChild(chip(data.index));
+    Voice.speak(data.answer);
+  }
+
   // One path to the brain for typed and spoken questions. Every answer is spoken.
   async function ask(question) {
     question = question.trim();
     if (!question) return;
+    if (REMEMBER.test(question)) return remember(question);
     Voice.stopSpeaking();
     $("send").disabled = true;
     Voice.setThinking(true);
@@ -450,6 +543,7 @@ await new Promise((resolve, reject) => {
   // ── voice ─────────────────────────────────────────────────────
   // Commands that never reach the brain. Add more with Voice.addRoute(pattern, handler).
   Voice.addRoute(/^(?:new conversation|start over|start again|reset)$/, () => newConversation());
+  Voice.addRoute(/^remember that\b/, (m, sentence) => remember(sentence));
   Voice.addRoute(/^(?:close|close (?:the )?panel|go back|zoom out|show (?:me )?everything)$/, () => Focus.clear());
   Voice.addRoute(/^(?:show me|open|go to|fly to) (?:the )?(.+)$/, (m, sentence) => {
     const want = m[1];
@@ -475,7 +569,7 @@ await new Promise((resolve, reject) => {
     Voice.speak(greeting);
   }).catch(() => Voice.setNote(`${nodes.length} notes indexed.`));
 
-  window.galaxy = { Graph, Focus, view, get lastFocus() { return lastFocus; } };  // devtools + tests
+  window.galaxy = { Graph, Focus, view, addNote, get lastFocus() { return lastFocus; } };  // devtools + tests
 
   function escapeHtml(s) {
     return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

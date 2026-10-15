@@ -6,7 +6,9 @@ Usage: python3 build.py [NOTES_DIR]        (default: ./notes)
 Standard library only. Every node's numeric `id` equals its index in the
 nodes array; server.py and the viewer both look notes up by that index.
 """
+import functools
 import json
+import os
 import pathlib
 import re
 import sys
@@ -38,55 +40,94 @@ def excerpt(text, limit=EXCERPT_CHARS):
     return cut.rstrip(",.;:") + "…"
 
 
+def read_note(path, notes_dir):
+    """One .md file -> the record the linker and indexer work from."""
+    path, notes_dir = pathlib.Path(path).resolve(), pathlib.Path(notes_dir).resolve()
+    raw = path.read_text(encoding="utf-8", errors="replace")
+    rel_parent = path.parent.relative_to(notes_dir)
+    # The title is already the label; drop a leading "# Title" heading from the text.
+    body = re.sub(r"\A(---\s*\n.*?\n---\s*\n)?\s*#\s+" + re.escape(path.stem) + r"\s*\n",
+                  lambda m: m.group(1) or "", raw, flags=re.S)
+    return {
+        "label": path.stem,
+        "group": path.parent.name if str(rel_parent) != "." else notes_dir.name,
+        "path": str(path.relative_to(ROOT) if path.is_relative_to(ROOT) else path),
+        "raw": raw,
+        "text": strip_markdown(body),
+        "wikilinks": {w.strip().lower() for w in WIKILINK.findall(raw)},
+    }
+
+
 def scan(notes_dir):
     notes_dir = pathlib.Path(notes_dir).resolve()
     files = sorted(p for p in notes_dir.rglob("*.md")
                    if not any(part.startswith(".") for part in p.relative_to(notes_dir).parts))
-    notes = []
-    for path in files:
-        raw = path.read_text(encoding="utf-8", errors="replace")
-        rel_parent = path.parent.relative_to(notes_dir)
-        # The title is already the label; drop a leading "# Title" heading from the text.
-        body = re.sub(r"\A(---\s*\n.*?\n---\s*\n)?\s*#\s+" + re.escape(path.stem) + r"\s*\n",
-                      lambda m: m.group(1) or "", raw, flags=re.S)
-        notes.append({
-            "label": path.stem,
-            "group": path.parent.name if str(rel_parent) != "." else notes_dir.name,
-            "path": str(path.relative_to(ROOT) if path.is_relative_to(ROOT) else path),
-            "raw": raw,
-            "text": strip_markdown(body),
-            "wikilinks": {w.strip().lower() for w in WIKILINK.findall(raw)},
-        })
-    return notes
+    return [read_note(path, notes_dir) for path in files]
+
+
+@functools.lru_cache(maxsize=4096)
+def _title_pattern(title):
+    return re.compile(r"(?<!\w)" + re.escape(title) + r"(?!\w)", re.I)
+
+
+def _mentions(a, b):
+    """Does note a mention note b's title (as plain text or a [[wikilink]])?"""
+    title = b["label"].lower()
+    if len(title) < MIN_TITLE_LEN:
+        return False
+    return title in a["wikilinks"] or bool(_title_pattern(title).search(a["text"]))
+
+
+def link_type(a, b):
+    """The rule for linking two notes: "mention", "shared", or None."""
+    if _mentions(a, b) or _mentions(b, a):
+        return "mention"
+    if a["wikilinks"] & b["wikilinks"]:
+        return "shared"
+    return None
 
 
 def build_links(notes):
-    pairs = {}
-
-    def add(a, b, kind):
-        if a == b:
-            return
-        key = (min(a, b), max(a, b))
-        pairs.setdefault(key, set()).add(kind)
-
-    titles = [(i, n["label"].lower()) for i, n in enumerate(notes)]
-    patterns = {i: re.compile(r"(?<!\w)" + re.escape(t) + r"(?!\w)", re.I)
-                for i, t in titles if len(t) >= MIN_TITLE_LEN}
-
-    for i, note in enumerate(notes):
-        for j, pattern in patterns.items():
-            if j != i and (notes[j]["label"].lower() in note["wikilinks"]
-                           or pattern.search(note["text"])):
-                add(i, j, "mention")
-
+    links = []
     for i in range(len(notes)):
         for j in range(i + 1, len(notes)):
-            if notes[i]["wikilinks"] & notes[j]["wikilinks"]:
-                add(i, j, "shared")
+            kind = link_type(notes[i], notes[j])
+            if kind:
+                links.append({"source": i, "target": j, "type": kind})
+    return links
 
-    return [{"source": a, "target": b,
-             "type": "mention" if "mention" in kinds else "shared"}
-            for (a, b), kinds in sorted(pairs.items())]
+
+def links_for(index, notes):
+    """Links for one note against all the others, exactly as build_links would make them."""
+    out = []
+    for j, other in enumerate(notes):
+        if j != index:
+            kind = link_type(notes[index], other)
+            if kind:
+                a, b = min(index, j), max(index, j)
+                out.append({"source": a, "target": b, "type": kind})
+    return out
+
+
+def make_node(i, note, degree):
+    return {"id": i, "label": note["label"], "group": note["group"], "path": note["path"],
+            "excerpt": excerpt(note["text"]), "degree": degree}
+
+
+def write_graph(nodes, links):
+    """Atomic write, so a crash mid-write can't leave the viewer with half a file."""
+    assert all(node["id"] == i for i, node in enumerate(nodes))
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    tmp = OUT.with_suffix(".js.tmp")
+    tmp.write_text("// Generated by build.py. Do not edit by hand.\nconst GRAPH = "
+                   + json.dumps({"nodes": nodes, "links": links}, ensure_ascii=False, indent=1)
+                   + ";\n", encoding="utf-8")
+    os.replace(tmp, OUT)
+
+
+def read_graph():
+    raw = OUT.read_text(encoding="utf-8")
+    return json.loads(raw.split("=", 1)[1].strip().rstrip(";"))
 
 
 def main():
@@ -103,15 +144,8 @@ def main():
         degree[link["source"]] += 1
         degree[link["target"]] += 1
 
-    nodes = [{"id": i, "label": n["label"], "group": n["group"], "path": n["path"],
-              "excerpt": excerpt(n["text"]), "degree": degree[i]}
-             for i, n in enumerate(notes)]
-    assert all(node["id"] == i for i, node in enumerate(nodes))
-
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text("// Generated by build.py. Do not edit by hand.\nconst GRAPH = "
-                   + json.dumps({"nodes": nodes, "links": links}, ensure_ascii=False, indent=1)
-                   + ";\n", encoding="utf-8")
+    nodes = [make_node(i, n, degree[i]) for i, n in enumerate(notes)]
+    write_graph(nodes, links)
     groups = sorted({n["group"] for n in nodes})
     print(f"{len(nodes)} notes, {len(links)} links, {len(groups)} groups -> {OUT.relative_to(ROOT)}")
 
