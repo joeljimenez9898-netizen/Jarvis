@@ -352,7 +352,7 @@ await new Promise((resolve, reject) => {
   // Every note born at runtime comes through addNote(): it is placed at its most related
   // node, linked exactly as the server linked it, pulses, and the camera flies to it.
   // Returns false if this tab's graph is out of step with the server (caller reloads).
-  function addNote(node, newLinks = [], anchor = null) {
+  function addNote(node, newLinks = [], anchor = null, { fly = true } = {}) {
     if (node.id !== nodes.length) return false;
     if (!groups.includes(node.group)) groups.push(node.group);
 
@@ -377,7 +377,7 @@ await new Promise((resolve, reject) => {
     Graph.graphData({ nodes, links });
     renderLegend();
     pulse(node);
-    setTimeout(() => Focus.note(node.id), 700);
+    if (fly) setTimeout(() => Focus.note(node.id), 700);
     setTimeout(() => { node.fx = node.fy = node.fz = undefined; Graph.d3ReheatSimulation(); }, 700 + 1700);
     return true;
   }
@@ -454,7 +454,8 @@ await new Promise((resolve, reject) => {
 
   // The spoken answer stays short; the note itself is on screen, never read out.
   function spoken(text) {
-    const sentences = text.replace(/\s+/g, " ").match(/[^.!?]+[.!?]*/g) || [text];
+    // A full stop ends a sentence only before a space or the end, so "1.8 MB" stays whole.
+    const sentences = text.replace(/\s+/g, " ").match(/(?:[^.!?]|[.!?](?=\S))+(?:[.!?]+|$)/g) || [text];
     return sentences.slice(0, 3).join(" ").trim();
   }
 
@@ -494,6 +495,50 @@ await new Promise((resolve, reject) => {
     Voice.speak(data.answer);
   }
 
+  // Notes the server wrote (a teardown and, the first time, [[REA]]): born in order through
+  // the one door, with the camera flying only to the last. False if this tab is stale.
+  async function birth(births) {
+    for (let i = 0; i < births.length; i++) {
+      const b = births[i], last = i === births.length - 1;
+      if (!addNote(b.node, b.links, b.anchor, { fly: last })) return false;
+      if (!last) await new Promise(r => setTimeout(r, 1200));
+    }
+    return true;
+  }
+
+  // "tear down <site>": straight to the bay; the bay's own brain call writes the analysis.
+  async function teardownSite(sentence, url) {
+    Voice.stopSpeaking();
+    Voice.setThinking(true);
+    answer.className = "glass show thinking";
+    answer.querySelector(".q").textContent = sentence;
+    answer.querySelector(".a").textContent = "Taking it apart";
+    answer.querySelector(".chips").replaceChildren();
+    let data;
+    try {
+      const res = await fetch("/teardown", { method: "POST", headers: { "Content-Type": "application/json" },
+                                             body: JSON.stringify({ url, question: sentence }) });
+      data = await res.json();
+    } catch {
+      data = { answer: "I'm afraid the teardown didn't come back: the server didn't answer.", births: [] };
+    }
+    Voice.setThinking(false);
+    showAndSpeak(data);
+  }
+
+  async function showAndSpeak(data) {
+    const ok = !data.error && (data.ok !== false || (data.births || []).length);
+    answer.className = ok ? "glass show" : "glass show error";
+    answer.querySelector(".a").textContent = data.answer || data.error || "Nothing came back.";
+    const births = data.births || [];
+    if (births.length && !(await birth(births))) {
+      Voice.speak(data.answer + " The galaxy needs redrawing.").then(() => location.reload());
+      return;
+    }
+    if (births.length) answer.querySelector(".chips").appendChild(chip(births[births.length - 1].index));
+    Voice.speak(spoken(data.answer || ""));
+  }
+
   // One path to the brain for typed and spoken questions. Every answer is spoken.
   async function ask(question) {
     question = question.trim();
@@ -520,6 +565,7 @@ await new Promise((resolve, reject) => {
       if (data.about_notes) used.forEach(i => answer.querySelector(".chips").appendChild(chip(i)));
       // Decide the camera first, then talk: the panel is open while the answer is spoken.
       lastFocus = Focus.fromAnswer({ about_notes: !!data.about_notes, nodes: used });
+      if ((data.births || []).length) { await showAndSpeak(data); return; }
       const said = Voice.speak(spoken(data.answer));
       // A server action that rebuilt the index: new graph data needs a fresh page.
       if (data.action && data.action.ok && data.action.reload) said.then(() => location.reload());
@@ -544,6 +590,14 @@ await new Promise((resolve, reject) => {
   // Commands that never reach the brain. Add more with Voice.addRoute(pattern, handler).
   Voice.addRoute(/^(?:new conversation|start over|start again|reset)$/, () => newConversation());
   Voice.addRoute(/^remember that\b/, (m, sentence) => remember(sentence));
+  // Routes see punctuation-free text, so the address comes from the original sentence
+  // ("nodejs.org", or speech's "nodejs dot org"). No address: let the brain sort it out.
+  Voice.addRoute(/^(?:tear down|take apart|reverse engineer|look under the hood of)\b/, (m, sentence) => {
+    const said = sentence.replace(/\s+dot\s+/gi, ".");
+    const site = said.match(/\b((?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:\/\S*)?)/i);
+    if (site) teardownSite(sentence, site[1].replace(/[.,!?]+$/, ""));
+    else ask(sentence);
+  });
   Voice.addRoute(/^(?:close|close (?:the )?panel|go back|zoom out|show (?:me )?everything)$/, () => Focus.clear());
   Voice.addRoute(/^(?:show me|open|go to|fly to) (?:the )?(.+)$/, (m, sentence) => {
     const want = m[1];

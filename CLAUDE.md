@@ -36,3 +36,6 @@ call against the running system, not a mock.
 - Teardown evidence (`evidence.py`) labels every item with `by`: "REA", "Jarvis browser", or
   "Jarvis scan of REA-captured code". Never merge or relabel them. Fingerprint patterns live
   in the one `FINGERPRINTS` table, and banner patterns only match inside comments.
+- A teardown note is born through `add_note()` (markdown + attachments) and `addNote()`,
+  [[REA]] first if new. Its Evidence section and automatic claim check are written by Jarvis,
+  never by the brain. One teardown at a time (`_teardown_running`).

@@ -478,29 +478,88 @@ def teardown_law():
     return f"{len(off_limits)} off-limits targets refused; REA limited to {len(teardown.ALLOWED_COMMANDS)} observation commands"
 
 
-@check("Teardown runs live: Chrome + REA observe a real page")
+@check("Teardown chain: evidence -> note with snapshot -> [[REA]] -> spoken; one at a time")
 def teardown_live():
     if not (CTX.get("bay") or {}).get("ready"):
         raise Warn("skipped: the bay isn't ready (see above)")
-    # Our own project is a page we may always look at, and it needs no internet.
-    status, data = post_json("/teardown", {"url": BASE + "/", "headless": True}, timeout=180)
-    a = data.get("action") or {}
-    if status != 200 or not data.get("ok"):
-        raise Fail(f"{data.get('answer') or data}")
-    if a.get("title") != "Knowledge Galaxy" or not a.get("evidence_dir"):
-        raise Fail(f"observed the wrong page or no evidence: title={a.get('title')!r}, dir={a.get('evidence_dir')}")
-    folder = pathlib.Path(a["evidence_dir"])
+    import threading
+    box = {}
+    first = threading.Thread(target=lambda: box.update(r=post_json(
+        "/teardown", {"url": BASE + "/", "question": "What is this page built with?", "headless": True},
+        timeout=900)))
+    first.start()
+    time.sleep(1.5)
+    _, second = post_json("/teardown", {"url": BASE + "/", "headless": True}, timeout=30)
+    first.join()
+    status, data = box["r"]
+    a, births = data.get("action") or {}, data.get("births") or []
+    problems = []
+    if "already taking one apart" not in (second.get("answer") or ""):
+        problems.append(f"a second teardown during the first wasn't refused: {second.get('answer')!r}")
+    if not births:
+        raise Fail(f"no note was written: {data.get('answer') or data}" + ("; " + "; ".join(problems) if problems else ""))
+    folder = pathlib.Path(a["evidence_dir"]) if a.get("evidence_dir") else None
     try:
-        ev = json.loads((folder / "evidence.json").read_text())
-        problems = evidence_problems(ev, folder)
+        note = ROOT / births[-1]["path"] if not pathlib.Path(births[-1]["path"]).is_absolute() else pathlib.Path(births[-1]["path"])
+        text = note.read_text(encoding="utf-8")
+        img = re.search(r"!\[[^\]]*\]\((assets/[^)]+\.png)\)", text)
+        if not img or not (note.parent / urllib.parse.unquote(img.group(1))).read_bytes().startswith(b"\x89PNG"):
+            problems.append("snapshot not saved in assets/ or not embedded")
+        if "[[REA]]" not in text or not any(b["node"]["label"] == "REA" for b in births) and \
+                not any(n["label"] == "REA" for n in json.loads(http("GET", "/graph-data.js")[2].decode().split("=", 1)[1].strip().rstrip(";"))["nodes"]):
+            problems.append("no [[REA]] concept note to link to")
+        if "## Evidence" not in text or not re.search(r"`ev_[0-9a-f]{16,}`", text):
+            problems.append("Evidence section or REA evidence ids missing")
+        if not (data.get("answer") or "").strip():
+            problems.append("nothing to say aloud")
+        if folder and (folder / "evidence.json").exists():
+            problems += evidence_problems(json.loads((folder / "evidence.json").read_text()), folder)
+        brain = "analysed by the brain" if a.get("analysed") else None
+        if not brain:
+            problems.append("brain leg not run: " + (data.get("answer") or "no analysis"))
+        elif a.get("unsupported"):
+            CTX["teardown_flags"] = a["unsupported"]
     finally:
-        import shutil
-        shutil.rmtree(folder, ignore_errors=True)       # preflight's own test evidence
+        problems += remove_births(births)
+        if folder:
+            import shutil
+            shutil.rmtree(folder, ignore_errors=True)
     if problems:
-        raise Fail("evidence incomplete or unattributed: " + "; ".join(problems))
-    return (f"{a['title']}: loaded in {a['load_seconds']}s; 5 steps captured, every line attributed "
-            f"({len(ev['scripts'])} scripts, {ev['assets']['files']} files, screenshot "
-            f"{ev['screenshot']['width']}x{ev['screenshot']['height']})")
+        raise Fail("; ".join(problems) + f" (note, snapshot and {len(births)} node(s) were written and then removed)")
+    if CTX.get("teardown_flags"):
+        raise Warn(f"note written, but claims not found in the evidence: {CTX['teardown_flags']}")
+    return (f"{len(births)} node(s) born ({', '.join(b['node']['label'] for b in births)}), snapshot embedded, "
+            f"[[REA]] linked, {brain}; second request refused; test notes removed")
+
+
+def remove_births(births):
+    """Take preflight's notes back out: newest first, only if they're still the last nodes."""
+    sys.path.insert(0, str(ROOT))
+    import build
+    problems = []
+    for b in reversed(births):
+        path = pathlib.Path(b["path"])
+        path = path if path.is_absolute() else ROOT / path
+        graph = build.read_graph()
+        nodes = graph["nodes"]
+        if b["index"] != len(nodes) - 1 or nodes[-1]["label"] != b["node"]["label"]:
+            problems.append(f"TEST NOTE LEFT BEHIND: {path} (not the last node any more; remove it and run build.py)")
+            continue
+        for link in graph["links"]:
+            if b["index"] in (link["source"], link["target"]):
+                other = link["target"] if link["source"] == b["index"] else link["source"]
+                nodes[other]["degree"] = max(0, nodes[other]["degree"] - 1)
+        graph["links"] = [l for l in graph["links"] if b["index"] not in (l["source"], l["target"])]
+        nodes.pop()
+        build.write_graph(nodes, graph["links"])
+        text = path.read_text(encoding="utf-8") if path.exists() else ""
+        for asset in re.findall(r"\]\((assets/[^)]+)\)", text):
+            (path.parent / urllib.parse.unquote(asset)).unlink(missing_ok=True)
+        path.unlink(missing_ok=True)
+        for d in (path.parent / "assets", path.parent, path.parent.parent):
+            if d.is_dir() and d.name in ("assets", "teardowns", "captures", "concepts") and not any(d.iterdir()):
+                d.rmdir()
+    return problems
 
 
 def evidence_problems(ev, folder):

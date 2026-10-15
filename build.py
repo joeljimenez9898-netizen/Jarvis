@@ -73,9 +73,11 @@ def _title_pattern(title):
 def _mentions(a, b):
     """Does note a mention note b's title (as plain text or a [[wikilink]])?"""
     title = b["label"].lower()
-    if len(title) < MIN_TITLE_LEN:
+    if title in a["wikilinks"]:              # an explicit [[link]] always counts, even to "REA"
+        return True
+    if len(title) < MIN_TITLE_LEN:           # short titles cause too many accidental plain-text matches
         return False
-    return title in a["wikilinks"] or bool(_title_pattern(title).search(a["text"]))
+    return bool(_title_pattern(title).search(a["text"]))
 
 
 def link_type(a, b):

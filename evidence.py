@@ -57,12 +57,15 @@ OTHER_BANNER = re.compile(r"/\*[!*]?\s*(?:@license\s+)?([A-Za-z@][\w@./+-]*(?: [
 
 # Read-only globals that libraries set on window, read by Jarvis's own browser.
 RUNTIME_PROBE = """({
+  height: document.documentElement.scrollHeight,
+  images: document.images.length,
+  videos: document.querySelectorAll('video').length,
   three: window.__THREE__ || null,
   gsap: (window.gsap && window.gsap.version) || null,
   babylon: (window.BABYLON && window.BABYLON.Engine && window.BABYLON.Engine.Version) || null,
   playcanvas: (window.pc && window.pc.version) || null,
   pixi: (window.PIXI && window.PIXI.VERSION) || null,
-  webgl: (() => { const c = document.querySelectorAll('canvas'); return c.length; })()
+  canvases: document.querySelectorAll('canvas').length
 })"""
 
 # ── 2b. GPU STRINGS: names code hands to the graphics card, and what they mean ──
@@ -333,6 +336,7 @@ def capture(page, run_rea, out_dir):
                            for r in ir.get("resources") or []]
     ev["rea_dom_nodes"] = (ir.get("dom") or {}).get("total_nodes")
     ev["rea_limitations"] = inspect.get("limitations", [])
+    ev["rea_evidence_ids"] = {"inspect-web-page": inspect.get("evidence_id")}
 
     timings["watch"] = round(time.monotonic() - _t, 1); _t = time.monotonic()
     # 2. READ THE CODE
@@ -353,6 +357,7 @@ def capture(page, run_rea, out_dir):
             seen.add(n.get("url"))
     ev["routes"] = sorted({r.get("value") for r in obs.get("routes", []) if r.get("value")})
     ev["endpoints"] = sorted({e.get("value") for e in obs.get("endpoints", []) if e.get("value")})
+    ev["rea_evidence_ids"]["analyze-web-bundle"] = bundle.get("evidence_id")
     ev["rea_vendors"] = sorted({i["value"] for i in br.get("inferences", [])
                                 if i.get("kind") == "vendor_fingerprint" and i.get("value")})
     ev["gpu"] = gpu_strings(scripts)
@@ -371,6 +376,7 @@ def capture(page, run_rea, out_dir):
         raise RuntimeError("REA's screenshot wasn't a PNG")
     (out_dir / "screenshot.png").write_bytes(png)
     vp = (shot.get("normalized_result") or {}).get("viewport") or {}
+    ev["rea_evidence_ids"]["capture-web-screenshot"] = shot.get("evidence_id")
     ev["screenshot"] = {"by": REA, "path": str(out_dir / "screenshot.png"), "bytes": len(png),
                         "width": vp.get("width"), "height": vp.get("height"), "sha256": art.get("sha256")}
 
@@ -441,3 +447,80 @@ def digest(ev):
     s = ev["screenshot"]
     L.append(f"SNAPSHOT  [{s['by']}] {s['width']}x{s['height']} PNG, {_size(s['bytes'])} -> {s['path']}")
     return "\n".join(L)
+
+
+# ── the brain's digest: everything, compressed, attributed, under ~15,000 characters ──
+
+DIGEST_LIMIT = 15000
+LIMITS = [
+    "REA attaches to a page that is already running: anything before it attached (the first "
+    "network requests, console output, the intro) is not in REA's observation.",
+    "REA reports only the site's own origin. Files from other origins come from Jarvis's own "
+    "read of the browser's resource timeline.",
+    "Library names and versions come from license banners and strings left in the code. A "
+    "library that strips its banner, or is renamed, goes undetected; a banner proves the code "
+    "was shipped, not that it runs.",
+    "Shader and effect names show what the code can hand the graphics card, not what is on "
+    "screen at any moment.",
+    "Nothing was clicked or typed: views behind interaction weren't observed.",
+]
+
+
+def brain_digest(ev, question):
+    host = urllib.parse.urlsplit(ev["url"]).hostname or ev["url"]
+    page_origin = "{0.scheme}://{0.netloc}".format(urllib.parse.urlsplit(ev["url"]))
+    rt = ev.get("runtime_globals") or {}
+    a, g = ev["assets"], ev["gpu"]
+    sections = []
+
+    def sec(title, lines, cap=None):
+        lines = list(lines)
+        if cap and len(lines) > cap:
+            lines = lines[:cap] + [f"… {len(lines) - cap} more not shown"]
+        sections.append((title, lines))
+
+    sec("SITE", [f"{host}  ({ev['url']})", f"title: {ev.get('title')!r}"])
+    sec("QUESTION", [question or "(none given: explain how the site is built and what makes it look the way it does)"])
+    sec("PAGE FACTS", [
+        f"[Jarvis browser] loaded (readyState complete) {ev['load_seconds']}s after launch; page height "
+        f"{rt.get('height')}px; canvases {rt.get('canvases')}; images {rt.get('images')}; videos {rt.get('videos')}",
+        f"[REA] DOM nodes at observation: {ev.get('rea_dom_nodes')}",
+        f"[Jarvis browser] runtime globals: " + ", ".join(f"{k}={v}" for k, v in rt.items()
+                                                        if k in ("three", "gsap", "babylon", "playcanvas", "pixi") and v) or "none"])
+    sec("SCRIPTS (REA)", [f"[REA] {_size(s['chars'])}  {'module ' if s.get('module') else ''}{s['url']}"
+                          + (f"  ({s['note']})" if s.get("note") else "")
+                          for s in sorted(ev["scripts"], key=lambda s: -(s["chars"] or 0))], cap=30)
+    sec("WHICH FILE LOADS WHICH (REA)", [f"[REA] {e['from']} -> {e['to']} ({e['how']})" for e in ev["loads"]] or
+        ["[REA] no load edges found"], cap=30)
+    sec("ROUTES (REA)", [f"[REA] {', '.join(ev['routes']) or 'none found'}"])
+    if ev.get("endpoints"):
+        sec("ENDPOINT CANDIDATES (REA, low confidence)", [f"[REA] {', '.join(ev['endpoints'][:20])}"])
+    sec("CODE SIGNALS (Jarvis scan of REA-captured code)",
+        [f"[Jarvis scan] {s['meaning']}: {', '.join(s['names'][:5])}" for s in g["signals"]]
+        + ([f"[Jarvis scan] hand-written uniforms: {', '.join(g['custom_named'])}"] if g["custom_named"] else [])
+        + ([f"[Jarvis scan] effect names in code: {', '.join(g['effects'])}"] if g.get("effects") else []), cap=20)
+    sec("STACK", [f"[{r['by']}] {r['layer']}: {r['name']} {r['version'] or '(no version in banner)'}"
+                  + (f" — runtime agrees: {r['runtime']['version']} [{r['runtime']['by']}]" if r.get("runtime") else "")
+                  + (f" — found in {r['file']}" if r.get("file") else "")
+                  for r in ev["stack"]] or ["[Jarvis scan] no known banners or markers"])
+    if ev.get("rea_vendors"):
+        sec("REA'S OWN VENDOR FINGERPRINTS", [f"[REA] {', '.join(ev['rea_vendors'])}"])
+    if ev.get("other_banners"):
+        sec("OTHER BANNERS (Jarvis scan)", [f"[Jarvis scan] {b['banner']} {b['version']}" for b in ev["other_banners"]], cap=12)
+    sec("ASSET TOTALS (Jarvis browser)",
+        [f"[Jarvis browser] {a['files']} files, {_size(a['bytes'])} sized, from {len(a['by_origin'])} origin(s)"]
+        + [f"[Jarvis browser] {k}: {t['files']} files, {_size(t['bytes'])}" + (f", {t['hidden']} with hidden size" if t["hidden"] else "")
+           for k, t in sorted(a["by_kind"].items(), key=lambda kv: -kv[1]["bytes"])])
+    sec("LARGEST FILES (Jarvis browser)", [f"[Jarvis browser] {_size(f['bytes'])}  {f['kind']}  {f['url']}" for f in a["largest"]])
+    third = {o: v for o, v in a["by_origin"].items() if o != page_origin}
+    sec("THIRD-PARTY ORIGINS (Jarvis browser)",
+        [f"[Jarvis browser] {o}: {v['files']} files, {_size(v['bytes'])}" for o, v in
+         sorted(third.items(), key=lambda kv: -kv[1]["bytes"])] or ["[Jarvis browser] none"], cap=15)
+    sec("SNAPSHOT (REA)", [f"[REA] {ev['screenshot']['width']}x{ev['screenshot']['height']} PNG of the top of the page"])
+    sec("LIMITS", LIMITS + [f"[REA] {l}" for l in ev.get("rea_limitations", [])[:3]] + [f"[Jarvis browser] {n}" for n in a["notes"]])
+
+    text = "\n\n".join(f"{t}\n" + "\n".join(lines) for t, lines in sections)
+    if len(text) > DIGEST_LIMIT:                       # last resort: keep the start of every section
+        per = DIGEST_LIMIT // len(sections) - 40
+        text = "\n\n".join(f"{t}\n" + "\n".join(lines)[:per] for t, lines in sections)
+    return text[:DIGEST_LIMIT]

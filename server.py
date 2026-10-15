@@ -28,7 +28,7 @@ CONTROL_TAGS = {
                 "when": "they ask to see, open, pull up or go to one specific note"},
     "REINDEX": {"usage": "[REINDEX]",
                 "when": "they say their notes changed, or asks to rescan or rebuild the index"},
-    "TEARDOWN": {"usage": "[TEARDOWN: website address]",
+    "TEARDOWN": {"usage": "[TEARDOWN: website address | what they want to know]",
                  "when": "they ask to tear down, reverse engineer or look under the hood of a website"},
 }
 
@@ -39,8 +39,10 @@ RECEIPT_LINES = {
                 "fail": "I can find no note called {title}, sir. I'd rather say so than guess."},
     "REINDEX": {"ok": "Re-indexed. {count} notes on file; the galaxy will redraw itself.",
                 "fail": "The re-index did not happen: {reason}."},
-    "TEARDOWN": {"ok": "I've looked {title} over, sir: built on {stack}, {scripts} scripts and "
-                       "{assets} files, and I touched nothing.",
+    "TEARDOWN": {"ok": "{spoken}",
+                 "evidence_only": "I've taken it apart and filed the evidence, sir, but I couldn't think "
+                                  "it through: {reason}.",
+                 "busy": "I'm already taking one apart, sir.",
                  "missing": "The workshop isn't fitted out yet, sir: {fix}.",
                  "refused": "I won't point the kit at that, sir: {reason}.",
                  "fail": "The teardown fell over, I'm afraid: {reason}."},
@@ -89,6 +91,46 @@ comma-separated indexes of the notes you actually relied on, or USED: none."""
 SYSTEM_PROMPT = PERSONA.replace("{tags}", "\n".join(
     f"  {t['usage']}  when {t['when']}" for t in CONTROL_TAGS.values()))
 
+# The teardown bay's analyst: one call per teardown, given the evidence digest.
+TEARDOWN_BRAIN = """You are the analyst in Jarvis's teardown bay. You receive a DIGEST of evidence
+about one website and the user's QUESTION. The evidence was captured three ways, and every
+digest line says which:
+  [REA]            observed or analysed by REA (Reverse Engineer Anything)
+  [Jarvis browser] read by Jarvis's own browser
+  [Jarvis scan]    found by Jarvis scanning the code REA captured
+
+Rules:
+- Every claim must trace to a line in the digest. If you can't point to the line, leave it out.
+- Inference is allowed only when labelled: say "likely" (for example, how an effect probably
+  works given the libraries and shader names present).
+- Never invent a library, version, file, route, number or technique that isn't in the digest.
+- Keep attribution straight: never credit REA with what Jarvis read, or the reverse.
+- Quote sizes, counts and versions exactly as given.
+
+Output EXACTLY this, with nothing before or after:
+LABEL: Teardown · <host>
+SPOKEN: <two or three sentences for a dry British butler to say aloud. The headline answer to
+the question first, then the most surprising detail. No web addresses, no file names, no
+markdown; numbers as words.>
+SUMMARY: <one short paragraph>
+---NOTE---
+<a markdown note with exactly these parts, in this order:
+**Verdict:** <one line>
+## The answer
+## The stack            (each item with its evidence and who captured it)
+## How the effect works (numbered; "likely" for inference)
+## What it loads
+## Rebuild it           (5 to 7 numbered steps a developer could hand to Claude Code)
+## What the evidence can't show
+Do not add a title, a snapshot or an Evidence section: Jarvis adds those.>"""
+
+# Written once, the first time anything is taken apart.
+REA_CONCEPT_NOTE = (
+    "REA (Reverse Engineer Anything, github.com/morluto/rea) is the kit [[Jarvis]] uses to take "
+    "websites apart. It observes a page running in a clean, throwaway browser: it reads the "
+    "scripts, the routes and the files the page loads, and takes a snapshot. It never clicks, "
+    "types, logs in or changes anything. Every teardown note links here.")
+
 # ═════════════════════════════ end of persona ═══════════════════════════════
 
 import datetime
@@ -111,9 +153,10 @@ import build
 # The teardown bay is optional: Jarvis boots and answers without it.
 try:
     import teardown as bay
+    import evidence
     BAY_ERROR = None
 except Exception as _e:  # noqa: BLE001 — any import problem just disables the bay
-    bay, BAY_ERROR = None, f"{_e.__class__.__name__}: {_e}"
+    bay, evidence, BAY_ERROR = None, None, f"{_e.__class__.__name__}: {_e}"
 
 ROOT = build.ROOT
 VIEWER = ROOT / "viewer"
@@ -140,7 +183,7 @@ CODE_MODULES = ("server.py", "build.py", "teardown.py", "browser.py", "evidence.
 CODE_SHA = hashlib.sha256(b"".join(
     (ROOT / f).read_bytes() for f in CODE_MODULES if (ROOT / f).exists())).hexdigest()[:16]
 
-_lock = threading.Lock()
+_lock = threading.RLock()       # re-entrant: tag handlers and add_note take it themselves
 _history = deque(maxlen=HISTORY_TURNS * 2)
 _last_nodes = []
 _graph_cache = {"mtime": None, "notes": []}
@@ -250,10 +293,23 @@ def make_title(text, words=6):
     return (title[:1].upper() + title[1:]) if title else "Capture"
 
 
-def add_note(text, folder="captures", title=None, kind="capture"):
-    """Write, link, append, index. Returns {index, node, links, anchor, path}.
-    Raises CaptureError; .written says whether the file exists despite the failure.
-    Caller holds _lock."""
+LABEL_SLOT = "@@LABEL@@"           # replaced with the note's final label
+LABEL_URL_SLOT = "@@LABEL_URL@@"   # the same, URL-encoded, for links: "a (2).png" -> "a%20%282%29.png"
+
+
+def add_note(text, folder="captures", title=None, kind="capture", markdown=None, attachments=None,
+             meta=None):
+    """THE door for new notes. Write, link, append, index. Returns {index, node, links, anchor, path}.
+      text:        the sentence to capture, or for a markdown note the text to place it by
+      markdown:    a full note body instead of the one-sentence form (LABEL_SLOT is filled in)
+      attachments: {path relative to the note's folder: bytes}, written before the note
+      meta:        extra frontmatter fields
+    Raises CaptureError; .written says whether the file exists despite the failure."""
+    with _lock:
+        return _add_note_locked(text, folder, title, kind, markdown, attachments, meta)
+
+
+def _add_note_locked(text, folder, title, kind, markdown, attachments, meta):
     global _last_nodes
     text = " ".join(str(text).split())
     if not text:
@@ -277,8 +333,19 @@ def add_note(text, folder="captures", title=None, kind="capture"):
             label, n = f"{title} ({n})", n + 1
         path = folder_path / f"{label}.md"
         today = datetime.date.today()
-        content = (f"---\ntype: {kind}\ndate: {today.isoformat()}\n---\n\n# {label}\n\n"
-                   f"{sentence}\n\nCaptured {today.day} {today:%B %Y}.\n")
+        front = {"type": kind, "date": today.isoformat(), **(meta or {})}
+        head = "---\n" + "".join(f"{k}: {json.dumps(v, ensure_ascii=False) if isinstance(v, str) and ':' in v else v}\n"
+                                 for k, v in front.items()) + "---\n\n"
+        if markdown is not None:
+            body = markdown.replace(LABEL_URL_SLOT, urllib.parse.quote(label)).replace(LABEL_SLOT, label)
+            content = f"{head}# {label}\n\n{body.strip()}\n"
+        else:
+            content = f"{head}# {label}\n\n{sentence}\n\nCaptured {today.day} {today:%B %Y}.\n"
+        for rel, data in (attachments or {}).items():
+            target = folder_path / rel.replace(LABEL_SLOT, label)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with open(target, "xb") as fh:
+                fh.write(data)
         with open(path, "x", encoding="utf-8") as fh:
             fh.write(content)
         if path.read_text(encoding="utf-8") != content:
@@ -329,7 +396,7 @@ def add_note(text, folder="captures", title=None, kind="capture"):
             "path": node["path"]}
 
 
-def remember(text):
+def remember(text):  # noqa: E302
     """The /remember endpoint's work: one capture, one spoken receipt line."""
     lines = RECEIPT_LINES["REMEMBER"]
     content = re.sub(r"^\s*remember(?:\s+that)?\b[\s,.:;]*", "", text, flags=re.I).strip(" ,.:;")
@@ -376,12 +443,13 @@ def read_config():
     return key, str(cfg.get("model") or "claude-opus-5-5")
 
 
-def call_model(key, model, messages):
+def call_model(key, model, messages, system=None, max_tokens=CHAT_MAX_TOKENS,
+               retry_tokens=RETRY_MAX_TOKENS, effort=CHAT_EFFORT, timeout=90):
     # base_url is explicit so an ANTHROPIC_BASE_URL in the environment can't
     # redirect the key somewhere else.
     client = anthropic.Anthropic(api_key=key, base_url="https://api.anthropic.com",
-                                 max_retries=1, timeout=90)
-    for budget in (CHAT_MAX_TOKENS, RETRY_MAX_TOKENS):
+                                 max_retries=1, timeout=timeout)
+    for budget in (max_tokens, retry_tokens):
         try:
             # Thinking is always on for Opus 5.5: no `thinking` param, no forced
             # tool_choice. Effort is set per route. fallbacks="default" re-runs a
@@ -389,9 +457,9 @@ def call_model(key, model, messages):
             response = client.beta.messages.create(
                 model=model,
                 max_tokens=budget,
-                system=SYSTEM_PROMPT,
+                system=system or SYSTEM_PROMPT,
                 messages=messages,
-                output_config={"effort": CHAT_EFFORT},
+                output_config={"effort": effort},
                 fallbacks="default",
                 betas=["server-side-fallback-2026-07-01"],
             )
@@ -482,7 +550,8 @@ def _reset_history():
 
 @tag_handler("RESET")
 def _tag_reset(arg):
-    _reset_history()
+    with _lock:
+        _reset_history()
     return {"ok": not _history}
 
 
@@ -506,8 +575,9 @@ def _tag_reindex(arg):
     done = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=120)
     if done.returncode != 0:
         return {"ok": False, "reason": (done.stderr or done.stdout).strip()[-200:] or "build.py failed"}
-    count = len(load_notes())
-    _reset_history()            # indexes may have shifted; old citations are stale
+    with _lock:
+        count = len(load_notes())
+        _reset_history()        # indexes may have shifted; old citations are stale
     return {"ok": True, "count": count, "reload": True}
 
 
@@ -521,20 +591,191 @@ def bay_diag():
 TEARDOWN_HEADLESS = os.environ.get("JARVIS_TEARDOWN_HEADLESS") == "1"
 
 
-@tag_handler("TEARDOWN")
-def _tag_teardown(arg, headless=None):
-    if bay is None:
-        return {"ok": False, "line": "missing", "fix": "the teardown bay (teardown.py) isn't loaded"}
+_teardown_running = threading.Lock()      # one teardown at a time
+TEARDOWN_TOKENS, TEARDOWN_RETRY_TOKENS = 8000, 16000   # thinking and answer share this budget
+TEARDOWN_EFFORT = "medium"
+
+
+def parse_teardown(text):
+    """LABEL / SPOKEN / SUMMARY / ---NOTE--- -> dict, or raises ValueError."""
+    m = re.search(r"^\s*LABEL:\s*(.+?)\s*$\s*^SPOKEN:\s*(.+?)\s*^SUMMARY:\s*(.+?)\s*^---NOTE---\s*$(.*)\Z",
+                  text.strip(), re.S | re.M)
+    if not m:
+        raise ValueError("the analysis didn't come back in the LABEL / SPOKEN / SUMMARY / NOTE shape")
+    label, spoken, summary, note = (g.strip() for g in m.groups())
+    if not label.startswith("Teardown · ") or not spoken or not note:
+        raise ValueError("the analysis came back with an empty or mislabelled part")
+    missing = [h for h in ("**Verdict:**", "## The answer", "## The stack", "## How the effect works",
+                           "## What it loads", "## Rebuild it", "## What the evidence can't show")
+               if h not in note]
+    return {"label": label, "spoken": spoken, "summary": summary, "note": note, "missing_sections": missing}
+
+
+# Names a note might drop in. Any of these mentioned but absent from the digest is flagged.
+KNOWN_TECH = ["Three.js", "Babylon.js", "PlayCanvas", "PixiJS", "OGL", "React Three Fiber", "R3F", "drei",
+              "React", "Vue", "Svelte", "Angular", "Next.js", "Nuxt", "Astro", "Remix", "Gatsby", "GSAP",
+              "ScrollTrigger", "Lenis", "Locomotive Scroll", "Theatre.js", "Framer Motion", "Motion One",
+              "anime.js", "Lottie", "Rive", "Spline", "postprocessing", "Draco", "Basis", "KTX2",
+              "meshoptimizer", "Vite", "webpack", "esbuild", "Rollup", "Parcel", "WebGPU", "Barba",
+              "Swup", "Howler", "Tone.js", "Matter.js", "Cannon", "Rapier", "Ammo", "Tailwind", "jQuery"]
+
+
+def check_against_digest(note, digest):
+    """Claims in the note that the digest doesn't contain: libraries, versions, files, sizes."""
+    # "Rebuild it" recommends tools for *your* rebuild; it makes no claims about the site.
+    note = re.sub(r"## Rebuild it.*?(?=\n## |\Z)", "", note, flags=re.S)
+    low = digest.lower()
+    flags = []
+    for tech in KNOWN_TECH:
+        word = r"(?<![\w.-])" + re.escape(tech) + r"(?![\w-])"      # whole words: "react" ≠ "mouse-reactive"
+        if re.search(word, note, re.I) and not re.search(word, digest, re.I):
+            flags.append(f"library not in the evidence: {tech}")
+    for v in sorted(set(re.findall(r"\b(?:r\d{3}|\d+\.\d+\.\d+)\b", note))):
+        if v not in digest:
+            flags.append(f"version not in the evidence: {v}")
+    libraries = {t.lower() for t in KNOWN_TECH}
+    for f in sorted(set(re.findall(r"\b[\w-]+\.(?:js|mjs|glb|gltf|wasm|ktx2|hdr|exr|png|jpe?g|webp|mp4|webm|woff2?)\b",
+                                   note, re.I))):
+        if f.lower() not in low and f.lower() not in libraries:
+            flags.append(f"file not in the evidence: {f}")
+    for size in sorted(set(re.findall(r"\b\d+(?:\.\d+)?\s?(?:KB|MB|GB)\b", note))):
+        if size.replace(" ", "") not in digest.replace(" ", ""):
+            flags.append(f"size not in the evidence: {size}")
+    return flags
+
+
+def speakable(text):
+    """The butler says no web addresses or file names, whatever the brain wrote."""
+    text = re.sub(r"https?://\S+", "the site", text)
+    libraries = {t.lower() for t in KNOWN_TECH}          # "Three.js" is a library, not a file
+    text = re.sub(r"\b[\w-]+\.(?:js|mjs|glb|gltf|wasm|ktx2|hdr|exr|png|jpe?g|webp|avif|mp4|webm|json|css|html)\b",
+                  lambda m: m.group(0) if m.group(0).lower() in libraries else "a file", text, flags=re.I)
+    text = re.sub(r"\b(?:[a-z0-9-]+\.)+(?:com|co|io|net|org|dev|app|design|studio|xyz|ai|uk|tech)\b",
+                  "the site", text, flags=re.I)
+    return re.sub(r"[*_`#]", "", text).strip()
+
+
+def _evidence_section(ev, digest_chars, flags=None):
+    a = ev["assets"]
+    rows = ["| Layer | Library | Version | Captured by | Evidence |", "|---|---|---|---|---|"]
+    for r in ev["stack"]:
+        how = (f"banner/marker in `{r['file'].rsplit('/', 1)[-1]}`" if r.get("file") else r.get("note", "runtime global"))
+        rt = f"; runtime: {r['runtime']['version']} ({r['runtime']['by']})" if r.get("runtime") else ""
+        rows.append(f"| {r['layer']} | {r['name']} | {r['version'] or '—'} | {r['by']} | {how}{rt} |")
+    if not ev["stack"]:
+        rows.append("| — | nothing recognised | — | Jarvis scan of REA-captured code | no banners or markers |")
+    kinds = ", ".join(f"{k} {t['files']} ({evidence._size(t['bytes'])})"
+                      for k, t in sorted(a["by_kind"].items(), key=lambda kv: -kv[1]["bytes"]))
+    ids = "\n".join(f"- `{op}`: `{eid}`" for op, eid in ev.get("rea_evidence_ids", {}).items() if eid)
+    return (f"## Evidence\n\n### Stack\n\n" + "\n".join(rows) +
+            f"\n\n### Totals (Jarvis browser)\n\n{a['files']} files, {evidence._size(a['bytes'])} sized, "
+            f"from {len(a['by_origin'])} origin(s): {kinds}.\n"
+            + "".join(f"\n> {n}" for n in a["notes"]) +
+            f"\n\n### REA evidence ids\n\n{ids}\n\n"
+            f"Captured {ev['captured_at']} · job `{ev['job_id']}` · loaded in {ev['load_seconds']}s · "
+            f"{len(ev['scripts'])} scripts (REA) · digest {digest_chars:,} characters.\n"
+            + ("" if flags is None else
+               "\n### Automatic check against the evidence\n\n" +
+               ("Every library, version, file and size named above appears in the evidence.\n" if not flags else
+                "These claims were **not found** in the evidence:\n\n" + "\n".join(f"- {f}" for f in flags) + "\n")))
+
+
+def _evidence_only_note(ev, reason):
+    a = ev["assets"]
+    stack = "\n".join(f"- **{r['name']}**{' ' + r['version'] if r['version'] else ''} ({r['layer']}): {r['by']}"
+                      for r in ev["stack"]) \
+        or "- Nothing recognised."
+    largest = "\n".join(f"- {evidence._size(f['bytes'])}: {f['kind']}" for f in a["largest"][:8])
+    limits = "\n".join(f"- {l}" for l in evidence.LIMITS)
+    return (f"**Verdict:** Evidence only. The analysis didn't run ({reason}), so nothing here is "
+            f"interpreted.\n\n## The stack\n\n{stack}\n\n## What it loads\n\n{a['files']} files, "
+            f"{evidence._size(a['bytes'])} sized (Jarvis browser).\n\n{largest}\n\n"
+            f"## What the evidence can't show\n\n{limits}\n\n"
+            f"*The answer, how the effect works and how to rebuild it need the brain. Re-run the "
+            f"teardown once it's available.*")
+
+
+def ensure_rea_note():
+    """The [[REA]] concept note, born the first time anything is taken apart. Returns a birth or None."""
+    if any(n["label"].lower() == "rea" for n in load_notes()):
+        return None
+    return add_note(REA_CONCEPT_NOTE, folder="concepts", title="REA", kind="concept",
+                    markdown=REA_CONCEPT_NOTE)
+
+
+def run_teardown(url, question="", headless=None):
+    """Evidence -> digest -> one brain call -> note(s) -> spoken line. Returns a receipt."""
+    if not _teardown_running.acquire(blocking=False):
+        return {"ok": False, "line": "busy"}
     try:
-        result = bay.teardown(arg, headless=TEARDOWN_HEADLESS if headless is None else headless)
-    except bay.LawError as e:
-        return {"ok": False, "line": "refused", "reason": str(e)}
-    except bay.NotReady as e:
-        return {"ok": False, "line": "missing", "fix": e.fix}
-    except Exception as e:  # noqa: BLE001 — reported in character, never a crash
-        return {"ok": False, "reason": str(e)[:200] or e.__class__.__name__}
-    return {"ok": True, **result["summary"], "title": result["title"] or result["origin"],
-            "evidence_id": result["evidence_id"]}
+        if bay is None:
+            return {"ok": False, "line": "missing", "fix": "the teardown bay (teardown.py) isn't loaded"}
+        try:
+            result = bay.teardown(url, headless=TEARDOWN_HEADLESS if headless is None else headless)
+        except bay.LawError as e:
+            return {"ok": False, "line": "refused", "reason": str(e)}
+        except bay.NotReady as e:
+            return {"ok": False, "line": "missing", "fix": e.fix}
+        except Exception as e:  # noqa: BLE001 — reported in character, never a crash
+            return {"ok": False, "reason": str(e)[:200] or e.__class__.__name__}
+
+        ev, summary = result["evidence"], result["summary"]
+        host = urllib.parse.urlsplit(ev["url"]).hostname or "site"
+        digest = evidence.brain_digest(ev, question)
+
+        # one call to the current brain
+        brain, brain_error = None, None
+        try:
+            key, model = read_config()
+            raw = call_model(key, model, [{"role": "user", "content": f"DIGEST\n\n{digest}"}],
+                             system=TEARDOWN_BRAIN, max_tokens=TEARDOWN_TOKENS,
+                             retry_tokens=TEARDOWN_RETRY_TOKENS, effort=TEARDOWN_EFFORT, timeout=300)
+            brain = parse_teardown(raw)
+        except ChatError as e:
+            brain_error = ("there's no API key in config.json yet" if "PUT-YOUR-KEY-HERE" in str(e)
+                           else str(e).rstrip("."))
+        except ValueError as e:
+            brain_error = str(e)
+
+        label = brain["label"] if brain else f"Teardown · {host}"
+        flags = check_against_digest(brain["note"] + "\n" + brain["spoken"] + "\n" + brain["summary"], digest) \
+            if brain else None
+        body = brain["note"] if brain else _evidence_only_note(ev, brain_error)
+        shot = pathlib.Path(ev["screenshot"]["path"]).read_bytes()
+        markdown = (f"**{label}** · [[REA]] · {ev['url']}\n\n"
+                    f"![Snapshot of {host}](assets/{LABEL_URL_SLOT}.png)\n\n{body.strip()}\n\n"
+                    f"{_evidence_section(ev, len(digest), flags)}")
+        births = []
+        try:
+            rea = ensure_rea_note()
+            if rea:
+                births.append(rea)
+            births.append(add_note(brain["summary"] if brain else f"Teardown of {host}: {summary['stack']}",
+                                   folder="captures/teardowns", title=f"{host}-{datetime.date.today().isoformat()}",
+                                   kind="teardown", markdown=markdown, attachments={f"assets/{LABEL_SLOT}.png": shot},
+                                   meta={"label": label, "url": ev["url"], "job": ev["job_id"],
+                                         "analysed": bool(brain)}))
+        except CaptureError as e:
+            return {"ok": False, "reason": f"the evidence was captured but the note wasn't written: {e.reason}",
+                    "births": births}
+        note = births[-1]
+        out = {"ok": True, "births": births, "note": note["path"], "label": label, "title": summary["title"],
+               "analysed": bool(brain), "digest_chars": len(digest), "evidence_dir": summary["evidence_dir"],
+               "stack": summary["stack"]}
+        if brain:
+            out.update(spoken=speakable(brain["spoken"]), summary=brain["summary"],
+                       missing_sections=brain["missing_sections"], unsupported=flags)
+        else:
+            out.update(line="evidence_only", reason=brain_error)
+        return out
+    finally:
+        _teardown_running.release()
+
+
+@tag_handler("TEARDOWN")
+def _tag_teardown(arg, headless=None, question=None):
+    url, _, asked = arg.partition("|")
+    return run_teardown(url.strip(), question if question is not None else asked.strip(), headless)
 
 
 assert set(CONTROL_TAGS) <= set(_tag_handlers), "every CONTROL_TAG needs a @tag_handler"
@@ -544,11 +785,13 @@ def action_response(tag, arg="", **opts):
     line, receipt = run_tag(tag, arg, **opts)
     nodes = receipt.get("nodes", []) if receipt["ok"] else []
     return {"answer": line, "nodes": nodes, "about_notes": bool(nodes),
+            "births": receipt.get("births", []),
             "action": {k: v for k, v in receipt.items() if k in (
                 "tag", "arg", "ok", "reason", "reload", "count", "line", "fix", "title", "url", "origin",
                 "scripts", "resources", "dom_nodes", "requests_seen", "frames", "evidence_id",
                 "load_seconds", "page_height", "images", "job_id", "stack", "assets", "asset_bytes",
-                "routes", "evidence_dir", "screenshot")}}
+                "routes", "evidence_dir", "screenshot", "note", "label", "analysed", "summary",
+                "digest_chars", "missing_sections", "unsupported")}}
 
 
 def select_notes(question):
@@ -588,24 +831,31 @@ def chat(question):
         answer, used = parse_answer(call_model(key, model, messages), picked)
 
         tag, arg = find_tag(answer)
-        if tag:
-            result = action_response(tag, arg)
-            if tag != "RESET":
-                a = result["action"]
-                _history.append({"role": "user", "content": f"Question: {question}"})
-                _history.append({"role": "assistant", "content":
-                                 f"[{tag}{': ' + arg if arg else ''}] RECEIPT ok={str(a['ok']).lower()}"
-                                 f"{' reason=' + a['reason'] if a.get('reason') else ''}"})
-            if result["nodes"]:
-                _last_nodes = result["nodes"]
-            return result
+        if not tag:
+            _history.append({"role": "user", "content": f"Question: {question}"})
+            _history.append({"role": "assistant", "content": answer})
+            if used:
+                _last_nodes = used
+            # about_notes is the camera's permission: only true when notes were really used.
+            return {"answer": answer, "nodes": used, "about_notes": bool(about_notes and used)}
 
-        _history.append({"role": "user", "content": f"Question: {question}"})
-        _history.append({"role": "assistant", "content": answer})
-        if used:
-            _last_nodes = used
-        # about_notes is the camera's permission: only true when notes were really used.
-        return {"answer": answer, "nodes": used, "about_notes": bool(about_notes and used)}
+    # Tags run OUTSIDE the conversation lock: a teardown takes minutes and chat mustn't freeze.
+    if tag == "TEARDOWN" and "|" not in arg:
+        arg = f"{arg} | {question}"                  # the user's own words are the question
+    result = action_response(tag, arg)
+    with _lock:
+        if tag != "RESET":
+            a = result["action"]
+            _history.append({"role": "user", "content": f"Question: {question}"})
+            _history.append({"role": "assistant", "content":
+                             f"[{tag}{': ' + arg if arg else ''}] RECEIPT ok={str(a['ok']).lower()}"
+                             f"{' reason=' + a['reason'] if a.get('reason') else ''}"
+                             + (f" note={a['note']}" if a.get("note") else "")})
+        if result["nodes"]:
+            _last_nodes = result["nodes"]
+        elif result.get("births"):
+            _last_nodes = [result["births"][-1]["index"]]
+    return result
 
 
 # ── http ──────────────────────────────────────────────────────────
@@ -681,7 +931,8 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path == "/teardown":
             # Same handler the brain's [TEARDOWN: ...] tag uses; no lock (it doesn't touch history).
             result = action_response("TEARDOWN", str(data.get("url", ""))[:500],
-                                     headless=bool(data["headless"]) if "headless" in data else None)
+                                     headless=bool(data["headless"]) if "headless" in data else None,
+                                     question=str(data.get("question", ""))[:1000])
             return self._json({"ok": result["action"]["ok"], **result})
 
         if self.path == "/api/recall":
@@ -704,8 +955,7 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path == "/action":
             if tag not in CONTROL_TAGS:
                 return self._json({"error": f"unknown action {tag!r}"}, 400)
-            with _lock:
-                return self._json(action_response(tag, str(data.get("arg", ""))[:200]))
+            return self._json(action_response(tag, str(data.get("arg", ""))[:500]))
 
         if not question:
             return self._json({"error": "empty question"}, 400)

@@ -67,6 +67,17 @@ REA, Jarvis's own browser reads, or Jarvis scanning the code REA captured.
    scroll, effects, compression, then build tools. Runtime globals such as `window.__THREE__`
    corroborate them.
 
+**From evidence to a note.** The evidence is compressed into a digest of at most 15,000
+characters, with every line tagged with who captured it. One brain call, using `TEARDOWN_BRAIN`
+in the persona block, returns a LABEL, a SPOKEN line, a SUMMARY and a markdown note. Jarvis
+writes the note to `notes/captures/teardowns/<host>-<date>.md` and embeds the snapshot from
+`assets/`. It also adds an Evidence section (the stack, the totals, REA's evidence ids) and an
+**automatic check** that lists any library, version, file or size the note names but the
+evidence doesn't contain. The first teardown also creates a `[[REA]]` concept note. Both notes
+go through the same `add_note()` / `addNote()` doors as "remember that", so they appear live and
+can be cited by the next question. If the brain is unavailable, the evidence is still filed as
+an "evidence only" note, and Jarvis says why. Only one teardown runs at a time.
+
 To upgrade REA, change `PINNED_REA` in
 `teardown.py` and re-run the install with the new version. Nothing ever installs "latest".
 
