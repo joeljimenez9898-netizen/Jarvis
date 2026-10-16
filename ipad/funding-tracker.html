@@ -293,7 +293,7 @@ function contexto() {
     porEmpresa: [...porEmpresa(l)].map(([e, x]) => { const s = totales(x); return { empresa: e, retiradas: r2(s.retiradas), costes: r2(s.costes), beneficio: r2(s.beneficio) }; }),
     ultimosMovimientos: l.slice(0, 12).map((m) => ({ fecha: m.fecha, empresa: m.empresa, tipo: m.tipo === "retirada" ? "retirada" : "coste de examen", subtipo: m.subtipo, importe: r2(signo(m)), notas: m.notas || undefined })) };
 }
-window.FUNDING = { contexto, render };
+window.FUNDING = { contexto, render, open: (tab) => { if (tab === "resumen" || tab === "empresas") S.tab = tab; render(); } };
 
 (async () => {
   render();

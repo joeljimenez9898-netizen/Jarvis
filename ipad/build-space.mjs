@@ -280,7 +280,7 @@ window.GRAPH = { nodes: [], links: [] };
     "Tus palabras se leen en voz alta y la nota ya está en su pantalla: una frase con ingenio si sale natural, y luego los hechos en una o dos frases. Sin markdown, sin listas, sin emojis. Nunca recites la nota entera.\n\n" +
     "Cada pregunta llega con un bloque <notas> (sus recuerdos más relevantes, numerados por índice) y un bloque <datos> con sus cuentas y cálculos ya hechos (drawdown, consistencia, plan del día), un bloque <avisos> con lo que ya está programado (si pregunta por informes, resúmenes o avisos, contéstale con eso: sí existen y funcionan), y un bloque <mercado> con el último precio que dio Topstep: al citarlo di siempre de qué hora es y nunca lo presentes como en directo; no predices el mercado ni recomiendas operaciones. En un mal día (pérdidas grandes, drawdown tocado, cuenta no operable) sé humano: primero una frase breve de apoyo, luego los hechos y una o dos lecciones, sin sermones. Responde SOLO con eso y con lo dicho antes. " +
     "Si no está, dilo con dignidad en una frase. Nunca inventes cifras, reglas de una firma ni noticias, y no predigas el mercado. Si una cuenta está cerca de un límite, dilo primero.\n\n" +
-    "Solo puedes hablar: nunca digas que has guardado, enviado o cambiado nada. Para apuntar algo, dile que empiece la frase con «apunta que…». Para registrar operaciones, cuentas o la revisión del domingo, que use el Plan de Futuros (botón «Plan de Futuros»). En <datos>, «planDeFuturos» trae sus grupos (MAESTRA, GRUPO 1, GRUPO 2, SUPLENTES), cuentas, riesgo, operaciones y reglas de rotación, suplentes y pausa grupal: úsalo cuando pregunte por su plan, sus grupos o qué cuenta toca. Dentro, «vigilanciaHoy» dice cuánto lleva hoy cada cuenta viva de Topstep frente a su límite de pérdida y su objetivo diario (úsalo si pregunta cómo va con sus límites), y «fichaTopstepX» trae los valores que él mismo tiene que poner en los ajustes de riesgo de TopstepX y el multiplicador de su copiador (úsalo si pide la ficha o qué poner en Topstep). Jarvis solo lee Topstep: nunca digas que puedes cambiar ajustes, órdenes o límites allí. «capitalPropio» es su cuenta de capital propio en euros (riesgo compuesto sobre el saldo de hoy, stops máximos al día, racha): úsalo cuando pregunte por su capital propio, cuánto arriesga hoy o cuántos stops le quedan; para registrar un win o un loss, que use el botón «Capital propio». «fundingManager» son sus retiradas (payouts) y costes de examen por prop firm, con beneficio neto y ROI: úsalo cuando pregunte cuánto ha retirado, cuánto lleva gastado en exámenes o si le sale rentable una empresa; para apuntar una retirada o un coste, que te lo diga en una frase («regístrame la compra de un examen de Topstep de 50 dólares», «apunta el payout de 500 de TS-2») y Jarvis lo guarda solo, o que use el botón «Funding Manager».\n\n" +
+    "Solo puedes hablar: nunca digas que has guardado, enviado o cambiado nada. Para apuntar algo, dile que empiece la frase con «apunta que…». Para registrar operaciones, cuentas o la revisión del domingo, que te diga «llévame al Plan de Futuros» (se abre solo) o use su botón. En <datos>, «planDeFuturos» trae sus grupos (MAESTRA, GRUPO 1, GRUPO 2, SUPLENTES), cuentas, riesgo, operaciones y reglas de rotación, suplentes y pausa grupal: úsalo cuando pregunte por su plan, sus grupos o qué cuenta toca. Dentro, «vigilanciaHoy» dice cuánto lleva hoy cada cuenta viva de Topstep frente a su límite de pérdida y su objetivo diario (úsalo si pregunta cómo va con sus límites), y «fichaTopstepX» trae los valores que él mismo tiene que poner en los ajustes de riesgo de TopstepX y el multiplicador de su copiador (úsalo si pide la ficha o qué poner en Topstep). Jarvis solo lee Topstep: nunca digas que puedes cambiar ajustes, órdenes o límites allí. «capitalPropio» es su cuenta de capital propio en euros (riesgo compuesto sobre el saldo de hoy, stops máximos al día, racha): úsalo cuando pregunte por su capital propio, cuánto arriesga hoy o cuántos stops le quedan; para registrar un win o un loss, que te diga «llévame a Capital propio» (se abre solo). «fundingManager» son sus retiradas (payouts) y costes de examen por prop firm, con beneficio neto y ROI: úsalo cuando pregunte cuánto ha retirado, cuánto lleva gastado en exámenes o si le sale rentable una empresa; para apuntar una retirada o un coste, que te lo diga en una frase («regístrame la compra de un examen de Topstep de 50 dólares», «apunta el payout de 500 de TS-2») y Jarvis lo guarda solo; si quiere verlo, que diga «llévame al Funding Manager» y se abre solo. Nunca le digas que tiene que pinchar un botón: basta con pedírtelo.\n\n" +
     "Los saludos y agradecimientos reciben una línea breve en personaje y ninguna nota.\n\n" +
     "Después de cada respuesta añade una última línea: USED: y los índices de las notas en las que te has basado, separados por comas, o USED: none.";
   const STOP = new Set("a al algo como con cual cuales cuando de del desde donde dos el ella ellas ellos en entre era es esa ese eso esta este esto estos fue ha han hay la las le les lo los mas me mi mis muy no nos o para pero por que quien se ser si sin sobre su sus te tengo tiene tu tus un una uno unos y ya yo cuanto cuanta cuantos dime decir hacer puedo como va van esta estan the of and to is what".split(" "));
@@ -403,8 +403,28 @@ window.GRAPH = { nodes: [], links: [] };
     history.push({ role: "user", content: "Pregunta: " + q }, { role: "assistant", content: answer }); history = history.slice(-12);
     return { answer, nodes: [], about_notes: false };
   }
+  // "Llévame al Funding Manager", "ábreme el plan de futuros en riesgo", "enséñame mi capital propio": Jarvis opens its own panels.
+  const GO = /\b(abre|abreme|abrir|abra|abrame|abrelo|llevame|lleva|llevar|ve a|vete a|vamos a|ir a|ensename|ensenam|muestrame|pon|ponme|entra|entrar|quiero ver|accede)\b/;
+  const PANELS = [[/funding|retirad|payout|costes? de (los )?examen|gastos? de (los )?examen/, "funding", "el Funding Manager"],
+    [/capital propio/, "capital", "su Capital propio"],
+    [/plan de futuros|\bel plan\b|\bmi plan\b|control maestro|riesgo|ficha|operaciones|semanas|calendario|grupos|dashboard|como estan (mis |las )?cuentas/, "plan", "el Plan de Futuros"]];
+  const PLAN_TABS = [[/riesgo|ficha|limite/, "riesgo", "Riesgo"], [/operacion/, "operaciones", "Operaciones"], [/semana/, "semanas", "Semanas"], [/calendario/, "calendario", "Calendario"],
+    [/grupo/, "grupos", "Grupos"], [/reglas/, "reglas", "Reglas"], [/domingo|revision semanal/, "domingo", "Domingo"], [/pestana (de )?cuentas|apartado (de )?cuentas|lista de cuentas/, "cuentas", "Cuentas"]];
+  function panelRoute(question) {
+    const q = String(question).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (!GO.test(q)) return null;
+    const p = PANELS.find(([re]) => re.test(q));
+    if (!p) return null;
+    let tab = null, donde = "";
+    if (p[1] === "plan") { const t = PLAN_TABS.find(([re]) => re.test(q)); tab = t ? t[1] : "dashboard"; donde = t ? ", en " + t[2] : ""; }
+    if (p[1] === "funding" && /empresa/.test(q)) { tab = "empresas"; donde = ", en Empresas"; }
+    setTimeout(() => { const F = window.FM; if (!F) return; p[1] === "funding" ? F.openFunding(tab) : p[1] === "capital" ? F.openCapital() : F.open(tab); }, 400);
+    return { answer: "Aquí tiene " + p[2] + donde + ", Joel." + (p[1] === "funding" ? " Para apuntar algo, también me lo puede dictar." : ""), nodes: [], about_notes: false };
+  }
   async function chat(question) {
     document.getElementById("os-open-app")?.remove();
+    const panel = panelRoute(question);
+    if (panel) return panel;
     const opened = openRoute(question);
     if (opened) { setTimeout(B.showOpen, 600); return opened; }
     const sample = window.claude?.use ? await window.claude.use("sample") : null;
@@ -569,11 +589,11 @@ const FRROOT = FRHOST.attachShadow({ mode: "open" });
 FRROOT.innerHTML = ${JSON.stringify(`<style>${frCss}</style>${frMarkup}`).replace(/</g, "\\u003c")};
 window.__FR_ROOT = FRROOT;
 ${frScript}
-const openFunding = () => { FRHOST.hidden = false; window.FUNDING && window.FUNDING.render(); };
+const openFunding = (tab) => { FRHOST.hidden = false; window.FUNDING && window.FUNDING.open(typeof tab === "string" ? tab : null); };
 const frBack = FRROOT.getElementById("fr-back"); frBack.hidden = false; frBack.addEventListener("click", () => { FRHOST.hidden = true; });
 window.FM.openFunding = openFunding;
 document.getElementById("fr-open").addEventListener("click", openFunding);
-const open = () => { PLANHOST.hidden = false; window.PLAN && window.PLAN.render(); };
+const open = (tab) => { PLANHOST.hidden = false; window.PLAN && window.PLAN.open(typeof tab === "string" ? tab : null); };
 const close = () => { PLANHOST.hidden = true; FMHOST.hidden = true; CAPHOST.hidden = true; FRHOST.hidden = true; };
 window.FM.open = open; window.FM.close = close;
 const back = PROOT.getElementById("pf-back"); back.hidden = false; back.addEventListener("click", close);
