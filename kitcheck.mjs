@@ -127,11 +127,27 @@ async function checkTopstepReadOnly() {
                                          : `Topstep sync allows: ${allowed.join(", ")}`];
 }
 
+/** The iPad Jarvis builds, its app stars are there, and the only Miro tool it calls only reads. */
+async function checkIpadApps() {
+  const { execFileSync } = await import("node:child_process");
+  const out = path.join(os.tmpdir(), "jarvis-space-check.html");
+  try {
+    execFileSync(process.execPath, [path.join(ROOT, "ipad", "build-space.mjs"), out], { stdio: "pipe" });
+    const page = fs.readFileSync(out, "utf8");
+    const tools = [...new Set([...page.matchAll(/callTool\("Miro", "([^"]+)"/g)].map((m) => m[1]))];
+    const apps = ["TradingView", "Excalidraw", "Miro", "YouTube", "Instagram", "Apps de Claude"].filter((a) => !page.includes('"' + a + '"'));
+    const ok = JSON.stringify(tools) === '["board_search_boards"]' && !apps.length && page.includes("tiene que empezar por https://");
+    return [ok, ok ? "iPad page builds; 6 app stars; Miro limited to board_search_boards (read); links must be http(s)"
+                   : `Miro tools: ${tools.join(", ") || "none"}; missing apps: ${apps.join(", ") || "none"}`];
+  } finally { fs.rmSync(out, { force: true }); }
+}
+
 export const CHECKS = [["spoken addresses parse", checkAddresses],
                        ["fingerprints from banners", checkFingerprints],
                        ["every digest line names its source", checkDigestAttribution],
                        ["snapshots can't leave the teardowns folder", checkSnapshotContainment],
-                       ["Topstep sync is read-only", checkTopstepReadOnly]];
+                       ["Topstep sync is read-only", checkTopstepReadOnly],
+                       ["iPad Jarvis: app stars, Miro read-only", checkIpadApps]];
 
 export async function run() {
   const results = [];

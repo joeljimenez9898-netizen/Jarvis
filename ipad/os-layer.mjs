@@ -41,7 +41,12 @@ export const CSS = `
   #fm-open { margin-top: 10px; width: 100%; }
   #os-search { width: 100%; box-sizing: border-box; background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 10px; color: var(--text);
                font: inherit; font-size: 13px; padding: 9px 11px; outline: none; }
-  #os-search:focus { border-color: var(--accent); }
+  #os-search:focus, .os-in:focus { border-color: var(--accent); }
+  .os-in { width: 100%; box-sizing: border-box; background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 10px; color: var(--text); font: inherit; font-size: 13px; padding: 9px 11px; outline: none; margin-bottom: 6px; }
+  #os-link { display: flex; flex-direction: column; gap: 0; }
+  #os-link .os-toggle { justify-content: center; text-transform: none; letter-spacing: 0; width: 100%; }
+  .os-msg { font-size: 12px; color: var(--muted); min-height: 1em; margin-top: 4px; }
+  #os-open-link { display: inline-block; margin: 10px 0 2px; padding: 7px 12px; border-radius: 999px; background: var(--accent); color: #07101f; font-weight: 600; font-size: 13px; text-decoration: none; }
   #os-results { margin-top: 6px; display: grid; gap: 2px; }
   .os-row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--text); background: none; border: 0; width: 100%; text-align: left; font-family: inherit; }
   .os-row:hover, .os-row:focus-visible { background: rgba(255,255,255,.06); outline: none; }
@@ -96,6 +101,10 @@ export const MARKUP = `
   <div class="glass os-box" id="os-brand"></div>
   <div class="glass os-box"><input id="os-search" type="search" placeholder="Busca en tu cerebro…" aria-label="Buscar en el cerebro" autocomplete="off"><div id="os-results"></div></div>
   <div class="glass os-box"><p class="os-h">Inspector</p><div id="os-insp"></div><div id="os-insp-empty">Toca una estrella para enfocarla: solo ella y sus conexiones se iluminan, y aquí puedes leer su nota.</div></div>
+  <div class="glass os-box"><p class="os-h">Añadir enlace</p>
+    <form id="os-link" autocomplete="off"><input id="os-link-t" class="os-in" placeholder="Título (ej. Gráfico MNQ 5m)" aria-label="Título del enlace">
+    <input id="os-link-u" class="os-in" inputmode="url" placeholder="Pega el enlace: TradingView, YouTube, Excalidraw…" aria-label="Enlace">
+    <button class="os-toggle" type="submit" style="justify-content:center">Guardar como estrella</button><div id="os-link-msg" class="os-msg"></div></form></div>
   <div class="glass os-box"><p class="os-h">Nodos principales</p><div id="os-hubs"></div></div>
   <div class="glass os-box"><p class="os-h">Fuerzas</p>
     <label class="os-slider">Repulsión<input id="os-repel" type="range" min="40" max="400" value="140"></label>
@@ -166,6 +175,25 @@ export const SCRIPT = `
       N().forEach((n) => { if (n.__tag) n.__tag.visible = on; });
     });
     $("os-fm").addEventListener("click", () => window.FM && window.FM.open());
+    // Inspector: a star with an address gets a button that opens it in its app.
+    const panel = $("panel");
+    const showLink = () => {
+      let a = $("os-open-link");
+      const id = g.Focus && g.Focus.current, n = id != null ? N()[id] : null;
+      if (!n || !n.url || !panel.classList.contains("open")) { if (a) a.remove(); return; }
+      if (!a) { a = document.createElement("a"); a.id = "os-open-link"; a.target = "_blank"; a.rel = "noopener"; }
+      if (a.getAttribute("href") !== n.url) { a.href = n.url; a.textContent = "Abrir ↗"; }
+      const ex = $("p-excerpt");
+      if (ex && a.previousElementSibling !== ex) ex.after(a);   // only move it when needed: the observer sees our own insert
+    };
+    new MutationObserver(showLink).observe(panel, { attributes: true, childList: true, subtree: true, attributeFilter: ["class"] });
+    $("os-link").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const msg = $("os-link-msg"); msg.textContent = "Guardando…";
+      msg.textContent = await window.BRAIN.saveLink($("os-link-t").value, $("os-link-u").value);
+      if (msg.textContent === "Guardado.") { $("os-link-t").value = ""; $("os-link-u").value = ""; }
+    });
+    if (window.BRAIN && window.BRAIN.loadMiro) window.BRAIN.loadMiro().then((s) => { const h = document.querySelector("#os-hubs"); if (h) h.title = "Miro: " + s; });
     const voiceOn = (e) => {
       const tag = $("os-voice").querySelector("span");
       if (!window.Voice || !Voice.available) { tag.textContent = "no disponible aquí"; Voice && Voice.setNote("Este navegador no deja hablar a la página. Abre Jarvis en Safari."); return; }

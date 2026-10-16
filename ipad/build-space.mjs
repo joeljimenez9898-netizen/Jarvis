@@ -69,7 +69,23 @@ for (const [a, b] of [
 const brain = String.raw`
 window.GRAPH = { nodes: [], links: [] };
 (() => {
-  const TIPOS = { operacion: "Operaciones", idea: "Ideas", incidencia: "Incidencias", estrategia: "Estrategia", observacion: "Notas" };
+  const TIPOS = { operacion: "Operaciones", idea: "Ideas", incidencia: "Incidencias", estrategia: "Estrategia", observacion: "Notas", enlace: "Enlaces" };
+  // Your tools, each a star. A link you save hangs from its app by its address.
+  const APPS = [
+    ["tradingview", "TradingView", "https://www.tradingview.com/", /tradingview/i, "Tus gráficos y alertas de TradingView. Guarda aquí el enlace de cada gráfico o idea."],
+    ["excalidraw", "Excalidraw", "https://excalidraw.com/", /excalidraw/i, "Tus dibujos y esquemas de Excalidraw. Guarda el enlace de cada dibujo."],
+    ["miro", "Miro", "https://miro.com/app/dashboard/", /miro\.com|\bmiro\b/i, "Tus tableros de Miro, leídos con tu cuenta de Miro."],
+    ["youtube", "YouTube", "https://www.youtube.com/", /youtube|youtu\.be/i, "Vídeos de YouTube: formación, ideas y tu canal."],
+    ["instagram", "Instagram", "https://www.instagram.com/", /instagram/i, "Instagram: publicaciones, reels e ideas."],
+    ["claude", "Apps de Claude", "https://claude.ai/", /claude\.ai\/artifact/i, "Las apps que Claude te ha creado: tus planes de futuros, paneles y Jarvis."],
+  ];
+  const PLANES = [
+    ["MNQ · Short en apertura NY", "https://claude.ai/artifact/E1DdHdQFczDK3v5NzTLemi", "Tu plan de futuros: short en MNQ en la apertura de Nueva York."],
+    ["Panel ilustrativo · MNQ apertura NY", "https://claude.ai/artifact/DqWNZBLFDCqKHdnCbmTS4Y", "Panel ilustrativo del MNQ en la apertura de Nueva York."],
+    ["Esquema animado: long tras sweep de liquidez", "https://claude.ai/artifact/RXpQJAcHixo9uRj3soEYuN", "Esquema animado de un long después de un barrido de liquidez."],
+    ["Backtesting Dashboard", "https://claude.ai/artifact/2JgieCMuWN8u8R3cv4gCsU", "Tu panel de backtesting."],
+  ];
+  const urlIn = (t) => (String(t || "").match(/https?:\/\/[^\s<>"']+/) || [])[0] || "";
   const B = window.BRAIN = { db: null, docs: { cuentas: new Map(), diario: new Map(), sistema: {}, topstep: null }, bodies: [], known: new Set(), byKey: {} };
   const words = (t) => String(t || "").split(/\s+/).filter(Boolean);
   const titleOf = (t) => { const w = words(t).filter((x, i) => i || !/^(que|el|la|los|las|un|una)$/i.test(x)).slice(0, 6).join(" ").replace(/[.,;:!?]+$/, "");
@@ -86,7 +102,7 @@ window.GRAPH = { nodes: [], links: [] };
   }
   function build() {
     const nodes = [], links = [], body = [];
-    const add = (key, label, group, excerpt, text) => { const id = nodes.length; nodes.push({ id, label, group, path: "", excerpt, degree: 0 }); body.push(text || excerpt); B.byKey[key] = id; return id; };
+    const add = (key, label, group, excerpt, text, url) => { const id = nodes.length; nodes.push({ id, label, group, path: "", excerpt, degree: 0, url: url || "" }); body.push(text || excerpt); B.byKey[key] = id; return id; };
     const link = (a, b, type = "mention") => { if (a == null || b == null || a === b) return; if (links.some((l) => (l.source === Math.min(a, b) && l.target === Math.max(a, b)))) return;
                                                links.push({ source: Math.min(a, b), target: Math.max(a, b), type }); nodes[a].degree++; nodes[b].degree++; };
     B.byKey = {};
@@ -106,6 +122,8 @@ window.GRAPH = { nodes: [], links: [] };
       const n = add("cuenta:" + id, c.alias || "Cuenta", "Cuentas", cuentaTexto(c));
       link(n, c.firma ? firmas[c.firma] : jarvis);
     }
+    for (const [k, label, url, , desc] of APPS) link(jarvis, add("app:" + k, label, "Apps", desc, desc + " " + label, url));
+    for (const [label, url, desc] of PLANES) { const p = add("plan:" + url, label, "Planes de trading", desc, desc, url); link(p, B.byKey["app:claude"]); link(p, sistema); }
     const notas = [...B.docs.diario.entries()].sort((a, b) => (a[1].creado || "").localeCompare(b[1].creado || ""));
     for (const [id, d] of notas) placeNote(id, d, { nodes, links, add, link });
     for (const [id] of notas) B.known.add(id);
@@ -114,10 +132,13 @@ window.GRAPH = { nodes: [], links: [] };
   }
   // One note -> one star, linked to its account, to accounts it mentions, and to Mi sistema for strategy.
   function placeNote(id, d, g) {
-    const label = titleOf(d.texto), group = TIPOS[d.tipo] || "Notas";
+    const url = d.url || urlIn(d.texto);
+    const clean = String(d.texto || "").replace(url, "").trim();
+    const label = d.titulo || titleOf(clean || url.replace(/^https?:\/\/(www\.)?/, "")), group = TIPOS[d.tipo] || (url ? "Enlaces" : "Notas");
     const text = (d.texto || "") + (d.fecha ? " (" + d.fecha.split("-").reverse().join("/") + ")" : "");
-    const n = g.add("nota:" + id, label, group, text, text);
+    const n = g.add("nota:" + id, label, group, text, text, url);
     let linked = false;
+    for (const [k, , , re] of APPS) if (re.test(url) || re.test(d.texto || "")) { g.link(n, B.byKey["app:" + k]); linked = true; }
     if (d.cuentaId && B.byKey["cuenta:" + d.cuentaId] != null) { g.link(n, B.byKey["cuenta:" + d.cuentaId]); linked = true; }
     const low = (d.texto || "").toLowerCase();
     for (const [cid, c] of B.docs.cuentas) if (c.alias && low.includes(c.alias.toLowerCase())) { g.link(n, B.byKey["cuenta:" + cid]); linked = true; }
@@ -131,13 +152,47 @@ window.GRAPH = { nodes: [], links: [] };
     B.known.add(id);
     const G = window.GRAPH, newLinks = [];
     const g = { nodes: G.nodes, links: newLinks,
-      add: (key, label, group, excerpt, text) => { const nid = G.nodes.length; B.byKey[key] = nid; B.bodies[nid] = text || excerpt; B._pending = { id: nid, label, group, path: "", excerpt, degree: 0 }; return nid; },
+      add: (key, label, group, excerpt, text, url) => { const nid = G.nodes.length; B.byKey[key] = nid; B.bodies[nid] = text || excerpt; B._pending = { id: nid, label, group, path: "", excerpt, degree: 0, url: url || "" }; return nid; },
       link: (a, b, type = "mention") => { if (a == null || b == null || a === b || newLinks.some((l) => l.source === Math.min(a, b) && l.target === Math.max(a, b))) return;
                                           newLinks.push({ source: Math.min(a, b), target: Math.max(a, b), type }); } };
     const nid = placeNote(id, d, g);
     const node = B._pending; node.degree = newLinks.length;
     const anchor = newLinks.length ? (newLinks[0].source === nid ? newLinks[0].target : newLinks[0].source) : 0;
     return { index: nid, node, links: newLinks, anchor };
+  };
+  // Miro, read live with the viewer's own Miro account: each board becomes a star under Miro.
+  B.loadMiro = async () => {
+    const use = window.claude?.use ? window.claude.use.bind(window.claude) : null;
+    const mcp = use ? await use("mcp") : null;
+    if (!mcp || !window.galaxy) return "sin conexión";
+    let boards;
+    try { boards = (await mcp.callTool("Miro", "board_search_boards", { limit: 50 })).payload?.data || []; }
+    catch (e) { return e && e.code === "server_not_connected" ? "Miro no está conectado en tu Claude" : "Miro no respondió"; }
+    // Born beside the Miro star, so wait until the simulation has placed it.
+    for (let i = 0; i < 100 && !isFinite(window.GRAPH.nodes[B.byKey["app:miro"]]?.x); i++) await new Promise((r) => setTimeout(r, 100));
+    let n = 0, sin = 0;
+    for (const bd of boards) {
+      if (!bd.miro_url || B.byKey["miro:" + bd.miro_url] != null) continue;
+      const G = window.GRAPH, nid = G.nodes.length, hub = B.byKey["app:miro"];
+      const name = bd.name && bd.name !== "Sin título" ? bd.name : "Tablero sin título " + (++sin);
+      const node = { id: nid, label: name, group: "Tableros Miro", path: "", excerpt: "Tablero de Miro: " + name + ".", degree: 1, url: bd.miro_url };
+      B.byKey["miro:" + bd.miro_url] = nid; B.bodies[nid] = node.excerpt + " Miro";
+      if (window.galaxy.addNote(node, [{ source: Math.min(hub, nid), target: Math.max(hub, nid), type: "mention" }], hub, { fly: false })) n++;
+    }
+    return n + " tableros";
+  };
+  // "Añadir enlace": the one door for links, same as a note, born as a star at once.
+  B.saveLink = async (titulo, url) => {
+    if (!B.db) return "Abre Jarvis dentro de Claude para guardarlo.";
+    url = String(url || "").trim(); titulo = String(titulo || "").trim();
+    if (!/^https?:\/\//i.test(url)) return "El enlace tiene que empezar por https://";
+    const d = new Date(), fecha = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    const doc = { texto: (titulo ? titulo + " " : "") + url, titulo, url, tipo: "enlace", cuentaId: "", fecha, creado: d.toISOString(), actualizado: d.toISOString() };
+    const id = Math.random().toString(36).slice(2, 10);
+    const born = B.birth(id, doc);
+    try { await B.db.doc("fm/main").collection("diario").doc(id).set(doc); } catch (e) { B.known.delete(id); return "No se ha guardado: " + (e.message || "error"); }
+    if (born) window.galaxy.addNote(born.node, born.links, born.anchor);
+    return "Guardado.";
   };
   window.__graphReady = (async () => {
     const use = window.claude?.use ? window.claude.use.bind(window.claude) : null;
