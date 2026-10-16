@@ -271,6 +271,29 @@ export const SCRIPT = `
         card.querySelector(".a").textContent = c.pregunta;
         if (window.Voice) { Voice.stopSpeaking && Voice.stopSpeaking(); Voice.speak(c.pregunta); }
       }, 3000); }
+    // Daily-limit warnings (fm/topstep vigilancia, written by the hourly read): Jarvis says each one aloud once a day while it is
+    // open, and on opening it says the ones not heard yet. If the iPad keeps it silent, the answer card's 🔊 / tap-anywhere plays it.
+    { const t0 = Date.now(), KEY = "jarvis-avisos-oidos";
+      const usd = (n) => Math.abs(n).toLocaleString("es-ES", { maximumFractionDigits: 0 }) + " dólares";
+      const said = () => { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch { return []; } };
+      setInterval(() => {
+        const v = window.BRAIN && window.BRAIN.docs && window.BRAIN.docs.topstep && window.BRAIN.docs.topstep.vigilancia;
+        if (!v || !Array.isArray(v.cuentas) || Date.now() - t0 < 12000) return;          // after the greeting
+        if (Date.now() - new Date(v.at).getTime() > 12 * 3600000) return;                  // only today's watch
+        const heard = said(), nuevos = v.cuentas.filter((f) => f.nivel && !heard.includes(v.fecha + ":" + f.cuenta + ":" + f.nivel));
+        if (!nuevos.length || document.getElementById("answer").classList.contains("thinking")) return;
+        const frases = nuevos.map((f) => f.nivel === "dll100" ? f.cuenta + " ha pasado su límite de pérdida diaria: lleva menos " + usd(f.hoy) + " hoy, y su límite es " + usd(f.limitePerdida) + ". Su plan dice que pare."
+          : f.nivel === "dll80" ? f.cuenta + " lleva menos " + usd(f.hoy) + " hoy: está al " + Math.round((-f.hoy / f.limitePerdida) * 100) + " por ciento de su límite de pérdida diaria, que es " + usd(f.limitePerdida) + "."
+          : f.cuenta + " ha llegado a su objetivo del día: lleva " + usd(f.hoy) + ". Su plan dice que cierre.");
+        try { localStorage.setItem(KEY, JSON.stringify([...heard, ...nuevos.map((f) => v.fecha + ":" + f.cuenta + ":" + f.nivel)].slice(-60))); } catch {}
+        const texto = "Aviso de límites, Joel. " + frases.join(" ");
+        const card = $("answer");
+        card.className = "glass show";
+        card.querySelector(".q").textContent = "Jarvis · vigilancia de límites";
+        card.querySelector(".chips").replaceChildren();
+        card.querySelector(".a").textContent = texto;
+        if (window.Voice) { Voice.stopSpeaking && Voice.stopSpeaking(); Voice.speak(texto); }
+      }, 4000); }
     // 📷: a photo of a trade for Jarvis to look at, where this view can send images to Claude.
     const photo = document.createElement("button"); photo.type = "button"; photo.id = "os-photo"; photo.title = "Mándame la foto de un trade"; photo.textContent = "📷"; photo.hidden = true;
     const pick = document.createElement("input"); pick.type = "file"; pick.hidden = true;

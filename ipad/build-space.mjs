@@ -122,7 +122,7 @@ window.GRAPH = { nodes: [], links: [] };
   // What runs on its own, set up by Joel with Claude. Jarvis on the page doesn't send these; it knows about them.
   const AVISOS = "Avisos automáticos de Joel (ya programados y funcionando; los envía Claude por su cuenta, no hace falta pedirlo): " +
     "1) Resumen diario de cuentas: de lunes a viernes hacia las 11:00 (hora de España), por notificación en el móvil y por email. Lee sus cuentas de Topstep (TS-2, TS-3 y TS-4): balance, beneficio, lo que falta para el objetivo de 3.000 $, margen de drawdown EOD de 2.000 $, consistencia del 50 % y avisos, más el precio del MNQ. " +
-    "2) Cuentas y precio del MNQ: cada hora de lunes a viernes de 14:00 a 22:00 (hora de España), en silencio, sin notificación: Jarvis lee de nuevo sus cuentas de Topstep y el MNQ, así que lo que sabe de sus cuentas tiene como mucho una hora en esas franjas. Joel no tiene que registrar nada a mano de las cuentas de Topstep; solo los payouts y lo que pagó por cada cuenta, si quiere el balance real del negocio. " +
+    "2) Cuentas, MNQ y vigilancia de límites: cada hora de lunes a viernes de 8:00 a 22:00 (hora de España): Jarvis lee de nuevo sus cuentas de Topstep (con sus operaciones) y el MNQ, así que lo que sabe tiene como mucho una hora en esas franjas. Además compara lo que lleva hoy cada cuenta viva con el límite de pérdida diaria y el objetivo diario de su pestaña Riesgo, y le avisa una vez al día de cada cosa (al 80 % del límite, al pasarlo y al llegar al objetivo): por notificación en el móvil y, si tiene Jarvis abierto, en voz. Es una vigilancia cada hora, no un stop: el límite de verdad lo pone él en TopstepX. Joel no tiene que registrar nada a mano de las cuentas de Topstep; los payouts y los exámenes se los puede dictar a Jarvis. " +
     "3) Pregunta de sesión: de lunes a viernes hacia las 12:00 (sesión de Londres) y hacia las 18:00 (sesión de Nueva York), una notificación en el móvil con sus cifras del día que le pregunta cómo le ha ido; Jarvis guarda su respuesta en el diario. Joel también puede mandar a Jarvis la foto de un trade con el botón 📷 para que se la analice. " +
     "Todos solo leen de Topstep: nunca operan ni tocan órdenes. Para cambiar la hora o los avisos, Joel se lo pide a Claude en la conversación donde los configuró.";
   const urlIn = (t) => (String(t || "").match(/https?:\/\/[^\s<>"']+/) || [])[0] || "";
@@ -174,7 +174,7 @@ window.GRAPH = { nodes: [], links: [] };
       link(n, c.firma ? firmas[c.firma] : jarvis);
     }
     for (const [k, label, url, , desc] of APPS) link(jarvis, add("app:" + k, label, "Apps", desc, desc + " " + label, url));
-    link(add("avisos", "Avisos automáticos", "Sistema", AVISOS, AVISOS + " resumen reporte informe notificacion email correo 11:00 once mañana programado automatico avisos"), jarvis);
+    link(add("avisos", "Avisos automáticos", "Sistema", AVISOS, AVISOS + " resumen reporte informe notificacion email correo 11:00 once mañana programado automatico avisos limite limites vigilancia"), jarvis);
     { const t = B.mercadoTxt("MNQ") || "El precio del MNQ llegará con la próxima actualización de Topstep.";
       link(add("mercado:MNQ", "MNQ", "Mercado", t, t + " MNQ Nasdaq precio mercado", "https://www.tradingview.com/chart/?symbol=" + encodeURIComponent("CME_MINI:MNQ1!")), B.byKey["app:tradingview"]); }
     for (const [label, url, desc] of PLANES) { const p = add("plan:" + url, label, "Planes de trading", desc, desc, url); link(p, B.byKey["app:claude"]); link(p, sistema); }
