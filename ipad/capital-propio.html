@@ -1,0 +1,191 @@
+<title>Capital propio</title>
+<style>
+.cp { --bg: #000; --surface: #0D0E10; --raised: #141517; --border: #1C1D20; --borderLight: #28292D; --text: #EEF0F1; --muted: #8B9096;
+      --faint: #55585C; --accent: #00D991; --accentSoft: rgba(0,217,145,.14); --coral: #FF6B6B; --coralSoft: rgba(255,107,107,.14);
+      background: var(--bg); min-height: 100%; color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif; }
+.cp * { box-sizing: border-box; }
+.cp button, .cp input { font-family: inherit; }
+.cp button { cursor: pointer; }
+.cp button:focus-visible, .cp input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cp input[type=number] { font-variant-numeric: tabular-nums; }
+.cp .wrap { max-width: 900px; margin: 0 auto; padding: 32px 20px 80px; padding-top: max(32px, env(safe-area-inset-top)); }
+.cp #cp-back { background: var(--raised); color: var(--text); border: 1px solid var(--borderLight); border-radius: 10px; padding: 8px 14px; font-weight: 600; margin-bottom: 20px; }
+.cp #cp-back[hidden] { display: none; }
+.cp .kick { font-size: 11px; color: var(--accent); letter-spacing: .14em; margin-bottom: 8px; font-weight: 600; }
+.cp h1 { font-size: 30px; font-weight: 700; margin: 0; letter-spacing: -.02em; }
+.cp .lede { font-size: 14px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+.cp .hero { background: linear-gradient(135deg, var(--accentSoft), transparent 60%); border: 1px solid var(--accent); border-radius: 18px; padding: 26px 28px;
+            margin: 28px 0; display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 14px; }
+.cp .lab { font-size: 11px; color: var(--muted); letter-spacing: .08em; margin-bottom: 6px; }
+.cp .big { font-size: 40px; font-weight: 700; letter-spacing: -.02em; }
+.cp .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.cp .win { display: flex; align-items: center; gap: 6px; background: var(--accent); border: 0; color: #00140D; padding: 11px 18px; border-radius: 10px; font-size: 13.5px; font-weight: 700; }
+.cp .loss { display: flex; align-items: center; gap: 6px; background: transparent; border: 1px solid var(--coral); color: var(--coral); padding: 11px 18px; border-radius: 10px; font-size: 13.5px; font-weight: 700; }
+.cp .sec { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; }
+.cp .sec b { font-size: 11px; color: var(--accent); letter-spacing: .05em; } .cp .sec span { font-size: 15px; font-weight: 700; }
+.cp .cmp { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.cp .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; display: flex; flex-direction: column; }
+.cp .card.acc { border-color: var(--accent); }
+.cp .card h3 { font-size: 14.5px; margin: 0 0 12px; } .cp .card.acc h3 { color: var(--accent); }
+.cp .item { display: flex; gap: 8px; font-size: 12.5px; color: var(--muted); line-height: 1.4; margin-bottom: 8px; }
+.cp .item i { color: var(--faint); font-style: normal; } .cp .card.acc .item i { color: var(--accent); }
+.cp .foot { font-size: 12px; font-weight: 700; color: var(--faint); padding-top: 10px; border-top: 1px solid var(--border); margin-top: auto; }
+.cp .card.acc .foot { color: var(--accent); }
+.cp .note { background: var(--raised); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 10px; padding: 14px 16px; font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 32px; }
+.cp .two { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(260px, 1.1fr); gap: 14px; margin-bottom: 32px; }
+@media (max-width: 640px) { .cp .two { grid-template-columns: 1fr; } }
+.cp .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cp .f { display: block; } .cp .f.full { grid-column: 1 / -1; }
+.cp .f span { display: block; font-size: 10.5px; color: var(--faint); margin-bottom: 5px; line-height: 1.3; }
+.cp .f input { width: 100%; background: var(--raised); border: 1px solid var(--borderLight); border-radius: 7px; padding: 9px 10px; color: var(--text); font-size: 14px; }
+.cp .f.hi input { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.cp .outs { display: flex; flex-direction: column; gap: 10px; }
+.cp .out { background: linear-gradient(135deg, var(--accentSoft), transparent 70%); border: 1px solid var(--accent); border-radius: 14px; padding: 16px 18px; }
+.cp .out.neg { background: linear-gradient(135deg, var(--coralSoft), transparent 70%); border-color: var(--coral); }
+.cp .out .v { font-size: 26px; font-weight: 700; color: var(--accent); letter-spacing: -.01em; } .cp .out.neg .v { color: var(--coral); }
+.cp .out .s { font-size: 12px; color: var(--muted); margin-top: 4px; } .cp .out .d { font-size: 11px; color: var(--faint); margin-top: 6px; line-height: 1.4; }
+.cp .shield { display: flex; align-items: center; gap: 10px; border-radius: 14px; padding: 16px 18px; background: var(--accentSoft); border: 1px solid var(--accent); }
+.cp .shield.bad { background: var(--coralSoft); border-color: var(--coral); }
+.cp .shield b { font-size: 13.5px; color: var(--accent); } .cp .shield.bad b { color: var(--coral); }
+.cp .shield small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.cp .row { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: var(--raised); border-left: 3px solid var(--accent); border-radius: 8px; margin-bottom: 6px; }
+.cp .row.l { border-left-color: var(--coral); }
+.cp .row span { font-size: 12.5px; color: var(--muted); } .cp .row b { font-size: 13px; color: var(--accent); } .cp .row.l b { color: var(--coral); }
+.cp .ghost { display: flex; align-items: center; gap: 6px; background: transparent; border: 1px solid var(--border); color: var(--faint); padding: 8px 14px; border-radius: 8px; font-size: 12px; margin-top: 12px; }
+.cp .reset { display: block; margin: 32px auto 0; }
+.cp .empty { font-size: 13px; color: var(--faint); }
+.cp .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--raised); border: 1px solid var(--accent); color: var(--text); padding: 10px 16px; border-radius: 10px; z-index: 30; font-size: 13px; }
+.cp .toast[hidden] { display: none; }
+</style>
+<div class="cp" id="cp">
+  <div class="wrap">
+    <button id="cp-back" type="button" hidden>← Galaxia</button>
+    <div id="cp-view"></div>
+  </div>
+  <div class="toast" id="cp-toast" hidden></div>
+</div>
+<script>
+(() => {
+"use strict";
+// Capital propio: 4.5 % compounded on today's balance. Saved in the artifact's database (fm/capital).
+const ROOT = window.__CAP_ROOT || document;
+const $ = (s) => ROOT.querySelector(s);
+const DEF = { saldoInicial: 1000, stopsMaxDia: 2, winrate: 82, riesgoPct: 4.5, ratioTpSl: 0.31, opsPorDia: 4, rachaMaxima: 3, maxPerdidaAceptada: 30, margenSeguridad: 2 };
+const S = { inputs: { ...DEF }, log: [], db: null, saveT: null };
+const eur = (n) => { const v = Number(n || 0); return (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toLocaleString("es-ES", { maximumFractionDigits: 0 }) + " €"; };
+const pct = (n, d = 1) => `${Number(n || 0).toFixed(d)}%`;
+const today = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+const saldo = () => (S.log.length ? S.log[S.log.length - 1].balanceAfter : S.inputs.saldoInicial);
+
+function calc() {
+  const I = S.inputs, s = saldo(), r = I.riesgoPct / 100;
+  const arriesgasHoy = s * r, objetivoGanancia = arriesgasHoy * I.ratioTpSl;
+  const drawdownDiario = 1 - Math.pow(1 - r, I.stopsMaxDia), dineroDrawdownDiario = s * drawdownDiario;
+  const maxP = I.maxPerdidaAceptada / 100, margenSeguro = I.rachaMaxima * I.margenSeguridad;
+  // risk % such that "margenSeguro" losses in a row land exactly on the maximum accepted loss
+  const riesgoQueDiceTuRacha = margenSeguro > 0 ? (1 - Math.pow(1 - maxP, 1 / margenSeguro)) * 100 : 0;
+  const stopsHastaLimite = r > 0 ? Math.log(1 - maxP) / Math.log(1 - r) : Infinity;
+  return { arriesgasHoy, objetivoGanancia, drawdownDiario, dineroDrawdownDiario, riesgoQueDiceTuRacha,
+           dineroDeEseRiesgo: s * (riesgoQueDiceTuRacha / 100), margenSeguro, stopsHastaLimite, esSeguro: stopsHastaLimite >= margenSeguro };
+}
+
+const num = (k, label, { step = 1, hi = false, full = false } = {}) =>
+  `<label class="f${hi ? " hi" : ""}${full ? " full" : ""}"><span>${label}</span><input type="number" inputmode="decimal" step="${step}" data-k="${k}" value="${S.inputs[k]}"></label>`;
+const out = (label, value, sub, detail, neg) =>
+  `<div class="out${neg ? " neg" : ""}"><div class="lab">${label}</div><div class="v">${value}</div><div class="s">${sub}</div>${detail ? `<div class="d">${detail}</div>` : ""}</div>`;
+
+function render() {
+  const I = S.inputs, s = saldo(), c = calc(), up = s >= I.saldoInicial;
+  $("#cp-view").innerHTML = `
+  <div class="kick">CAMINOALMILLONFX · CAPITAL PROPIO</div>
+  <h1>${pct(I.riesgoPct)} compuesto</h1>
+  <div class="lede">Siempre sobre el saldo de hoy. Si ganas, sube. Si pierdes, baja. Máximo ${I.stopsMaxDia} stops al día.</div>
+  <div class="hero"><div><div class="lab">SALDO ACTUAL</div><div class="big">${eur(s).replace(/^\+/, "")}</div>
+      <div style="font-size:13px;margin-top:4px;color:${up ? "var(--accent)" : "var(--coral)"}">${up ? "+" : ""}${pct((s / I.saldoInicial - 1) * 100)} desde tu inicio de ${eur(I.saldoInicial).replace(/^\+/, "")}</div></div>
+    <div class="btns"><button class="win" type="button" data-act="win">↗ Registrar Win</button><button class="loss" type="button" data-act="loss">↘ Registrar Loss</button></div></div>
+
+  <div class="sec"><b>01</b><span>Esto ya no es una fondeada</span></div>
+  <div class="cmp">
+    <div class="card"><h3>Cuenta fondeada</h3>${["Un EOD te echa a los 4 stops", "Si la quemas, repones por dinero", "Reglas puestas por otro", "Riesgo bajo obligado: 1–1,5%"].map((t) => `<div class="item"><i>→</i>${t}</div>`).join("")}<div class="foot">El límite te lo pone la prop firm</div></div>
+    <div class="card acc"><h3>Capital propio</h3>${["Nadie te saca. Nunca", "Si lo quemas, no hay reposición", "Las reglas las pones tú y no hay quien te vigile", `Riesgo alto posible: ${pct(I.riesgoPct)} compuesto`].map((t) => `<div class="item"><i>→</i>${t}</div>`).join("")}<div class="foot">El límite eres tú</div></div>
+  </div>
+  <div class="note">En fondeo, el peor escenario es perder una cuota y volver a empezar. Aquí, el peor escenario es quedarte sin negocio. Por eso el riesgo no es fijo: es un porcentaje del saldo de hoy.</div>
+
+  <div class="sec"><b>02</b><span>Tu número de hoy</span></div>
+  <div class="two"><div class="card"><div class="lab" style="color:var(--faint)">TUS DATOS</div><div class="fields">
+      ${num("stopsMaxDia", "Stops máx. por día")}${num("winrate", "Winrate (%)")}${num("riesgoPct", "Riesgo por operación (%)", { step: 0.1, hi: true })}
+      ${num("ratioTpSl", "Ratio TP:SL", { step: 0.01 })}${num("opsPorDia", "Operaciones por día")}${num("saldoInicial", "Saldo inicial (€)")}</div></div>
+    <div class="outs">${out("ARRIESGAS HOY", eur(c.arriesgasHoy).replace(/^\+/, ""), `objetivo ${eur(c.objetivoGanancia).replace(/^\+/, "")} · ratio x${I.ratioTpSl}`, `Arriesgas ${pct(I.riesgoPct)} de lo que tienes hoy`)}
+      ${out("SI PIERDES TODOS TUS STOPS HOY", "-" + eur(c.dineroDrawdownDiario).replace(/^\+/, ""), pct(-c.drawdownDiario * 100), `${I.stopsMaxDia} pérdidas seguidas al ${pct(I.riesgoPct)}, compuesto dentro del día`, true)}</div></div>
+
+  <div class="sec"><b>03</b><span>¿Aguanta tu riesgo tu peor racha?</span></div>
+  <div style="font-size:12.5px;color:var(--faint);margin:-6px 0 14px">Aquí no hay EOD. El límite lo pones tú.</div>
+  <div class="two"><div class="card"><div class="fields">${num("rachaMaxima", "Tu racha máxima (stops seguidos en tu historial real)", { full: true })}
+      ${num("maxPerdidaAceptada", "Máximo que aceptas perder (%)")}${num("margenSeguridad", "Margen de seguridad (x)")}</div>
+      <div style="font-size:11.5px;color:var(--faint);margin-top:10px">${I.rachaMaxima} × ${I.margenSeguridad} = ${c.margenSeguro} stops de margen exigido</div></div>
+    <div class="outs">${out("RIESGO QUE DICE TU RACHA", pct(c.riesgoQueDiceTuRacha, 2), `${eur(c.dineroDeEseRiesgo).replace(/^\+/, "")} con el saldo de hoy`, "Riesgo máximo/operación para que tu peor racha × margen no supere tu límite")}
+      <div class="shield${c.esSeguro ? "" : " bad"}"><span style="font-size:20px">${c.esSeguro ? "🛡️" : "⚠️"}</span><div><b>${c.esSeguro ? "Tu riesgo actual aguanta el margen" : "Tu riesgo actual no aguanta el margen"}</b>
+        <small>Al ${pct(I.riesgoPct)}, llegarías a tu límite en ~${Number.isFinite(c.stopsHastaLimite) ? c.stopsHastaLimite.toFixed(1) : "∞"} stops seguidos${c.esSeguro ? " — por encima del margen exigido." : " — por debajo del margen exigido. Baja el riesgo."}</small></div></div></div></div>
+
+  <div class="sec"><b>04</b><span>Registro de hoy y días anteriores</span></div>
+  <div class="card">${S.log.length ? [...S.log].reverse().map((e) => `<div class="row${e.resultado === "win" ? "" : " l"}"><span>${e.resultado === "win" ? "✓" : "✗"}&nbsp; ${e.date} · riesgo ${pct(e.riesgoPct)}</span><b>${eur(e.balanceAfter).replace(/^\+/, "")}</b></div>`).join("")
+    : '<div class="empty">Sin registros todavía — usa "Registrar Win" o "Registrar Loss" arriba para empezar a componer tu saldo.</div>'}
+    ${S.log.length ? '<button class="ghost" type="button" data-act="undo">🗑 Deshacer último registro</button>' : ""}</div>
+  <button class="ghost reset" type="button" data-act="reset">Reiniciar todo (volver a ${eur(DEF.saldoInicial).replace(/^\+/, "")})</button>`;
+}
+
+function toast(t) { const el = $("#cp-toast"); el.textContent = t; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => (el.hidden = true), 2200); }
+// One write per change, a moment after the last keystroke.
+function save() {
+  clearTimeout(S.saveT);
+  S.saveT = setTimeout(async () => {
+    try { if (S.db) await S.db.doc("fm/capital").set({ inputs: S.inputs, log: S.log, actualizado: new Date().toISOString() }); }
+    catch { toast("No se ha podido guardar."); }
+  }, 600);
+}
+function registrar(resultado) {
+  const r = S.inputs.riesgoPct / 100, before = saldo();
+  const after = resultado === "win" ? before * (1 + r * S.inputs.ratioTpSl) : before * (1 - r);
+  S.log.push({ id: Date.now().toString(), date: today(), resultado, riesgoPct: S.inputs.riesgoPct, balanceBefore: before, balanceAfter: after });
+  render(); save(); toast(resultado === "win" ? "Win registrado." : "Loss registrado.");
+}
+$("#cp").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  const a = b.dataset.act;
+  if (a === "win" || a === "loss") return registrar(a);
+  if (a === "undo") { S.log.pop(); render(); save(); return; }
+  if (a === "reset") { if (!confirm("¿Reiniciar todo? Se borran tus datos y tu registro.")) return; S.inputs = { ...DEF }; S.log = []; render(); save(); }
+});
+$("#cp").addEventListener("change", (e) => {
+  const k = e.target.dataset.k; if (!k) return;
+  const v = Number(e.target.value); if (!Number.isFinite(v)) return;
+  S.inputs[k] = v; render(); save();
+});
+
+// What Jarvis reads when Joel asks about his own capital.
+function contexto() {
+  const c = calc(), I = S.inputs, s = saldo(), hoy = today(), deHoy = S.log.filter((e) => e.date === hoy);
+  return { moneda: "EUR", saldoActual: Math.round(s * 100) / 100, saldoInicial: I.saldoInicial, rentabilidadDesdeInicio: pct((s / I.saldoInicial - 1) * 100),
+    riesgoPorOperacion: I.riesgoPct + "%", arriesgasHoy: Math.round(c.arriesgasHoy * 100) / 100, objetivoPorOperacion: Math.round(c.objetivoGanancia * 100) / 100,
+    ratioTpSl: I.ratioTpSl, winrate: I.winrate + "%", stopsMaxDia: I.stopsMaxDia, stopsHoy: deHoy.filter((e) => e.resultado === "loss").length,
+    winsHoy: deHoy.filter((e) => e.resultado === "win").length, siPierdesTodosLosStopsHoy: -Math.round(c.dineroDrawdownDiario * 100) / 100,
+    riesgoQueDiceTuRacha: pct(c.riesgoQueDiceTuRacha, 2), riesgoAguantaElMargen: c.esSeguro, stopsHastaElLimite: Number.isFinite(c.stopsHastaLimite) ? Math.round(c.stopsHastaLimite * 10) / 10 : null,
+    ultimosRegistros: S.log.slice(-10).map((e) => ({ fecha: e.date, resultado: e.resultado, saldo: Math.round(e.balanceAfter * 100) / 100 })) };
+}
+window.CAPITAL = { contexto, render };
+
+(async () => {
+  render();
+  const db = window.claude?.use ? await window.claude.use("db") : null;
+  S.db = db; if (!db) return;
+  db.doc("fm/capital").onSnapshot((snap) => {
+    if (!snap.exists) return;
+    const d = snap.data();
+    const focused = ROOT.activeElement && ROOT.activeElement.dataset && ROOT.activeElement.dataset.k;
+    S.inputs = { ...DEF, ...(d.inputs || {}) }; S.log = Array.isArray(d.log) ? d.log : [];
+    if (!focused) render();
+  }, () => {});
+})();
+})();
+</script>

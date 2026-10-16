@@ -39,6 +39,7 @@ export const CSS = `
   #os-left #title { position: static; pointer-events: auto; }
   #os-left #title h1 { font-size: 15px; letter-spacing: .28em; color: var(--text); }
   #fm-open { margin-top: 10px; width: 100%; }
+  #cap-open { width: 100%; }
   #os-search { width: 100%; box-sizing: border-box; background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 10px; color: var(--text);
                font: inherit; font-size: 13px; padding: 9px 11px; outline: none; }
   #os-search:focus, .os-in:focus { border-color: var(--accent); }
@@ -132,6 +133,7 @@ export const MARKUP = `
       <button class="os-toggle" id="os-voice">🔊 Voz <span>tocar para activar</span></button>
       <button class="os-toggle" id="os-labels" aria-pressed="true">Etiquetas <span>sí</span></button>
       <button class="os-toggle" id="os-fm">Plan de Futuros <span>abrir</span></button>
+      <button class="os-toggle" id="os-cap">Capital propio <span>abrir</span></button>
     </div>
   </div>
 </aside>
@@ -179,6 +181,7 @@ export const SCRIPT = `
       N().forEach((n) => { if (n.__tag) n.__tag.visible = on; });
     });
     $("os-fm").addEventListener("click", () => window.FM && window.FM.open());
+    $("os-cap").addEventListener("click", () => window.FM && window.FM.openCapital && window.FM.openCapital());
     // Inspector: a star with an address gets a button that opens it in its app.
     const panel = $("panel");
     const showLink = () => {
