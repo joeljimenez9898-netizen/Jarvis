@@ -115,10 +115,23 @@ async function checkSnapshotContainment() {
   }
 }
 
+/** The Topstep sync may only read: login, account list, trade history. Never orders or positions. */
+async function checkTopstepReadOnly() {
+  const ts = await import("./topstep-sync.mjs");
+  const allowed = [...ts.READ_ONLY_ENDPOINTS].sort();
+  const want = ["/api/Account/search", "/api/Auth/loginKey", "/api/Trade/search"];
+  const acting = allowed.filter((e) => /order|position|close|cancel|place|modify/i.test(e));
+  const ok = JSON.stringify(allowed) === JSON.stringify(want) && !acting.length;
+  const day = ts.tradingDay("2026-10-15T23:30:00Z");          // 18:30 Chicago belongs to the next session
+  return [ok && day === "2026-10-16", ok ? `Topstep sync limited to ${allowed.join(", ")}; trading day rolls at 17:00 Chicago (${day})`
+                                         : `Topstep sync allows: ${allowed.join(", ")}`];
+}
+
 export const CHECKS = [["spoken addresses parse", checkAddresses],
                        ["fingerprints from banners", checkFingerprints],
                        ["every digest line names its source", checkDigestAttribution],
-                       ["snapshots can't leave the teardowns folder", checkSnapshotContainment]];
+                       ["snapshots can't leave the teardowns folder", checkSnapshotContainment],
+                       ["Topstep sync is read-only", checkTopstepReadOnly]];
 
 export async function run() {
   const results = [];
