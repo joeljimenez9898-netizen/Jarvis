@@ -177,6 +177,7 @@ async function checkIpadApps() {
     if (!page.includes("📋 Ficha para TopstepX") || !page.includes("fichaTopstepX: vigil()") || !page.includes("nunca digas que puedes cambiar ajustes")) wrongSym.push("the TopstepX limits sheet is missing from the Plan");
     if (!page.includes("jarvis-avisos-oidos") || !page.includes("Aviso de límites, Joel. ") || !page.includes("vigilancia de límites: cada hora")) wrongSym.push("limit warnings are not spoken by Jarvis");
     if (!page.includes("function panelRoute(") || !page.includes("const panel = panelRoute(question)") || !page.includes("window.FUNDING.open(") || !page.includes("Nunca le digas que tiene que pinchar un botón")) wrongSym.push("«llévame al Funding Manager / al Plan de Futuros» does not open the panel");
+    if (!page.includes("function planDeDinero()") || !page.includes("window.CAPITAL.textoReparto(m.importe)") || !page.includes("jarvis-dinero-oido") || !page.includes("MOV_DO.test(f)")) wrongSym.push("the money plan (payout split, withdrawals, top-ups, risk steps) is not wired into Jarvis");
     if (!page.includes('id="cap-host"') || !page.includes("capitalPropio: window.CAPITAL?.contexto") || !page.includes('db.doc("fm/capital")')) wrongSym.push("Capital propio is not wired into Jarvis");
     if (!page.includes("<avisos>") || !page.includes("hacia las 11:00")) wrongSym.push("Jarvis does not know the scheduled 11:00 summary");
     if (!page.includes('db.doc("fm/mercado")') || !page.includes("no es en directo")) wrongSym.push("the MNQ price star is missing or not marked as not live");

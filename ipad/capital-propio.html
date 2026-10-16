@@ -72,12 +72,60 @@
 const ROOT = window.__CAP_ROOT || document;
 const $ = (s) => ROOT.querySelector(s);
 const DEF = { saldoInicial: 1000, stopsMaxDia: 2, winrate: 82, riesgoPct: 4.5, ratioTpSl: 0.31, opsPorDia: 4, rachaMaxima: 3, maxPerdidaAceptada: 30, margenSeguridad: 2 };
-const S = { inputs: { ...DEF }, log: [], db: null, saveT: null };
+// Joel's money rules: how each funded payout is split, when and how much to take out of his own capital,
+// when to add to it, and how risk climbs as the account grows. Starting values; he sets his own.
+const PLAN_DEF = { pctCapital: 30, pctExamenes: 20, pctTuyo: 30, pctImpuestos: 20, cambio: 0.92,
+                   frecuencia: "mensual", pctRetiro: 30, esperaSiCae: 10, riesgoBase: 4.5, cadaPct: 25, subePuntos: 0.5, riesgoMax: 6, bajaSiCae: 10 };
+const S = { inputs: { ...DEF }, plan: { ...PLAN_DEF }, log: [], db: null, saveT: null };
 const eur = (n) => { const v = Number(n || 0); return (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toLocaleString("es-ES", { maximumFractionDigits: 0 }) + " €"; };
 const pct = (n, d = 1) => `${Number(n || 0).toFixed(d)}%`;
 const today = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
 const saldo = () => (S.log.length ? S.log[S.log.length - 1].balanceAfter : S.inputs.saldoInicial);
 
+// ── plan de dinero ─────────────────────────────────────────────
+const isTrade = (e) => e.resultado === "win" || e.resultado === "loss";
+const iso = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+function reparto(usd) {
+  const P = S.plan, x = Math.abs(Number(usd) || 0), part = (p) => Math.round(x * p) / 100;
+  return { usd: x, capitalUsd: part(P.pctCapital), capitalEur: Math.round(part(P.pctCapital) * P.cambio * 100) / 100, examenes: part(P.pctExamenes), tuyo: part(P.pctTuyo),
+           impuestos: part(P.pctImpuestos), suma: P.pctCapital + P.pctExamenes + P.pctTuyo + P.pctImpuestos };
+}
+function textoReparto(usd) {
+  const r = reparto(usd), $ = (n) => n.toLocaleString("es-ES", { maximumFractionDigits: 2 }) + " $";
+  return "Según su plan de dinero, de esos " + $(r.usd) + ": " + $(r.capitalUsd) + " a capital propio (unos " + Math.round(r.capitalEur) + " €), " + $(r.examenes) +
+    " para más exámenes, " + $(r.tuyo) + " para usted y " + $(r.impuestos) + " apartados para Hacienda.";
+}
+function periodo() {
+  const now = new Date(), P = S.plan;
+  if (P.frecuencia === "semanal") {
+    const lunes = new Date(now); lunes.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+    const viernes = new Date(lunes); viernes.setDate(lunes.getDate() + 4);
+    return { desde: iso(lunes), dia: iso(viernes), nombre: "esta semana", cuando: "el viernes" };
+  }
+  const fin = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  return { desde: iso(new Date(now.getFullYear(), now.getMonth(), 1)), dia: iso(fin), nombre: "este mes", cuando: "el último día del mes" };
+}
+function dinero() {
+  const P = S.plan, I = S.inputs, s = saldo(), per = periodo(), hoy = today();
+  const aportes = S.log.filter((e) => e.resultado === "aporte").reduce((a, e) => a + e.importe, 0);
+  const aportado = I.saldoInicial + aportes;
+  const enPeriodo = S.log.filter((e) => e.date >= per.desde);
+  const beneficio = enPeriodo.filter(isTrade).reduce((a, e) => a + (e.balanceAfter - e.balanceBefore), 0);
+  const retirado = enPeriodo.filter((e) => e.resultado === "retiro").reduce((a, e) => a + e.importe, 0);
+  const sugerido = Math.max(0, Math.min(beneficio * P.pctRetiro / 100 - retirado, s - aportado));
+  // the peak since the last time money went in or out
+  let desde = 0; S.log.forEach((e, i) => { if (!isTrade(e)) desde = i; });
+  const pico = Math.max(I.saldoInicial, ...S.log.slice(desde).map((e) => e.balanceAfter));
+  const caida = pico > 0 ? (1 - s / pico) * 100 : 0;
+  const crec = (s / aportado - 1) * 100;
+  let escalon = Math.max(0, Math.floor(crec / P.cadaPct));
+  if (caida >= P.bajaSiCae && escalon > 0) escalon -= 1;
+  const tope = Math.min(P.riesgoMax, calc().riesgoQueDiceTuRacha || P.riesgoMax);
+  const recomendado = Math.round(Math.min(tope, P.riesgoBase + escalon * P.subePuntos) * 100) / 100;
+  const siguiente = aportado * (1 + ((Math.floor(Math.max(0, crec) / P.cadaPct) + 1) * P.cadaPct) / 100);
+  return { periodo: per, beneficio, retirado, sugerido, hoyToca: hoy === per.dia, aportado, pico, caida, crec, escalon, recomendado, tope, siguiente,
+           puedeAportar: caida < P.esperaSiCae };
+}
 function calc() {
   const I = S.inputs, s = saldo(), r = I.riesgoPct / 100;
   const arriesgasHoy = s * r, objetivoGanancia = arriesgasHoy * I.ratioTpSl;
@@ -95,6 +143,46 @@ const num = (k, label, { step = 1, hi = false, full = false } = {}) =>
 const out = (label, value, sub, detail, neg) =>
   `<div class="out${neg ? " neg" : ""}"><div class="lab">${label}</div><div class="v">${value}</div><div class="s">${sub}</div>${detail ? `<div class="d">${detail}</div>` : ""}</div>`;
 
+const pnum = (k, label, step = 1) => `<label class="f"><span>${label}</span><input type="number" inputmode="decimal" step="${step}" data-p="${k}" value="${S.plan[k]}"></label>`;
+function renderPlan() {
+  const P = S.plan, d = dinero(), r = reparto(1000), ok = r.suma === 100, fecha = (x) => x.split("-").reverse().join("/");
+  const ult = (window.FUNDING?.contexto?.().ultimosMovimientos || []).find((m) => m.tipo === "retirada");
+  const ej = ult ? reparto(Math.abs(ult.importe)) : r;
+  return `
+  <div class="sec"><b>05</b><span>Plan de dinero · reparto de cada payout</span></div>
+  <div class="two"><div class="card"><div class="fields">${pnum("pctCapital", "A capital propio (%)")}${pnum("pctExamenes", "A más exámenes (%)")}${pnum("pctTuyo", "Para ti (%)")}${pnum("pctImpuestos", "Apartado para Hacienda (%)")}
+      ${pnum("cambio", "Cambio: 1 $ = … €", 0.01)}</div>
+      <div style="font-size:11.5px;color:${ok ? "var(--faint)" : "var(--coral)"};margin-top:10px">${ok ? "Suman 100 %." : "Ojo: suman " + r.suma + " %, tienen que sumar 100 %."} Lo de Hacienda depende de tu caso: confírmalo con un asesor.</div></div>
+    <div class="outs">${out(ult ? "TU ÚLTIMO PAYOUT · " + ej.usd.toLocaleString("es-ES") + " $" : "EJEMPLO · PAYOUT DE 1.000 $", eur(ej.capitalEur).replace(/^\+/, ""), "a capital propio (" + ej.capitalUsd.toLocaleString("es-ES") + " $)",
+        ej.examenes.toLocaleString("es-ES") + " $ a exámenes · " + ej.tuyo.toLocaleString("es-ES") + " $ para ti · " + ej.impuestos.toLocaleString("es-ES") + " $ para Hacienda")}</div></div>
+
+  <div class="sec"><b>06</b><span>Retiros de capital propio</span></div>
+  <div class="two"><div class="card"><div class="fields">
+      <label class="f"><span>Cada cuánto retiras</span><select data-p="frecuencia" style="width:100%;background:var(--raised);border:1px solid var(--borderLight);border-radius:7px;padding:9px 10px;color:var(--text);font-size:14px">
+        <option value="semanal" ${P.frecuencia === "semanal" ? "selected" : ""}>Semanal (los viernes)</option><option value="mensual" ${P.frecuencia === "mensual" ? "selected" : ""}>Mensual (último día)</option></select></label>
+      ${pnum("pctRetiro", "% del beneficio que retiras")}</div>
+      <div style="font-size:11.5px;color:var(--faint);margin-top:10px">Solo se retira beneficio: nunca por debajo de lo que has metido (${eur(d.aportado).replace(/^\+/, "")}).</div></div>
+    <div class="outs">${out(d.hoyToca ? "HOY TOCA RETIRO" : "PRÓXIMO RETIRO · " + fecha(d.periodo.dia), eur(d.sugerido).replace(/^\+/, ""), "beneficio de " + d.periodo.nombre + ": " + eur(d.beneficio) + (d.retirado ? " · ya retirado " + eur(d.retirado).replace(/^\+/, "") : ""),
+        d.sugerido > 0 ? "El " + P.pctRetiro + " % de lo ganado " + d.periodo.nombre + "." : "Sin beneficio que retirar " + d.periodo.nombre + ".", d.beneficio < 0)}
+      <div class="btns"><input id="cp-ret" type="number" inputmode="decimal" placeholder="€" value="${Math.round(d.sugerido) || ""}" style="width:110px;background:var(--raised);border:1px solid var(--borderLight);border-radius:10px;padding:10px;color:var(--text)">
+        <button class="loss" type="button" data-act="retiro">Registrar retiro</button></div></div></div>
+
+  <div class="sec"><b>07</b><span>Cuándo meter más capital</span></div>
+  <div class="two"><div class="card"><div class="fields">${pnum("esperaSiCae", "Espera si estás más de … % por debajo de tu máximo")}</div>
+      <div style="font-size:11.5px;color:var(--faint);margin-top:10px">Lo que metes sale de tu reparto de payouts (${P.pctCapital} %). No se mete dinero en mitad de una mala racha.</div></div>
+    <div class="outs"><div class="shield${d.puedeAportar ? "" : " bad"}"><span style="font-size:20px">${d.puedeAportar ? "✅" : "⏸️"}</span><div><b>${d.puedeAportar ? "Puedes aportar" : "Espera para aportar"}</b>
+        <small>${d.puedeAportar ? "Estás a un " + pct(d.caida) + " de tu máximo (" + eur(d.pico).replace(/^\+/, "") + ")." : "Estás un " + pct(d.caida) + " por debajo de tu máximo: guarda la parte de capital propio hasta que te recuperes."}</small></div></div>
+      <div class="btns"><input id="cp-apo" type="number" inputmode="decimal" placeholder="€" style="width:110px;background:var(--raised);border:1px solid var(--borderLight);border-radius:10px;padding:10px;color:var(--text)">
+        <button class="win" type="button" data-act="aporte">Registrar aporte</button></div></div></div>
+
+  <div class="sec"><b>08</b><span>Subir el riesgo cuando la cuenta crece</span></div>
+  <div class="two"><div class="card"><div class="fields">${pnum("riesgoBase", "Riesgo base (%)", 0.1)}${pnum("cadaPct", "Sube cada +… % de crecimiento")}${pnum("subePuntos", "Cuánto sube (puntos %)", 0.1)}
+      ${pnum("riesgoMax", "Riesgo máximo (%)", 0.1)}${pnum("bajaSiCae", "Baja un escalón si cae … % del máximo")}</div>
+      <div style="font-size:11.5px;color:var(--faint);margin-top:10px">Lo que metes no cuenta como crecimiento: solo cuenta lo que ganas sobre lo que has metido. Nunca pasa del riesgo que aguanta tu racha (${pct(d.tope, 2)}).</div></div>
+    <div class="outs">${out("RIESGO QUE TOCA", pct(d.recomendado, 2), "escalón " + d.escalon + " · cuenta " + (d.crec >= 0 ? "+" : "") + pct(d.crec) + " sobre lo aportado",
+        "Siguiente escalón con " + eur(d.siguiente).replace(/^\+/, "") + ". Ahora usas " + pct(S.inputs.riesgoPct) + ".", d.recomendado < S.inputs.riesgoPct)}
+      ${Math.abs(d.recomendado - S.inputs.riesgoPct) > 0.001 ? `<div class="btns"><button class="win" type="button" data-act="aplicar-riesgo">Usar ${pct(d.recomendado, 2)}</button></div>` : ""}</div></div>`;
+}
 function render() {
   const I = S.inputs, s = saldo(), c = calc(), up = s >= I.saldoInicial;
   $("#cp-view").innerHTML = `
@@ -129,9 +217,10 @@ function render() {
         <small>Al ${pct(I.riesgoPct)}, llegarías a tu límite en ~${Number.isFinite(c.stopsHastaLimite) ? c.stopsHastaLimite.toFixed(1) : "∞"} stops seguidos${c.esSeguro ? " — por encima del margen exigido." : " — por debajo del margen exigido. Baja el riesgo."}</small></div></div></div></div>
 
   <div class="sec"><b>04</b><span>Registro de hoy y días anteriores</span></div>
-  <div class="card">${S.log.length ? [...S.log].reverse().map((e) => `<div class="row${e.resultado === "win" ? "" : " l"}"><span>${e.resultado === "win" ? "✓" : "✗"}&nbsp; ${e.date} · riesgo ${pct(e.riesgoPct)}</span><b>${eur(e.balanceAfter).replace(/^\+/, "")}</b></div>`).join("")
+  <div class="card">${S.log.length ? [...S.log].reverse().map((e) => `<div class="row${e.resultado === "win" || e.resultado === "aporte" ? "" : " l"}"><span>${({ win: "✓", loss: "✗", aporte: "➕", retiro: "➖" })[e.resultado]}&nbsp; ${e.date} · ${isTrade(e) ? "riesgo " + pct(e.riesgoPct) : (e.resultado === "aporte" ? "aporte " : "retiro ") + eur(e.importe).replace(/^\+/, "")}</span><b>${eur(e.balanceAfter).replace(/^\+/, "")}</b></div>`).join("")
     : '<div class="empty">Sin registros todavía — usa "Registrar Win" o "Registrar Loss" arriba para empezar a componer tu saldo.</div>'}
     ${S.log.length ? '<button class="ghost" type="button" data-act="undo">🗑 Deshacer último registro</button>' : ""}</div>
+  ${renderPlan()}
   <button class="ghost reset" type="button" data-act="reset">Reiniciar todo (volver a ${eur(DEF.saldoInicial).replace(/^\+/, "")})</button>`;
 }
 
@@ -140,7 +229,7 @@ function toast(t) { const el = $("#cp-toast"); el.textContent = t; el.hidden = f
 function save() {
   clearTimeout(S.saveT);
   S.saveT = setTimeout(async () => {
-    try { if (S.db) await S.db.doc("fm/capital").set({ inputs: S.inputs, log: S.log, actualizado: new Date().toISOString() }); }
+    try { if (S.db) await S.db.doc("fm/capital").set({ inputs: S.inputs, plan: S.plan, log: S.log, actualizado: new Date().toISOString() }); }
     catch { toast("No se ha podido guardar."); }
   }, 600);
 }
@@ -154,10 +243,19 @@ $("#cp").addEventListener("click", (e) => {
   const b = e.target.closest("[data-act]"); if (!b) return;
   const a = b.dataset.act;
   if (a === "win" || a === "loss") return registrar(a);
+  if (a === "aporte" || a === "retiro") {
+    const v = Math.abs(Number($(a === "aporte" ? "#cp-apo" : "#cp-ret").value) || 0); if (!v) return toast("Pon el importe en euros.");
+    const before = saldo(); if (a === "retiro" && v > before) return toast("No puedes retirar más de lo que hay.");
+    S.log.push({ id: Date.now().toString(), date: today(), resultado: a, importe: v, riesgoPct: S.inputs.riesgoPct, balanceBefore: before, balanceAfter: a === "aporte" ? before + v : before - v });
+    render(); save(); return toast(a === "aporte" ? "Aporte registrado." : "Retiro registrado.");
+  }
+  if (a === "aplicar-riesgo") { S.inputs.riesgoPct = dinero().recomendado; render(); save(); return toast("Riesgo actualizado."); }
   if (a === "undo") { S.log.pop(); render(); save(); return; }
   if (a === "reset") { if (!confirm("¿Reiniciar todo? Se borran tus datos y tu registro.")) return; S.inputs = { ...DEF }; S.log = []; render(); save(); }
 });
 $("#cp").addEventListener("change", (e) => {
+  const p = e.target.dataset.p;
+  if (p) { S.plan[p] = p === "frecuencia" ? e.target.value : Number(e.target.value); if (p !== "frecuencia" && !Number.isFinite(S.plan[p])) S.plan[p] = PLAN_DEF[p]; render(); save(); return; }
   const k = e.target.dataset.k; if (!k) return;
   const v = Number(e.target.value); if (!Number.isFinite(v)) return;
   S.inputs[k] = v; render(); save();
@@ -171,9 +269,20 @@ function contexto() {
     ratioTpSl: I.ratioTpSl, winrate: I.winrate + "%", stopsMaxDia: I.stopsMaxDia, stopsHoy: deHoy.filter((e) => e.resultado === "loss").length,
     winsHoy: deHoy.filter((e) => e.resultado === "win").length, siPierdesTodosLosStopsHoy: -Math.round(c.dineroDrawdownDiario * 100) / 100,
     riesgoQueDiceTuRacha: pct(c.riesgoQueDiceTuRacha, 2), riesgoAguantaElMargen: c.esSeguro, stopsHastaElLimite: Number.isFinite(c.stopsHastaLimite) ? Math.round(c.stopsHastaLimite * 10) / 10 : null,
-    ultimosRegistros: S.log.slice(-10).map((e) => ({ fecha: e.date, resultado: e.resultado, saldo: Math.round(e.balanceAfter * 100) / 100 })) };
+    ultimosRegistros: S.log.slice(-10).map((e) => ({ fecha: e.date, resultado: e.resultado, importe: e.importe, saldo: Math.round(e.balanceAfter * 100) / 100 })),
+    planDeDinero: planDeDinero() };
 }
-window.CAPITAL = { contexto, render };
+function planDeDinero() {
+  const P = S.plan, d = dinero(), r2 = (n) => Math.round(n * 100) / 100, ej = reparto(1000);
+  return { repartoDeCadaPayout: { aCapitalPropio: P.pctCapital + "%", aMasExamenes: P.pctExamenes + "%", paraJoel: P.pctTuyo + "%", paraHacienda: P.pctImpuestos + "%", cambioUsdEur: P.cambio,
+             ejemploPayout1000: { capitalPropioUsd: ej.capitalUsd, capitalPropioEur: ej.capitalEur, examenes: ej.examenes, paraJoel: ej.tuyo, hacienda: ej.impuestos } },
+    retiros: { frecuencia: P.frecuencia === "semanal" ? "semanal, los viernes" : "mensual, el último día del mes", porcentajeDelBeneficio: P.pctRetiro + "%",
+               beneficioDelPeriodo: r2(d.beneficio), yaRetirado: r2(d.retirado), retiroQueToca: r2(d.sugerido), proximoRetiro: d.periodo.dia, hoyToca: d.hoyToca, nuncaPorDebajoDe: r2(d.aportado) },
+    aportes: { puedeAportarAhora: d.puedeAportar, caidaDesdeMaximo: r2(d.caida) + "%", esperaSiCaeMasDe: P.esperaSiCae + "%", saleDe: P.pctCapital + "% de cada payout" },
+    riesgo: { actual: S.inputs.riesgoPct + "%", queToca: d.recomendado + "%", escalon: d.escalon, crecimientoSobreLoAportado: r2(d.crec) + "%", siguienteEscalonConSaldo: r2(d.siguiente),
+              reglas: "base " + P.riesgoBase + "%, +" + P.subePuntos + " puntos cada +" + P.cadaPct + "% de crecimiento, máximo " + P.riesgoMax + "% (y nunca más que el riesgo que aguanta su racha, " + r2(d.tope) + "%), baja un escalón si cae un " + P.bajaSiCae + "% desde el máximo" } };
+}
+window.CAPITAL = { contexto, render, textoReparto, dinero };
 
 (async () => {
   render();
@@ -182,8 +291,8 @@ window.CAPITAL = { contexto, render };
   db.doc("fm/capital").onSnapshot((snap) => {
     if (!snap.exists) return;
     const d = snap.data();
-    const focused = ROOT.activeElement && ROOT.activeElement.dataset && ROOT.activeElement.dataset.k;
-    S.inputs = { ...DEF, ...(d.inputs || {}) }; S.log = Array.isArray(d.log) ? d.log : [];
+    const focused = ROOT.activeElement && ROOT.activeElement.dataset && (ROOT.activeElement.dataset.k || ROOT.activeElement.dataset.p);
+    S.inputs = { ...DEF, ...(d.inputs || {}) }; S.plan = { ...PLAN_DEF, ...(d.plan || {}) }; S.log = Array.isArray(d.log) ? d.log : [];
     if (!focused) render();
   }, () => {});
 })();

@@ -294,6 +294,29 @@ export const SCRIPT = `
         card.querySelector(".a").textContent = texto;
         if (window.Voice) { Voice.stopSpeaking && Voice.stopSpeaking(); Voice.speak(texto); }
       }, 4000); }
+    // Money plan (Capital propio): on withdrawal day, and when the risk his rules call for has changed, Jarvis says it once.
+    { const t0 = Date.now(), KEY = "jarvis-dinero-oido";
+      setInterval(() => {
+        const C = window.CAPITAL; if (!C || !C.dinero || Date.now() - t0 < 20000) return;
+        if (document.getElementById("answer").classList.contains("thinking")) return;
+        let heard = []; try { heard = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch {}
+        const d = C.dinero(), frases = [], keys = [];
+        const riesgo = (window.CAPITAL.contexto().riesgoPorOperacion || "").replace("%", "");
+        if (d.hoyToca && d.sugerido >= 1 && !heard.includes("retiro:" + d.periodo.dia)) {
+          frases.push("Hoy toca retiro de capital propio: según su plan, " + Math.round(d.sugerido) + " euros, el beneficio que le corresponde de " + d.periodo.nombre + "."); keys.push("retiro:" + d.periodo.dia); }
+        const kr = "riesgo:" + d.recomendado;
+        if (Math.abs(d.recomendado - Number(riesgo)) > 0.001 && !heard.includes(kr)) {
+          frases.push((d.recomendado > Number(riesgo) ? "Su cuenta de capital propio ha crecido: su plan dice subir el riesgo al " : "Su cuenta de capital propio ha caído: su plan dice bajar el riesgo al ") +
+            String(d.recomendado).replace(".", ",") + " por ciento. Lo cambia en Capital propio."); keys.push(kr); }
+        if (!frases.length) return;
+        try { localStorage.setItem(KEY, JSON.stringify([...heard, ...keys].slice(-40))); } catch {}
+        const texto = "Joel, su plan de dinero. " + frases.join(" "), card = $("answer");
+        card.className = "glass show";
+        card.querySelector(".q").textContent = "Jarvis · plan de dinero";
+        card.querySelector(".chips").replaceChildren();
+        card.querySelector(".a").textContent = texto;
+        if (window.Voice) { Voice.stopSpeaking && Voice.stopSpeaking(); Voice.speak(texto); }
+      }, 5000); }
     // 📷: a photo of a trade for Jarvis to look at, where this view can send images to Claude.
     const photo = document.createElement("button"); photo.type = "button"; photo.id = "os-photo"; photo.title = "Mándame la foto de un trade"; photo.textContent = "📷"; photo.hidden = true;
     const pick = document.createElement("input"); pick.type = "file"; pick.hidden = true;
