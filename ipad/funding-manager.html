@@ -1,0 +1,930 @@
+<title>Jarvis</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a trading desk ledger. Sticky header + tab rail; one column of panels on phone, two on iPad landscape. */
+:root {
+  --bg: #f4f5f7; --panel: #ffffff; --panel-2: #eef0f4; --line: #dde1e8;
+  --fg: #17202c; --muted: #5d6878; --accent: #9a6514; --accent-soft: #f6ead5;
+  --good: #1f8a5b; --good-soft: #e1f3ea; --warn: #a36a00; --warn-soft: #fbefd6; --bad: #c23a3f; --bad-soft: #fbe3e4;
+  --ui: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --num: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --r: 12px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e131b; --panel: #151c27; --panel-2: #1b2431; --line: #263142;
+  --fg: #e6ebf2; --muted: #8e9aab; --accent: #e3ad5a; --accent-soft: #2e2615;
+  --good: #4cc38a; --good-soft: #13291f; --warn: #f0b429; --warn-soft: #2d2410; --bad: #f2676b; --bad-soft: #301719;
+  color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0e131b; --panel: #151c27; --panel-2: #1b2431; --line: #263142;
+  --fg: #e6ebf2; --muted: #8e9aab; --accent: #e3ad5a; --accent-soft: #2e2615;
+  --good: #4cc38a; --good-soft: #13291f; --warn: #f0b429; --warn-soft: #2d2410; --bad: #f2676b; --bad-soft: #301719;
+  color-scheme: dark }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 var(--ui); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--panel); }
+.wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); max-width: 1180px; margin: 0 auto; }
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-block: 12px 4px; flex-wrap: wrap; }
+.brand h1 { margin: 0; font-size: 17px; letter-spacing: .14em; font-weight: 700; }
+.brand h1 span { color: var(--accent); }
+.brand .today { color: var(--muted); font-size: 13px; }
+nav.tabs { display: flex; gap: 4px; overflow-x: auto; padding-block: 6px 8px; scrollbar-width: none; }
+nav.tabs::-webkit-scrollbar { display: none; }
+nav.tabs button { flex: none; border: 0; background: none; color: var(--muted); font: 600 14px var(--ui); padding: 8px 12px; border-radius: 999px; cursor: pointer; }
+nav.tabs button[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
+nav.tabs button:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+main { padding-block: 16px 48px; display: grid; gap: 16px; }
+h2 { font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 8px 0 0; font-weight: 600; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; min-width: 0; }
+.grid2 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); }
+.kpis { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; }
+.kpi .l { color: var(--muted); font-size: 12px; letter-spacing: .04em; }
+.kpi .v { font: 600 22px var(--num); font-variant-numeric: tabular-nums; margin-top: 2px; }
+.num { font-family: var(--num); font-variant-numeric: tabular-nums; }
+.pos { color: var(--good); } .neg { color: var(--bad); }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.spread { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--panel-2); color: var(--muted); white-space: nowrap; }
+.chip.good { background: var(--good-soft); color: var(--good); } .chip.warn { background: var(--warn-soft); color: var(--warn); }
+.chip.bad { background: var(--bad-soft); color: var(--bad); } .chip.acc { background: var(--accent-soft); color: var(--accent); }
+.acct { display: grid; gap: 10px; border-left: 4px solid var(--line); }
+.acct.s-good { border-left-color: var(--good); } .acct.s-warn { border-left-color: var(--warn); } .acct.s-bad { border-left-color: var(--bad); }
+.acct h3 { margin: 0; font-size: 17px; }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px 14px; }
+.metric .l { font-size: 12px; color: var(--muted); }
+.metric .v { font: 600 15px var(--num); font-variant-numeric: tabular-nums; }
+.bar { height: 8px; border-radius: 99px; background: var(--panel-2); overflow: hidden; }
+.bar > i { display: block; height: 100%; border-radius: 99px; background: var(--accent); }
+.bar.dd > i { background: var(--good); } .bar.dd.warn > i { background: var(--warn); } .bar.dd.bad > i { background: var(--bad); }
+.barlabel { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 4px; gap: 8px; }
+.alerts { display: grid; gap: 8px; }
+.alert { display: grid; gap: 2px; padding: 10px 12px; border-radius: 10px; background: var(--panel-2); font-size: 14px; }
+.alert.bad { background: var(--bad-soft); } .alert.warn { background: var(--warn-soft); } .alert.good { background: var(--good-soft); }
+.alert b { white-space: nowrap; }
+button.btn { font: 600 14px var(--ui); border-radius: 10px; padding: 9px 14px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); cursor: pointer; }
+button.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+button.btn.ghost { background: none; border-color: transparent; color: var(--accent); padding-inline: 6px; }
+button.btn.danger { color: var(--bad); }
+button.btn:disabled { opacity: .5; cursor: default; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .03em; }
+td.n, th.n { text-align: right; font-family: var(--num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tablewrap { overflow-x: auto; }
+.empty { text-align: center; padding: 28px 16px; color: var(--muted); display: grid; gap: 12px; justify-items: center; }
+.empty strong { color: var(--fg); font-size: 16px; }
+/* sheet (forms) */
+.sheet-bg { position: fixed; inset: 0; background: rgba(5, 8, 12, .55); z-index: 20; display: grid; place-items: end center; }
+.sheet { background: var(--panel); width: min(640px, 100%); max-height: 92%; overflow: auto; border-radius: 16px 16px 0 0; padding: 18px max(16px, env(safe-area-inset-right, 0px)) calc(18px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); display: grid; gap: 14px; }
+@media (min-width: 700px) { .sheet-bg { place-items: center; } .sheet { border-radius: 16px; } }
+.sheet h3 { margin: 0; font-size: 18px; }
+.fields { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); }
+label.f { display: grid; gap: 4px; font-size: 13px; color: var(--muted); font-weight: 500; }
+label.f.wide { grid-column: 1 / -1; }
+input, select, textarea { font: 15px var(--ui); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px; width: 100%; min-width: 0; }
+textarea { min-height: 90px; resize: vertical; }
+.hint { font-size: 12px; color: var(--muted); }
+.days { display: flex; gap: 6px; flex-wrap: wrap; }
+.days label { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; color: var(--fg); background: var(--panel-2); padding: 6px 10px; border-radius: 8px; }
+.days input { width: auto; }
+.err { color: var(--bad); font-size: 13px; min-height: 1em; }
+/* journal + chat */
+.entry { display: grid; gap: 4px; padding-block: 10px; border-bottom: 1px solid var(--line); }
+.entry:last-child { border-bottom: 0; }
+.chat { display: grid; gap: 12px; }
+.msg { padding: 12px 14px; border-radius: 12px; max-width: 760px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.me { background: var(--accent-soft); justify-self: end; }
+.msg.j { background: var(--panel); border: 1px solid var(--line); }
+.msg.sys { background: var(--panel-2); font-size: 13px; color: var(--muted); }
+.proposal { border: 1px dashed var(--accent); border-radius: 12px; padding: 12px 14px; display: grid; gap: 8px; background: var(--panel); max-width: 760px; }
+.askbar { display: flex; gap: 8px; align-items: flex-end; }
+.askbar textarea { min-height: 48px; height: 48px; }
+.status { font-size: 13px; color: var(--muted); }
+.banner { padding: 12px 14px; border-radius: 10px; background: var(--warn-soft); color: var(--fg); font-size: 14px; }
+@media (prefers-reduced-motion: no-preference) { .bar > i { transition: width .4s ease; } }
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <h1>JARVIS <span>· FUNDING MANAGER</span></h1>
+      <div class="today" id="today"></div>
+    </div>
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Secciones"></nav>
+  </div>
+</header>
+<main class="wrap" id="main" aria-live="polite"></main>
+<div id="sheet-root"></div>
+
+<script>
+"use strict";
+// ═══════════════════════════ state & storage ═══════════════════════════
+const TABS = [["jarvis", "Jarvis"], ["panel", "Panel"], ["plan", "Plan del día"], ["cuentas", "Cuentas"], ["dinero", "Payouts y costes"],
+              ["diario", "Diario"], ["informe", "Informe semanal"], ["sistema", "Mi sistema"]];
+const FASES = { evaluacion: "Evaluación", fondeada: "Fondeada", real: "Cuenta real" };
+const ESTADOS = { activa: "Activa", pausada: "En pausa", aprobada: "Aprobada", perdida: "Perdida", retirada: "Cerrada" };
+const DD_TIPOS = { estatico: "Estático", eod: "Trailing fin de día (EOD)", intradia: "Trailing intradía" };
+const CONCEPTOS = { activacion: "Activación", renovacion: "Renovación mensual", reset: "Reset", datos: "Datos / plataforma", evaluacion: "Evaluación extra", otro: "Otro" };
+const TIPOS_NOTA = { operacion: "Operación", idea: "Idea", incidencia: "Incidencia", estrategia: "Cambio de estrategia", observacion: "Observación" };
+const DIAS = [[1, "L"], [2, "M"], [3, "X"], [4, "J"], [5, "V"], [6, "S"], [0, "D"]];
+const SISTEMA_DEF = { moneda: "USD", estrategia: "", reglas: "", riesgoOperacion: 0, maxOperaciones: 3, limiteDiario: 0,
+                      fraccionDD: 25, maxCuentasDia: 0, noticias: "" };
+
+const S = { db: null, uid: null, base: null, mode: "loading", tab: "panel",
+            cuentas: new Map(), movs: new Map(), payouts: new Map(), costes: new Map(), diario: new Map(),
+            sistema: { ...SISTEMA_DEF }, topstep: null, weekOffset: 0, chat: [], history: [], busy: false, voice: false };
+try { S.voice = localStorage.getItem("fm-voz") === "1"; S.tab = localStorage.getItem("fm-tab") || "jarvis"; } catch {}
+if (!TABS.some(([k]) => k === S.tab)) S.tab = "jarvis";
+
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const pad = (n) => String(n).padStart(2, "0");
+const isoDate = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const HOY = () => isoDate();
+const cuando = (iso) => { if (!iso) return "—"; const d = new Date(iso); return d.toLocaleString("es-ES", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }); };
+const fmtDate = (s) => { if (!s) return "—"; const [y, m, d] = s.split("-"); return `${d}/${m}/${y.slice(2)}`; };
+function money(n, signed = false) {
+  if (n == null || !isFinite(n)) return "—";
+  let f;
+  try { f = new Intl.NumberFormat("es-ES", { style: "currency", currency: S.sistema.moneda || "USD", maximumFractionDigits: 2, useGrouping: "always" }); }
+  catch { f = new Intl.NumberFormat("es-ES", { style: "currency", currency: S.sistema.moneda || "USD", maximumFractionDigits: 2 }); }
+  const s = f.format(n);
+  return signed && n > 0 ? "+" + s : s;
+}
+const pct = (x, d = 0) => (x == null || !isFinite(x) ? "—" : `${(x * 100).toFixed(d)} %`);
+const sum = (arr, f) => arr.reduce((a, x) => a + (Number(f(x)) || 0), 0);
+function num(v) {                       // "1.234,5" / "1234.5" / "-300" -> number
+  if (typeof v === "number") return v;
+  let s = String(v ?? "").trim().replace(/[\s$€£]/g, "");
+  if (!s) return NaN;
+  if (s.includes(",") && s.includes(".")) s = s.replace(/\./g, "").replace(",", ".");
+  else if (s.includes(",")) s = s.replace(",", ".");
+  return Number(s);
+}
+const uid8 = () => Math.random().toString(36).slice(2, 10);
+
+// One door for every write. Mirrors into memory first so the screen answers at once.
+const COLS = ["cuentas", "movs", "payouts", "costes", "diario"];
+async function save(col, id, data) {
+  id = id || uid8();
+  const body = { ...data, actualizado: new Date().toISOString() };
+  S[col].set(id, body); render();
+  if (S.mode === "db") await S.base.collection(col).doc(id).set(body);
+  return id;
+}
+async function remove(col, id) {
+  S[col].delete(id); render();
+  if (S.mode === "db") await S.base.collection(col).doc(id).delete();
+}
+async function saveSistema(data) {
+  S.sistema = { ...SISTEMA_DEF, ...data }; render();
+  if (S.mode === "db") await S.db.doc("fm/sistema").set(S.sistema);
+}
+
+async function boot() {
+  $("#today").textContent = new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  renderTabs(); render();
+  const use = window.claude?.use ? window.claude.use.bind(window.claude) : null;
+  const db = use ? await use("db") : null;
+  if (!db) { S.mode = "local"; render(); return; }
+  Object.assign(S, { db, base: db.doc("fm/main"), mode: "db" });
+  db.doc("fm/topstep").onSnapshot((snap) => { S.topstep = snap.exists ? snap.data() : null; render(); }, () => {});
+  let pending = COLS.length + 1;
+  const done = () => { if (--pending === 0) { S.loaded = true; render(); } };
+  for (const c of COLS) {
+    let first = true;
+    S.base.collection(c).onSnapshot((snap) => {
+      S[c] = new Map(snap.docs.map((d) => [d.id, d.data()]));
+      if (first) { first = false; done(); } else render();
+    }, () => { S.mode = "error"; render(); });
+  }
+  let firstSys = true;
+  db.doc("fm/sistema").onSnapshot((snap) => {
+    S.sistema = { ...SISTEMA_DEF, ...(snap.exists ? snap.data() : {}) };
+    if (firstSys) { firstSys = false; done(); } else render();
+  }, () => {});
+}
+
+// ═══════════════════════════ the numbers ═══════════════════════════
+// Every figure on screen comes from here, from what was registered. Nothing is guessed.
+function cuentaStats(id) {
+  const c = S.cuentas.get(id);
+  const ini = Number(c.balanceInicial) || 0, dd = Number(c.ddMax) || 0;
+  const pays = [...S.payouts.values()].filter((p) => p.cuentaId === id);
+  const ts = c.topstepId && S.topstep && S.topstep.cuentas ? S.topstep.cuentas[c.topstepId] : null;
+  let movs = [...S.movs.values()].filter((m) => m.cuentaId === id);
+  if (ts && ts.dias && isFinite(ts.balance)) {          // Topstep is the source of truth: its days, its balance
+    movs = Object.entries(ts.dias).map(([fecha, pnl]) => ({ cuentaId: id, fecha, pnl, tipo: "pnl" }));
+    const ajuste = Math.round((ts.balance - (ini + sum(movs, (m) => m.pnl) - sum(pays, (p) => p.bruto))) * 100) / 100;
+    if (ajuste) movs.push({ cuentaId: id, fecha: (S.topstep.at || "").slice(0, 10), pnl: ajuste, tipo: "ajuste" });
+  }
+  const balance = ini + sum(movs, (m) => m.pnl) - sum(pays, (p) => p.bruto);
+  // end-of-day balance series (P&L and payouts), for the trailing peak
+  const byDate = new Map();
+  for (const m of movs) byDate.set(m.fecha, (byDate.get(m.fecha) || 0) + (Number(m.pnl) || 0));
+  for (const p of pays) byDate.set(p.fecha, (byDate.get(p.fecha) || 0) - (Number(p.bruto) || 0));
+  let run = ini, peak = ini;
+  for (const d of [...byDate.keys()].sort()) { run += byDate.get(d); peak = Math.max(peak, run); }
+  peak = Math.max(peak, Number(c.picoManual) || 0);
+  const tope = c.ddTope === "" || c.ddTope == null || isNaN(num(c.ddTope)) ? ini : num(c.ddTope);
+  const suelo = !dd ? null : c.ddTipo === "estatico" ? ini - dd : Math.min(peak - dd, tope);
+  const distancia = suelo == null ? null : balance - suelo;
+  const hoy = HOY();
+  const trading = movs.filter((m) => m.tipo !== "ajuste");
+  const pnlHoy = sum(trading.filter((m) => m.fecha === hoy), (m) => m.pnl);
+  const pd = Number(c.perdidaDiaria) || 0;
+  const restanteDiario = pd ? pd + pnlHoy : null;
+  const objetivo = Number(c.objetivo) || 0;
+  const beneficioCiclo = balance - ini;
+  const progreso = objetivo ? beneficioCiclo / objetivo : null;
+  // consistency, since the last payout of this account
+  const lastPay = pays.map((p) => p.fecha).sort().pop() || "";
+  const days = new Map();
+  for (const m of trading) if (m.fecha > lastPay) days.set(m.fecha, (days.get(m.fecha) || 0) + (Number(m.pnl) || 0));
+  const r = (Number(c.consistencia) || 0) / 100;
+  let cons = null;
+  if (r > 0 && r < 1) {
+    const vals = [...days.values()], P = sum(vals, (x) => x), B = Math.max(0, ...vals);
+    const ex = [...days.entries()].filter(([d]) => d !== hoy).map(([, v]) => v);
+    const P0 = sum(ex, (x) => x), B0 = Math.max(0, ...ex);
+    const maxDia = Math.max(B0, (r * P0) / (1 - r));
+    cons = { regla: r, total: P, mejor: B, pctMejor: P > 0 ? B / P : null, cumple: P > 0 ? B <= r * P + 1e-9 : B === 0,
+             totalNecesario: B / r, falta: Math.max(0, B / r - P), maxDia, restanteHoy: maxDia - Math.max(0, days.get(hoy) || 0) };
+  }
+  const diasOperados = new Set(trading.map((m) => m.fecha)).size;
+  const activa = c.estado === "activa";
+  let salud = "good";
+  if (activa && distancia != null && dd) { if (distancia <= 0) salud = "bad"; else if (distancia / dd < 0.3) salud = "warn"; }
+  if (activa && restanteDiario != null && restanteDiario <= 0) salud = "bad";
+  if (!activa) salud = "idle";
+  return { id, c, ts, balance, peak, suelo, distancia, dd, pnlHoy, restanteDiario, objetivo, beneficioCiclo, progreso, cons,
+           diasOperados, payouts: pays, cobrado: sum(pays, (p) => p.recibido || p.bruto), salud, activa };
+}
+const allStats = () => [...S.cuentas.keys()].map(cuentaStats).sort((a, b) => (a.c.alias || "").localeCompare(b.c.alias || ""));
+const label = (c) => c ? `${c.alias || "Sin nombre"}${c.firma ? " · " + c.firma : ""}` : "General";
+
+function totales() {
+  const cuentas = [...S.cuentas.values()];
+  const invertido = sum(cuentas, (c) => c.precio) + sum([...S.costes.values()], (k) => k.importe);
+  const cobrado = sum([...S.payouts.values()], (p) => p.recibido || p.bruto);
+  return { invertido, cobrado, neto: cobrado - invertido, roi: invertido ? (cobrado - invertido) / invertido : null,
+           activas: cuentas.filter((c) => c.estado === "activa").length,
+           evals: cuentas.filter((c) => c.estado === "activa" && c.fase === "evaluacion").length,
+           fondeadas: cuentas.filter((c) => c.estado === "activa" && c.fase !== "evaluacion").length,
+           aprobadas: cuentas.filter((c) => c.fechaAprobada).length, perdidas: cuentas.filter((c) => c.estado === "perdida").length };
+}
+
+function alertas() {
+  const out = [], mes = HOY().slice(0, 7);
+  for (const s of allStats()) {
+    if (!s.activa) continue;
+    const n = label(s.c);
+    if (s.distancia != null && s.distancia <= 0) out.push(["bad", n, `ha tocado el límite de drawdown (suelo ${money(s.suelo)}).`]);
+    else if (s.distancia != null && s.dd && s.distancia / s.dd < 0.3) out.push(["warn", n, `a ${money(s.distancia)} del drawdown: queda el ${pct(s.distancia / s.dd)} del margen.`]);
+    if (s.restanteDiario != null && s.restanteDiario <= 0) out.push(["bad", n, "ha alcanzado la pérdida diaria máxima hoy. No operar más hoy."]);
+    if (s.cons && s.cons.total > 0 && !s.cons.cumple) out.push(["warn", n, `consistencia: el mejor día es el ${pct(s.cons.pctMejor)} del beneficio (máx. ${pct(s.cons.regla)}). Faltan ${money(s.cons.falta)} de beneficio para cumplir.`]);
+    if (s.progreso != null && s.progreso >= 1 && s.c.fase === "evaluacion") out.push(["good", n, `objetivo de beneficio alcanzado (${money(s.beneficioCiclo)}). Revisa días mínimos y consistencia.`]);
+    if ((Number(s.c.renovacion) || 0) > 0 && ![...S.costes.values()].some((k) => k.cuentaId === s.id && k.concepto === "renovacion" && (k.fecha || "").startsWith(mes)))
+      out.push(["info", n, `renovación de este mes (${money(Number(s.c.renovacion))}) sin registrar.`]);
+  }
+  return out;
+}
+
+function planDelDia() {
+  const hoyDia = new Date().getDay(), sis = S.sistema;
+  const rows = [];
+  for (const s of allStats()) {
+    if (!s.activa) continue;
+    const dias = Array.isArray(s.c.dias) && s.c.dias.length ? s.c.dias : [1, 2, 3, 4, 5];
+    let motivo = null;
+    if (!dias.includes(hoyDia)) motivo = "hoy no es uno de sus días";
+    else if (s.distancia != null && s.distancia <= 0) motivo = "drawdown tocado";
+    else if (s.restanteDiario != null && s.restanteDiario <= 0) motivo = "pérdida diaria agotada";
+    const limites = [];
+    if (s.restanteDiario != null) limites.push(["pérdida diaria de la firma", s.restanteDiario]);
+    if (Number(sis.limiteDiario) > 0) limites.push(["tu límite diario", Number(sis.limiteDiario) + Math.min(0, s.pnlHoy)]);
+    if (s.distancia != null && Number(sis.fraccionDD) > 0) limites.push([`${sis.fraccionDD} % del margen de drawdown`, s.distancia * Number(sis.fraccionDD) / 100]);
+    const tope = limites.length ? limites.reduce((a, b) => (b[1] < a[1] ? b : a)) : null;
+    const riesgoMax = tope ? Math.max(0, tope[1]) : null;
+    let porOperacion = Number(sis.riesgoOperacion) || null;
+    if (riesgoMax != null && Number(sis.maxOperaciones) > 0) {
+      const reparto = riesgoMax / Number(sis.maxOperaciones);
+      porOperacion = porOperacion ? Math.min(porOperacion, reparto) : reparto;
+    }
+    rows.push({ s, motivo, riesgoMax, porQue: tope ? tope[0] : null, porOperacion, beneficioMax: s.cons && s.cons.total > 0 ? Math.max(0, s.cons.restanteHoy) : null,
+                estrategia: s.c.estrategia || "", prioridad: (s.c.fase === "evaluacion" ? 1 : 0) * 10 - (s.distancia && s.dd ? s.distancia / s.dd : 0) });
+  }
+  const ok = rows.filter((r) => !r.motivo).sort((a, b) => a.prioridad - b.prioridad);
+  const max = Number(sis.maxCuentasDia) || ok.length;
+  return { operar: ok.slice(0, max), reserva: ok.slice(max), fuera: rows.filter((r) => r.motivo) };
+}
+
+function semana(offset = 0) {
+  const d = new Date(); d.setHours(12, 0, 0, 0);
+  const lunes = new Date(d); lunes.setDate(d.getDate() - ((d.getDay() + 6) % 7) + offset * 7);
+  const domingo = new Date(lunes); domingo.setDate(lunes.getDate() + 6);
+  const a = isoDate(lunes), b = isoDate(domingo), en = (f) => f && f >= a && f <= b;
+  const movs = [...S.movs.values()].filter((m) => m.tipo !== "ajuste" && en(m.fecha));
+  const pays = [...S.payouts.values()].filter((p) => en(p.fecha));
+  const costes = [...S.costes.values()].filter((k) => en(k.fecha));
+  const compradas = [...S.cuentas.values()].filter((c) => en(c.fechaCompra));
+  const porCuenta = new Map();
+  for (const m of movs) porCuenta.set(m.cuentaId, (porCuenta.get(m.cuentaId) || 0) + (Number(m.pnl) || 0));
+  const gastos = sum(costes, (k) => k.importe) + sum(compradas, (c) => c.precio);
+  const cobrado = sum(pays, (p) => p.recibido || p.bruto);
+  return { a, b, pnl: sum(movs, (m) => m.pnl), porCuenta, payouts: pays, cobrado, costes, compradas, gastos,
+           evalsCompradas: compradas.filter((c) => c.fase === "evaluacion").length,
+           aprobadas: [...S.cuentas.values()].filter((c) => en(c.fechaAprobada)),
+           perdidas: [...S.cuentas.values()].filter((c) => en(c.fechaPerdida)), neto: cobrado - gastos };
+}
+
+// ═══════════════════════════ rendering ═══════════════════════════
+function renderTabs() {
+  $("#tabs").innerHTML = TABS.map(([k, t]) => `<button role="tab" id="tab-${k}" aria-selected="${S.tab === k}" data-tab="${k}">${t}</button>`).join("");
+}
+$("#tabs").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-tab]"); if (!b) return;
+  S.tab = b.dataset.tab; try { localStorage.setItem("fm-tab", S.tab); } catch {}
+  renderTabs(); render(); window.scrollTo(0, 0);
+});
+
+function render() {
+  const main = $("#main");
+  const keepChat = S.tab === "jarvis" ? $("#ask")?.value : null;
+  const views = { panel: viewPanel, plan: viewPlan, cuentas: viewCuentas, dinero: viewDinero, diario: viewDiario,
+                  informe: viewInforme, sistema: viewSistema, jarvis: viewJarvis };
+  let banner = "";
+  if (S.mode === "local") banner = `<div class="banner">Abre esta página dentro de Claude (claude.ai o la app) para guardar tus datos. Ahora mismo lo que escribas se pierde al cerrar.</div>`;
+  if (S.mode === "error") banner = `<div class="banner">No puedo leer tus datos ahora mismo. Recarga la página.</div>`;
+  main.innerHTML = banner + views[S.tab]();
+  if (keepChat != null && $("#ask")) $("#ask").value = keepChat;
+  if (S.tab === "jarvis") { const c = $("#chat-end"); c && c.scrollIntoView({ block: "end" }); }
+}
+
+function emptyAccounts() {
+  return `<div class="panel empty"><strong>Aún no hay cuentas</strong>
+    <span>Añade tu primera cuenta de fondeo con su firma, fase, balance, drawdown y objetivo.</span>
+    <div class="row"><button class="btn primary" data-act="cuenta-nueva">Añadir cuenta</button>
+    <button class="btn" data-act="ejemplo">Ver con datos de ejemplo</button></div>
+    <span class="hint">Los datos de ejemplo se marcan como EJEMPLO y se borran con un botón.</span></div>`;
+}
+
+function cardCuenta(s, compact = false) {
+  const c = s.c, ddPct = s.dd && s.distancia != null ? Math.max(0, Math.min(1, s.distancia / s.dd)) : null;
+  const ddCls = s.salud === "bad" ? "bad" : s.salud === "warn" ? "warn" : "";
+  const est = { activa: "good", pausada: "", aprobada: "acc", perdida: "bad", retirada: "" }[c.estado] || "";
+  return `<article class="panel acct s-${s.salud}">
+    <div class="spread"><div><h3>${esc(c.alias || "Sin nombre")}${c.ejemplo ? ' <span class="chip warn">EJEMPLO</span>' : ""}${s.ts ? ' <span class="chip good">Topstep</span>' : ""}</h3>
+      <div class="small muted">${esc(c.firma || "Firma sin indicar")}${c.plataforma ? " · " + esc(c.plataforma) : ""}${c.tamano ? " · " + money(Number(c.tamano)) : ""}</div></div>
+      <div class="row"><span class="chip acc">${FASES[c.fase] || "—"}</span><span class="chip ${est}">${ESTADOS[c.estado] || "—"}</span></div></div>
+    <div class="metrics">
+      <div class="metric"><div class="l">Balance</div><div class="v">${money(s.balance)}</div></div>
+      <div class="metric"><div class="l">Beneficio (ciclo)</div><div class="v ${s.beneficioCiclo >= 0 ? "pos" : "neg"}">${money(s.beneficioCiclo, true)}</div></div>
+      <div class="metric"><div class="l">Hoy</div><div class="v ${s.pnlHoy >= 0 ? "pos" : "neg"}">${money(s.pnlHoy, true)}</div></div>
+      <div class="metric"><div class="l">Pérdida diaria disponible</div><div class="v">${s.restanteDiario == null ? "sin límite" : money(s.restanteDiario)}</div></div>
+    </div>
+    ${s.dd ? `<div><div class="barlabel"><span>Margen hasta el drawdown (suelo ${money(s.suelo)})</span><span class="num">${money(s.distancia)} · ${pct(ddPct)}</span></div>
+      <div class="bar dd ${ddCls}"><i style="width:${(ddPct ?? 0) * 100}%"></i></div></div>` : `<div class="hint">Sin drawdown configurado.</div>`}
+    ${s.objetivo ? `<div><div class="barlabel"><span>Objetivo ${money(s.objetivo)}</span><span class="num">${pct(Math.max(0, s.progreso))} · faltan ${money(Math.max(0, s.objetivo - s.beneficioCiclo))}</span></div>
+      <div class="bar"><i style="width:${Math.max(0, Math.min(1, s.progreso)) * 100}%"></i></div></div>` : ""}
+    ${s.cons ? `<div class="small">Consistencia ${pct(s.cons.regla)}: ${s.cons.total > 0
+        ? `mejor día ${money(s.cons.mejor)} = <b>${pct(s.cons.pctMejor)}</b> del beneficio ${s.cons.cumple ? '<span class="chip good">cumple</span>' : `<span class="chip warn">faltan ${money(s.cons.falta)}</span>`}`
+        : "aún sin beneficio en este ciclo"}${s.cons.total > 0 ? ` · máximo hoy sin romperla: <b class="num">${money(Math.max(0, s.cons.restanteHoy))}</b>` : ""}</div>` : ""}
+    ${s.ts ? `<div class="hint">Datos de Topstep, actualizados ${esc(cuando(S.topstep.at))}. Se sincroniza sola cada mañana.</div>` : ""}
+    ${compact ? "" : `<div class="row">${s.ts ? "" : `<button class="btn primary" data-act="dia" data-id="${s.id}">Registrar día</button>`}
+      <button class="btn" data-act="payout-nuevo" data-id="${s.id}">Payout</button>
+      ${s.ts ? "" : `<button class="btn" data-act="balance" data-id="${s.id}">Ajustar balance</button>`}
+      <button class="btn ghost" data-act="cuenta-editar" data-id="${s.id}">Editar</button>
+      <button class="btn ghost" data-act="historial" data-id="${s.id}">Historial</button></div>`}
+  </article>`;
+}
+
+function viewPanel() {
+  if (S.mode === "db" && !S.loaded) return `<div class="panel muted">Cargando tus cuentas…</div>`;
+  const t = totales(), al = alertas(), st = allStats();
+  return `
+  <section class="kpis" aria-label="Resumen">
+    <div class="kpi"><div class="l">Beneficio neto real</div><div class="v ${t.neto >= 0 ? "pos" : "neg"}">${money(t.neto, true)}</div></div>
+    <div class="kpi"><div class="l">Payouts cobrados</div><div class="v">${money(t.cobrado)}</div></div>
+    <div class="kpi"><div class="l">Invertido (cuentas y costes)</div><div class="v">${money(t.invertido)}</div></div>
+    <div class="kpi"><div class="l">Rentabilidad</div><div class="v">${pct(t.roi)}</div></div>
+    <div class="kpi"><div class="l">Cuentas activas</div><div class="v">${t.activas}</div><div class="small muted">${t.evals} en evaluación · ${t.fondeadas} fondeada${t.fondeadas === 1 ? "" : "s"}</div></div>
+  </section>
+  <h2>Estado de cuentas</h2>
+  <div class="panel"><div class="spread"><span>Avisos de hoy</span><button class="btn" data-act="resumen">Resumen de la mañana con Jarvis</button></div>
+    <div class="alerts" style="margin-top:10px">${al.length ? al.map(([k, n, t]) => `<div class="alert ${k === "info" ? "" : k}"><b>${esc(n)}</b><span>${esc(t)}</span></div>`).join("")
+      : `<div class="muted small">${st.length ? "Todo en orden: ninguna cuenta cerca de sus límites." : "Sin cuentas todavía."}</div>`}</div></div>
+  ${st.length ? `<div class="grid2">${st.filter((s) => s.activa).map((s) => cardCuenta(s)).join("") || '<div class="panel muted">No hay cuentas activas.</div>'}</div>` : emptyAccounts()}`;
+}
+
+function viewPlan() {
+  const p = planDelDia(), sis = S.sistema;
+  const fila = (r) => `<tr><td><b>${esc(r.s.c.alias)}</b><div class="small muted">${esc(r.s.c.firma || "")} · ${FASES[r.s.c.fase] || ""}</div></td>
+    <td>${esc(r.estrategia || sis.estrategiaNombre || "Tu estrategia")}</td>
+    <td class="n">${r.riesgoMax == null ? "—" : money(r.riesgoMax)}<div class="small muted">${esc(r.porQue || "")}</div></td>
+    <td class="n">${r.porOperacion == null ? "—" : money(r.porOperacion)}</td>
+    <td class="n">${r.beneficioMax == null ? "—" : money(r.beneficioMax)}</td>
+    <td class="n">${money(r.s.distancia)}</td></tr>`;
+  const tabla = (rows) => `<div class="tablewrap"><table><thead><tr><th>Cuenta</th><th>Estrategia</th><th class="n">Pérdida máx. hoy</th><th class="n">Riesgo por operación</th><th class="n">Beneficio máx. (consistencia)</th><th class="n">Margen DD</th></tr></thead>
+    <tbody>${rows.map(fila).join("")}</tbody></table></div>`;
+  if (!S.cuentas.size) return emptyAccounts();
+  return `
+  <div class="panel"><div class="spread"><div><b>Hoy, ${new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}</b>
+    <div class="small muted">Calculado con tus reglas de «Mi sistema» y los límites de cada firma. El más estricto manda.</div></div>
+    <button class="btn" data-act="plan-jarvis">Pedir a Jarvis el plan explicado</button></div>
+    ${sis.noticias ? `<div class="alert warn" style="margin-top:10px"><b>Noticias</b><span>${esc(sis.noticias)}</span></div>` : ""}</div>
+  <h2>Operar hoy (${p.operar.length})</h2>
+  <div class="panel">${p.operar.length ? tabla(p.operar) : '<div class="muted">Ninguna cuenta disponible hoy.</div>'}</div>
+  ${p.reserva.length ? `<h2>En reserva (${p.reserva.length})</h2><div class="panel">${tabla(p.reserva)}<div class="hint">Has fijado un máximo de ${esc(sis.maxCuentasDia)} cuentas por día.</div></div>` : ""}
+  ${p.fuera.length ? `<h2>No operar hoy</h2><div class="panel alerts">${p.fuera.map((r) => `<div class="alert"><b>${esc(r.s.c.alias)}</b><span>${esc(r.motivo)}</span></div>`).join("")}</div>` : ""}
+  ${!(Number(sis.riesgoOperacion) || Number(sis.limiteDiario)) ? `<div class="banner">Define tu riesgo por operación y tu límite diario en «Mi sistema» para que el plan sea completo.</div>` : ""}`;
+}
+
+function viewCuentas() {
+  const st = allStats();
+  const hayEjemplos = st.some((s) => s.c.ejemplo);
+  return `<div class="spread"><h2>Todas las cuentas (${st.length})</h2><div class="row">
+      ${hayEjemplos ? '<button class="btn danger" data-act="borrar-ejemplos">Borrar datos de ejemplo</button>' : ""}
+      <button class="btn primary" data-act="cuenta-nueva">Añadir cuenta</button></div></div>
+    ${st.length ? `<div class="grid2">${st.map((s) => cardCuenta(s)).join("")}</div>` : emptyAccounts()}`;
+}
+
+function viewDinero() {
+  const pays = [...S.payouts.entries()].sort((a, b) => (b[1].fecha || "").localeCompare(a[1].fecha || ""));
+  const costes = [...S.costes.entries()].sort((a, b) => (b[1].fecha || "").localeCompare(a[1].fecha || ""));
+  const compras = [...S.cuentas.entries()].filter(([, c]) => Number(c.precio) > 0).sort((a, b) => (b[1].fechaCompra || "").localeCompare(a[1].fechaCompra || ""));
+  const t = totales();
+  return `<section class="kpis">
+    <div class="kpi"><div class="l">Payouts cobrados</div><div class="v pos">${money(t.cobrado)}</div></div>
+    <div class="kpi"><div class="l">Compras de cuentas</div><div class="v">${money(sum([...S.cuentas.values()], (c) => c.precio))}</div></div>
+    <div class="kpi"><div class="l">Otros costes</div><div class="v">${money(sum([...S.costes.values()], (k) => k.importe))}</div></div>
+    <div class="kpi"><div class="l">Beneficio neto real</div><div class="v ${t.neto >= 0 ? "pos" : "neg"}">${money(t.neto, true)}</div></div></section>
+  <div class="spread"><h2>Payouts</h2><button class="btn primary" data-act="payout-nuevo">Registrar payout</button></div>
+  <div class="panel">${pays.length ? `<div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Cuenta</th><th class="n">Retirado</th><th class="n">Recibido</th><th></th></tr></thead><tbody>
+    ${pays.map(([id, p]) => `<tr><td>${fmtDate(p.fecha)}</td><td>${esc(label(S.cuentas.get(p.cuentaId)))}${p.nota ? `<div class="small muted">${esc(p.nota)}</div>` : ""}</td>
+      <td class="n">${money(Number(p.bruto))}</td><td class="n pos">${money(Number(p.recibido || p.bruto))}</td>
+      <td><button class="btn ghost" data-act="payout-editar" data-id="${id}">Editar</button></td></tr>`).join("")}</tbody></table></div>`
+    : '<div class="muted">Aún no hay payouts. Cuando cobres, regístralo aquí: se descuenta del balance de la cuenta y suma a tu beneficio neto.</div>'}</div>
+  <div class="spread"><h2>Costes</h2><button class="btn primary" data-act="coste-nuevo">Registrar coste</button></div>
+  <div class="panel"><div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Cuenta</th><th class="n">Importe</th><th></th></tr></thead><tbody>
+    ${compras.map(([id, c]) => `<tr><td>${fmtDate(c.fechaCompra)}</td><td>Compra de cuenta</td><td>${esc(label(c))}</td><td class="n">${money(Number(c.precio))}</td><td><button class="btn ghost" data-act="cuenta-editar" data-id="${id}">Editar</button></td></tr>`).join("")}
+    ${costes.map(([id, k]) => `<tr><td>${fmtDate(k.fecha)}</td><td>${esc(CONCEPTOS[k.concepto] || k.concepto)}${k.nota ? `<div class="small muted">${esc(k.nota)}</div>` : ""}</td><td>${esc(label(S.cuentas.get(k.cuentaId)))}</td><td class="n">${money(Number(k.importe))}</td><td><button class="btn ghost" data-act="coste-editar" data-id="${id}">Editar</button></td></tr>`).join("")}
+    ${!compras.length && !costes.length ? '<tr><td colspan="5" class="muted">Sin costes registrados.</td></tr>' : ""}</tbody></table></div></div>`;
+}
+
+function viewDiario() {
+  const notas = [...S.diario.entries()].sort((a, b) => (b[1].creado || "").localeCompare(a[1].creado || ""));
+  return `<div class="panel"><form id="nota-rapida" class="fields">
+      <label class="f wide">Nota rápida<textarea id="nota-texto" placeholder="Ej.: Apex 2, entré tarde en el NY open; respeté el stop. Para dictar, pulsa el micrófono del teclado." required></textarea></label>
+      <label class="f">Tipo<select id="nota-tipo">${Object.entries(TIPOS_NOTA).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select></label>
+      <label class="f">Cuenta<select id="nota-cuenta"><option value="">General</option>${[...S.cuentas.entries()].map(([id, c]) => `<option value="${id}">${esc(label(c))}</option>`).join("")}</select></label>
+      <div class="row" style="grid-column:1/-1"><button class="btn primary" type="submit">Guardar nota</button><span class="status" id="nota-status"></span></div></form></div>
+    <h2>Diario (${notas.length})</h2>
+    <div class="panel">${notas.length ? notas.map(([id, n]) => `<div class="entry"><div class="spread"><span class="row"><span class="chip acc">${TIPOS_NOTA[n.tipo] || "Nota"}</span><span class="small muted">${esc(label(S.cuentas.get(n.cuentaId)))} · ${fmtDate(n.fecha)}</span></span>
+      <button class="btn ghost danger" data-act="borrar-nota" data-id="${id}">Borrar</button></div><div>${esc(n.texto)}</div></div>`).join("")
+      : '<div class="muted">Tu diario está vacío. Anota operaciones, ideas, incidencias y cambios de estrategia; Jarvis los tiene en cuenta.</div>'}</div>`;
+}
+
+function viewInforme() {
+  const w = semana(S.weekOffset), t = totales();
+  const filas = [...w.porCuenta.entries()].sort((a, b) => b[1] - a[1]);
+  return `<div class="panel spread"><div class="row"><button class="btn" data-act="sem-prev" aria-label="Semana anterior">←</button>
+      <b>Semana del ${fmtDate(w.a)} al ${fmtDate(w.b)}</b><button class="btn" data-act="sem-next" aria-label="Semana siguiente" ${S.weekOffset >= 0 ? "disabled" : ""}>→</button></div>
+      <div class="row"><button class="btn" data-act="informe-jarvis">Redactar con Jarvis</button><button class="btn" data-act="csv">Exportar CSV</button></div></div>
+  <section class="kpis">
+    <div class="kpi"><div class="l">P&amp;L de la semana</div><div class="v ${w.pnl >= 0 ? "pos" : "neg"}">${money(w.pnl, true)}</div></div>
+    <div class="kpi"><div class="l">Payouts cobrados</div><div class="v">${money(w.cobrado)}</div><div class="small muted">${w.payouts.length} retiro(s)</div></div>
+    <div class="kpi"><div class="l">Costes</div><div class="v">${money(w.gastos)}</div></div>
+    <div class="kpi"><div class="l">Beneficio neto de la semana</div><div class="v ${w.neto >= 0 ? "pos" : "neg"}">${money(w.neto, true)}</div><div class="small muted">payouts − costes</div></div>
+    <div class="kpi"><div class="l">Evaluaciones compradas</div><div class="v">${w.evalsCompradas}</div></div>
+    <div class="kpi"><div class="l">Aprobadas / perdidas</div><div class="v">${w.aprobadas.length} / ${w.perdidas.length}</div></div></section>
+  <div class="grid2"><div class="panel"><h2 style="margin-top:0">P&amp;L por cuenta</h2>
+    ${filas.length ? `<table><tbody>${filas.map(([id, v]) => `<tr><td>${esc(label(S.cuentas.get(id)))}</td><td class="n ${v >= 0 ? "pos" : "neg"}">${money(v, true)}</td></tr>`).join("")}</tbody></table>` : '<div class="muted">Sin días registrados esta semana.</div>'}</div>
+  <div class="panel"><h2 style="margin-top:0">Desde el principio</h2><table><tbody>
+    <tr><td>Invertido</td><td class="n">${money(t.invertido)}</td></tr><tr><td>Cobrado</td><td class="n">${money(t.cobrado)}</td></tr>
+    <tr><td><b>Beneficio neto real</b></td><td class="n ${t.neto >= 0 ? "pos" : "neg"}"><b>${money(t.neto, true)}</b></td></tr>
+    <tr><td>Rentabilidad</td><td class="n">${pct(t.roi, 1)}</td></tr><tr><td>Cuentas aprobadas</td><td class="n">${t.aprobadas}</td></tr><tr><td>Cuentas perdidas</td><td class="n">${t.perdidas}</td></tr></tbody></table></div></div>
+  <div class="panel" id="informe-texto">${S.informe && S.informe.semana === w.a ? `<div class="msg j" style="max-width:none">${esc(S.informe.texto)}</div>` : '<span class="muted small">Pulsa «Redactar con Jarvis» para un informe escrito de esta semana.</span>'}</div>`;
+}
+
+function viewSistema() {
+  const s = S.sistema;
+  return `<form id="sistema" class="panel fields">
+    <label class="f wide">Mi estrategia<textarea id="sis-estrategia" placeholder="Setup, mercado, horario, gestión de la posición…">${esc(s.estrategia)}</textarea></label>
+    <label class="f wide">Reglas de riesgo<textarea id="sis-reglas" placeholder="Ej.: máximo 2 pérdidas seguidas y cierro el día; no operar 15 min antes y después de noticias de alto impacto…">${esc(s.reglas)}</textarea></label>
+    <label class="f">Riesgo por operación (${esc(s.moneda)})<input id="sis-riesgo" inputmode="decimal" value="${esc(s.riesgoOperacion || "")}"></label>
+    <label class="f">Operaciones máximas por día<input id="sis-maxop" inputmode="numeric" value="${esc(s.maxOperaciones || "")}"></label>
+    <label class="f">Mi límite de pérdida diaria por cuenta<input id="sis-limite" inputmode="decimal" value="${esc(s.limiteDiario || "")}"></label>
+    <label class="f">Arriesgar como máximo este % del margen de drawdown en un día<input id="sis-fraccion" inputmode="decimal" value="${esc(s.fraccionDD ?? "")}"></label>
+    <label class="f">Cuentas máximas por día (0 = todas)<input id="sis-maxcuentas" inputmode="numeric" value="${esc(s.maxCuentasDia || 0)}"></label>
+    <label class="f">Moneda<select id="sis-moneda">${["USD", "EUR", "GBP"].map((m) => `<option ${s.moneda === m ? "selected" : ""}>${m}</option>`).join("")}</select></label>
+    <label class="f wide">Noticias de hoy (Forex Factory)<input id="sis-noticias" placeholder="Ej.: CPI 14:30, FOMC 20:00 — no operar 15 min antes/después" value="${esc(s.noticias)}"></label>
+    <div class="row" style="grid-column:1/-1"><button class="btn primary" type="submit">Guardar mi sistema</button><span class="status" id="sis-status"></span></div>
+    <p class="hint" style="grid-column:1/-1">El plan del día usa el límite más estricto entre: la pérdida diaria de la firma, tu límite diario y el % del margen de drawdown. El riesgo por operación se reparte entre tus operaciones máximas.</p>
+  </form>`;
+}
+
+function viewJarvis() {
+  const msgs = S.chat.map((m) => m.kind === "proposal" ? proposalHtml(m) : `<div class="msg ${m.kind}">${esc(m.text)}</div>`).join("");
+  const sync = S.topstep ? `<div class="panel"><div class="spread"><b>Resumen de la mañana</b><span class="small muted">Topstep · ${esc(cuando(S.topstep.at))}</span></div>
+      <div class="msg j" style="max-width:none;margin-top:10px;border:0;padding:0">${esc(S.topstep.resumen || "")}</div></div>`
+    : `<div class="panel small muted">El resumen de Topstep aparecerá aquí cada mañana a las 10:52.</div>`;
+  return sync + `<div class="panel small muted">Pregúntame por tus cuentas, tu riesgo o tu plan. Para dictar, pulsa el micrófono del teclado del iPad.
+      Puedo proponerte registros («hoy he ganado 450 en Apex 2») y tú los confirmas. Empieza con «apunta…» para guardar una nota al instante.
+      <label class="row" style="margin-top:8px;color:var(--fg)"><input type="checkbox" id="voz" style="width:auto" ${S.voice ? "checked" : ""}> Leer mis respuestas en voz alta</label></div>
+    <div class="chat" id="chat">${msgs || '<div class="msg j">Buenos días, señor. Sus cuentas le esperan; yo, con algo más de paciencia.</div>'}<div id="chat-end"></div></div>
+    <form id="askform" class="askbar"><textarea id="ask" placeholder="Escribe o dicta tu pregunta…" aria-label="Pregunta a Jarvis"></textarea>
+      <button class="btn primary" id="askbtn" ${S.busy ? "disabled" : ""}>${S.busy ? "Pensando…" : "Enviar"}</button></form>`;
+}
+
+function proposalHtml(m) {
+  const done = m.state === "done", no = m.state === "cancel";
+  return `<div class="proposal"><div><b>Propuesta de Jarvis:</b> ${esc(m.text)}</div>
+    ${done ? '<span class="chip good">Registrado</span>' : no ? '<span class="chip">Descartado</span>'
+      : `<div class="row"><button class="btn primary" data-act="prop-ok" data-id="${m.id}">Confirmar y registrar</button><button class="btn" data-act="prop-no" data-id="${m.id}">Descartar</button></div>`}</div>`;
+}
+
+// ═══════════════════════════ forms (sheets) ═══════════════════════════
+function sheet(title, body, onSubmit, extra = "") {
+  const root = $("#sheet-root");
+  root.innerHTML = `<div class="sheet-bg" id="sheet-bg"><form class="sheet" id="sheet" novalidate><h3>${esc(title)}</h3>${body}
+    <div class="err" id="sheet-err"></div><div class="row"><button class="btn primary" type="submit">Guardar</button>
+    <button class="btn" type="button" data-close>Cancelar</button>${extra}</div></form></div>`;
+  const close = () => { root.innerHTML = ""; };
+  $("#sheet-bg").addEventListener("click", (e) => { if (e.target.id === "sheet-bg" || e.target.hasAttribute("data-close")) close(); });
+  $("#sheet").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try { const r = await onSubmit(new FormData(e.target)); if (r !== false) close(); }
+    catch (err) { $("#sheet-err").textContent = err.message || "No se pudo guardar."; }
+  });
+  const first = $("#sheet input, #sheet select, #sheet textarea"); first && first.focus();
+  return { close };
+}
+const fld = (name, lab, val = "", attrs = "", hint = "") => `<label class="f">${lab}<input name="${name}" value="${esc(val)}" ${attrs}>${hint ? `<span class="hint">${hint}</span>` : ""}</label>`;
+const sel = (name, lab, opts, val) => `<label class="f">${lab}<select name="${name}">${Object.entries(opts).map(([k, v]) => `<option value="${k}" ${k === val ? "selected" : ""}>${esc(v)}</option>`).join("")}</select></label>`;
+const cuentaSel = (val, general = false, name = "cuentaId") => `<label class="f">Cuenta<select name="${name}">${general ? '<option value="">General</option>' : ""}${[...S.cuentas.entries()].map(([id, c]) => `<option value="${id}" ${id === val ? "selected" : ""}>${esc(label(c))}</option>`).join("")}</select></label>`;
+function need(fd, name, what, allowNeg = false) {
+  const v = num(fd.get(name));
+  if (!isFinite(v) || (!allowNeg && v < 0)) throw new Error(`Revisa «${what}»: tiene que ser un número${allowNeg ? "" : " positivo"}.`);
+  return v;
+}
+const opt = (fd, name) => { const v = num(fd.get(name)); return isFinite(v) ? v : 0; };
+
+function formCuenta(id) {
+  const c = id ? S.cuentas.get(id) : { fase: "evaluacion", estado: "activa", ddTipo: "eod", fechaCompra: HOY(), dias: [1, 2, 3, 4, 5], consistencia: 0 };
+  const dias = c.dias || [1, 2, 3, 4, 5];
+  const body = `<div class="fields">
+    ${fld("alias", "Nombre corto (ej. Apex 2)", c.alias, 'required maxlength="40"')}
+    ${fld("firma", "Firma", c.firma, 'maxlength="40" placeholder="Apex, Topstep, Lucid…"')}
+    ${fld("plataforma", "Plataforma", c.plataforma, 'maxlength="40" placeholder="Tradovate, ProjectX, Rithmic…"')}
+    ${fld("tamano", "Tamaño de la cuenta", c.tamano, 'inputmode="decimal" placeholder="50000"')}
+    ${sel("fase", "Fase", FASES, c.fase)}${sel("estado", "Estado", ESTADOS, c.estado)}
+    ${fld("precio", "Precio de compra", c.precio, 'inputmode="decimal"')}${fld("fechaCompra", "Fecha de compra", c.fechaCompra, 'type="date"')}
+    ${fld("renovacion", "Renovación mensual (0 si no tiene)", c.renovacion, 'inputmode="decimal"')}
+    ${fld("balanceInicial", "Balance inicial", c.balanceInicial, 'inputmode="decimal" required')}
+    ${sel("ddTipo", "Tipo de drawdown", DD_TIPOS, c.ddTipo)}
+    ${fld("ddMax", "Drawdown máximo (importe)", c.ddMax, 'inputmode="decimal" placeholder="2500"')}
+    ${fld("ddTope", "El trailing deja de subir en (balance)", c.ddTope, 'inputmode="decimal"', "Vacío = en el balance inicial. Solo para trailing.")}
+    ${fld("picoManual", "Pico de balance (solo trailing intradía)", c.picoManual, 'inputmode="decimal"', "Si tu firma usa el máximo intradía, apunta aquí el pico que marque la plataforma.")}
+    ${fld("perdidaDiaria", "Pérdida diaria máxima (0 = sin límite)", c.perdidaDiaria, 'inputmode="decimal"')}
+    ${fld("objetivo", "Objetivo de beneficio", c.objetivo, 'inputmode="decimal"', "En fondeadas: el beneficio que necesitas para pedir payout.")}
+    ${fld("consistencia", "Regla de consistencia (%)", c.consistencia || "", 'inputmode="decimal" placeholder="40, 50 o vacío"', "El mejor día no puede superar este % del beneficio (desde el último payout).")}
+    ${fld("estrategia", "Estrategia para esta cuenta", c.estrategia, 'maxlength="60"')}
+    ${fld("topstepId", "ID de cuenta en Topstep (opcional)", c.topstepId, 'inputmode="numeric" placeholder="28509172"', "Con el ID, el balance y los días llegan solos de Topstep cada mañana.")}
+    <label class="f wide">Días en los que puedo operarla<div class="days">${DIAS.map(([d, l]) => `<label><input type="checkbox" name="dias" value="${d}" ${dias.includes(d) ? "checked" : ""}>${l}</label>`).join("")}</div></label>
+    <label class="f wide">Notas<textarea name="notas">${esc(c.notas)}</textarea></label></div>`;
+  const extra = id ? `<button class="btn danger" type="button" id="del-cuenta">Borrar cuenta</button>` : "";
+  const sh = sheet(id ? "Editar cuenta" : "Nueva cuenta", body, async (fd) => {
+    const alias = String(fd.get("alias") || "").trim();
+    if (!alias) throw new Error("Ponle un nombre corto a la cuenta.");
+    const data = { ...(id ? S.cuentas.get(id) : {}), alias, firma: String(fd.get("firma") || "").trim(), plataforma: String(fd.get("plataforma") || "").trim(),
+      tamano: opt(fd, "tamano"), fase: fd.get("fase"), estado: fd.get("estado"), precio: opt(fd, "precio"), fechaCompra: fd.get("fechaCompra") || HOY(),
+      renovacion: opt(fd, "renovacion"), balanceInicial: need(fd, "balanceInicial", "Balance inicial"), ddTipo: fd.get("ddTipo"), ddMax: opt(fd, "ddMax"),
+      ddTope: String(fd.get("ddTope") || "").trim() === "" ? "" : opt(fd, "ddTope"), picoManual: opt(fd, "picoManual"), perdidaDiaria: opt(fd, "perdidaDiaria"),
+      objetivo: opt(fd, "objetivo"), consistencia: opt(fd, "consistencia"), estrategia: String(fd.get("estrategia") || "").trim(),
+      dias: fd.getAll("dias").map(Number), notas: String(fd.get("notas") || ""), topstepId: String(fd.get("topstepId") || "").replace(/\D/g, "") };
+    if (data.consistencia >= 100) throw new Error("La regla de consistencia tiene que ser menor que 100 %.");
+    const prev = id ? S.cuentas.get(id) : null;
+    if (data.estado === "aprobada" && !(prev && prev.fechaAprobada)) data.fechaAprobada = HOY();
+    if (data.estado === "perdida" && !(prev && prev.fechaPerdida)) data.fechaPerdida = HOY();
+    if (!data.creado) data.creado = new Date().toISOString();
+    await save("cuentas", id, data);
+  }, extra);
+  if (id) armDelete($("#del-cuenta"), async () => {
+    for (const col of ["movs", "payouts"]) for (const [k, v] of [...S[col]]) if (v.cuentaId === id) await remove(col, k);
+    await remove("cuentas", id); sh.close();
+  }, "¿Borrar la cuenta y su historial?");
+}
+
+function armDelete(btn, action, ask = "¿Seguro?") {
+  let armed = false;
+  btn.addEventListener("click", async () => {
+    if (!armed) { armed = true; btn.textContent = ask + " Pulsa otra vez"; setTimeout(() => { armed = false; btn.textContent = "Borrar"; }, 4000); return; }
+    btn.disabled = true; await action();
+  });
+}
+
+function formDia(id) {
+  sheet("Registrar día", `<div class="fields">${cuentaSel(id)}${fld("fecha", "Fecha", HOY(), 'type="date"')}
+    ${fld("pnl", "Resultado del día (negativo si pierdes)", "", 'inputmode="decimal" required placeholder="+450 o -300"')}
+    <label class="f wide">Nota (opcional)<input name="nota" maxlength="200"></label></div>`, async (fd) => {
+    await save("movs", null, { cuentaId: fd.get("cuentaId"), fecha: fd.get("fecha") || HOY(), pnl: need(fd, "pnl", "Resultado", true), tipo: "pnl", nota: String(fd.get("nota") || "") });
+  });
+}
+function formBalance(id) {
+  const s = cuentaStats(id);
+  sheet("Ajustar balance", `<p class="small muted" style="margin:0">Balance calculado: <b class="num">${money(s.balance)}</b>. Si la plataforma dice otra cifra, escríbela y guardaré la diferencia como ajuste (no cuenta para la consistencia).</p>
+    <div class="fields">${fld("balance", "Balance real en la plataforma", "", 'inputmode="decimal" required')}${fld("fecha", "Fecha", HOY(), 'type="date"')}</div>`, async (fd) => {
+    const real = need(fd, "balance", "Balance real");
+    const dif = Math.round((real - s.balance) * 100) / 100;
+    if (!dif) return;
+    await save("movs", null, { cuentaId: id, fecha: fd.get("fecha") || HOY(), pnl: dif, tipo: "ajuste", nota: "Ajuste de balance" });
+  });
+}
+function formPayout(pid, cuentaId) {
+  const p = pid ? S.payouts.get(pid) : { fecha: HOY(), cuentaId };
+  const sh = sheet(pid ? "Editar payout" : "Registrar payout", `<div class="fields">${cuentaSel(p.cuentaId)}${fld("fecha", "Fecha", p.fecha, 'type="date"')}
+    ${fld("bruto", "Importe retirado de la cuenta", p.bruto, 'inputmode="decimal" required')}
+    ${fld("recibido", "Importe recibido (tras el reparto)", p.recibido, 'inputmode="decimal"', "Lo que te llega a Revolut. Vacío = igual que el retirado.")}
+    <label class="f wide">Nota<input name="nota" value="${esc(p.nota)}" maxlength="200"></label></div>`, async (fd) => {
+    await save("payouts", pid, { cuentaId: fd.get("cuentaId"), fecha: fd.get("fecha") || HOY(), bruto: need(fd, "bruto", "Importe retirado"),
+      recibido: String(fd.get("recibido") || "").trim() ? need(fd, "recibido", "Importe recibido") : 0, nota: String(fd.get("nota") || "") });
+  }, pid ? '<button class="btn danger" type="button" id="del-x">Borrar</button>' : "");
+  if (pid) armDelete($("#del-x"), async () => { await remove("payouts", pid); sh.close(); });
+}
+function formCoste(kid, preset = {}) {
+  const k = kid ? S.costes.get(kid) : { fecha: HOY(), concepto: "activacion", ...preset };
+  const sh = sheet(kid ? "Editar coste" : "Registrar coste", `<div class="fields">${sel("concepto", "Concepto", CONCEPTOS, k.concepto)}${cuentaSel(k.cuentaId, true)}
+    ${fld("importe", "Importe", k.importe, 'inputmode="decimal" required')}${fld("fecha", "Fecha", k.fecha, 'type="date"')}
+    <label class="f wide">Nota<input name="nota" value="${esc(k.nota)}" maxlength="200"></label></div>`, async (fd) => {
+    await save("costes", kid, { concepto: fd.get("concepto"), cuentaId: fd.get("cuentaId") || "", importe: need(fd, "importe", "Importe"), fecha: fd.get("fecha") || HOY(), nota: String(fd.get("nota") || "") });
+  }, kid ? '<button class="btn danger" type="button" id="del-x">Borrar</button>' : "");
+  if (kid) armDelete($("#del-x"), async () => { await remove("costes", kid); sh.close(); });
+}
+function historial(id) {
+  const rows = [...S.movs.entries()].filter(([, m]) => m.cuentaId === id).sort((a, b) => (b[1].fecha || "").localeCompare(a[1].fecha || ""));
+  const root = $("#sheet-root");
+  root.innerHTML = `<div class="sheet-bg" id="sheet-bg"><div class="sheet"><h3>Historial · ${esc(label(S.cuentas.get(id)))}</h3>
+    ${rows.length ? `<div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th class="n">Importe</th><th></th></tr></thead><tbody>
+    ${rows.map(([k, m]) => `<tr><td>${fmtDate(m.fecha)}</td><td>${m.tipo === "ajuste" ? "Ajuste" : "Día"}${m.nota ? `<div class="small muted">${esc(m.nota)}</div>` : ""}</td><td class="n ${m.pnl >= 0 ? "pos" : "neg"}">${money(Number(m.pnl), true)}</td>
+      <td><button class="btn ghost danger" data-del-mov="${k}">Borrar</button></td></tr>`).join("")}</tbody></table></div>` : '<div class="muted">Sin días registrados.</div>'}
+    <div class="row"><button class="btn" type="button" data-close>Cerrar</button></div></div></div>`;
+  $("#sheet-bg").addEventListener("click", async (e) => {
+    if (e.target.id === "sheet-bg" || e.target.hasAttribute("data-close")) { root.innerHTML = ""; return; }
+    const k = e.target.dataset.delMov;
+    if (k) { if (e.target.dataset.armed) { await remove("movs", k); historial(id); } else { e.target.dataset.armed = "1"; e.target.textContent = "¿Seguro?"; } }
+  });
+}
+
+// ═══════════════════════════ actions ═══════════════════════════
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-act]"); if (!b || b.closest("#sheet-root")) return;
+  const id = b.dataset.id;
+  switch (b.dataset.act) {
+    case "cuenta-nueva": return formCuenta();
+    case "cuenta-editar": return formCuenta(id);
+    case "dia": return formDia(id);
+    case "balance": return formBalance(id);
+    case "historial": return historial(id);
+    case "payout-nuevo": return S.cuentas.size ? formPayout(null, id) : formCuenta();
+    case "payout-editar": return formPayout(id);
+    case "coste-nuevo": return formCoste();
+    case "coste-editar": return formCoste(id);
+    case "borrar-nota": if (b.dataset.armed) return remove("diario", id); b.dataset.armed = "1"; b.textContent = "¿Seguro?"; return;
+    case "sem-prev": S.weekOffset--; return render();
+    case "sem-next": S.weekOffset = Math.min(0, S.weekOffset + 1); return render();
+    case "ejemplo": return cargarEjemplo();
+    case "borrar-ejemplos": if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = "¿Borrar los ejemplos? Pulsa otra vez"; return; } return borrarEjemplos();
+    case "csv": return exportarCSV(b);
+    case "resumen": return irAJarvis("Dame el resumen de la mañana: estado de cada cuenta, distancia al drawdown, distancia al objetivo y avisos.");
+    case "plan-jarvis": return irAJarvis("Explícame el plan del día: qué cuentas opero, con qué estrategia y cuánto riesgo, según mis reglas.");
+    case "informe-jarvis": return redactarInforme(b);
+    case "prop-ok": return confirmar(id, true);
+    case "prop-no": return confirmar(id, false);
+  }
+});
+document.addEventListener("submit", async (e) => {
+  if (e.target.id === "nota-rapida") {
+    e.preventDefault();
+    const texto = $("#nota-texto").value.trim(); if (!texto) return;
+    await save("diario", null, { texto, tipo: $("#nota-tipo").value, cuentaId: $("#nota-cuenta").value, fecha: HOY(), creado: new Date().toISOString() });
+    const st = $("#nota-status"); if (st) st.textContent = "Guardada.";
+  } else if (e.target.id === "sistema") {
+    e.preventDefault();
+    const n = (sel) => { const v = num($(sel).value); return isFinite(v) ? v : 0; };
+    await saveSistema({ estrategia: $("#sis-estrategia").value, reglas: $("#sis-reglas").value, riesgoOperacion: n("#sis-riesgo"),
+      maxOperaciones: n("#sis-maxop"), limiteDiario: n("#sis-limite"), fraccionDD: n("#sis-fraccion"), maxCuentasDia: n("#sis-maxcuentas"),
+      moneda: $("#sis-moneda").value, noticias: $("#sis-noticias").value });
+    const st = $("#sis-status"); if (st) st.textContent = "Guardado.";
+  } else if (e.target.id === "askform") {
+    e.preventDefault();
+    const q = $("#ask").value.trim(); if (!q || S.busy) return;
+    $("#ask").value = "";
+    preguntar(q);
+  }
+});
+document.addEventListener("change", (e) => {
+  if (e.target.id === "voz") { S.voice = e.target.checked; try { localStorage.setItem("fm-voz", S.voice ? "1" : "0"); } catch {} if (!S.voice) speechSynthesis?.cancel(); }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("#sheet-root").innerHTML) $("#sheet-root").innerHTML = "";
+  if (e.target.id === "ask" && e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#askform").requestSubmit(); }
+});
+
+async function cargarEjemplo() {
+  const hoy = new Date(), dia = (n) => { const d = new Date(hoy); d.setDate(d.getDate() - n); return isoDate(d); };
+  const a = await save("cuentas", null, { ejemplo: true, alias: "EJEMPLO Eval 50K", firma: "Firma A", plataforma: "Tradovate", tamano: 50000, fase: "evaluacion", estado: "activa",
+    precio: 49, fechaCompra: dia(9), renovacion: 0, balanceInicial: 50000, ddTipo: "eod", ddMax: 2500, ddTope: "", picoManual: 0, perdidaDiaria: 1000,
+    objetivo: 3000, consistencia: 50, estrategia: "Apertura NY", dias: [1, 2, 3, 4, 5], creado: new Date().toISOString() });
+  const b = await save("cuentas", null, { ejemplo: true, alias: "EJEMPLO PA 100K", firma: "Firma B", plataforma: "ProjectX", tamano: 100000, fase: "fondeada", estado: "activa",
+    precio: 120, fechaCompra: dia(30), renovacion: 0, balanceInicial: 100000, ddTipo: "eod", ddMax: 3000, ddTope: 100100, picoManual: 0, perdidaDiaria: 0,
+    objetivo: 2600, consistencia: 40, estrategia: "Pullback a VWAP", dias: [1, 2, 3, 4], creado: new Date().toISOString(), fechaAprobada: dia(20) });
+  for (const [c, n, v] of [[a, 6, 640], [a, 5, -220], [a, 3, 910], [a, 1, 380], [b, 8, 1200], [b, 6, 450], [b, 4, -300], [b, 2, 700]])
+    await save("movs", null, { ejemplo: true, cuentaId: c, fecha: dia(n), pnl: v, tipo: "pnl" });
+  await save("costes", null, { ejemplo: true, concepto: "activacion", cuentaId: b, importe: 85, fecha: dia(20), nota: "Ejemplo" });
+  await save("diario", null, { ejemplo: true, texto: "EJEMPLO: entré antes de la confirmación en la apertura; respeté el stop.", tipo: "incidencia", cuentaId: a, fecha: dia(3), creado: new Date().toISOString() });
+}
+async function borrarEjemplos() {
+  for (const col of ["movs", "payouts", "costes", "diario", "cuentas"]) for (const [k, v] of [...S[col]]) if (v.ejemplo) await remove(col, k);
+}
+
+async function exportarCSV(btn) {
+  const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const lines = [["tipo", "fecha", "cuenta", "firma", "importe", "detalle"].join(",")];
+  const cu = (id) => S.cuentas.get(id) || {};
+  for (const m of S.movs.values()) lines.push([m.tipo === "ajuste" ? "ajuste" : "dia", m.fecha, q(cu(m.cuentaId).alias), q(cu(m.cuentaId).firma), m.pnl, q(m.nota)].join(","));
+  for (const p of S.payouts.values()) lines.push(["payout", p.fecha, q(cu(p.cuentaId).alias), q(cu(p.cuentaId).firma), p.recibido || p.bruto, q(`retirado ${p.bruto}`)].join(","));
+  for (const k of S.costes.values()) lines.push(["coste", k.fecha, q(cu(k.cuentaId).alias), q(cu(k.cuentaId).firma), -k.importe, q(CONCEPTOS[k.concepto] || k.concepto)].join(","));
+  for (const c of S.cuentas.values()) if (c.precio) lines.push(["compra", c.fechaCompra, q(c.alias), q(c.firma), -c.precio, q(FASES[c.fase])].join(","));
+  const dl = window.claude?.use ? await window.claude.use("downloads") : null;
+  if (!dl) { btn.textContent = "Exportar no está disponible aquí"; return; }
+  try { await dl.save({ filename: `funding-manager-${HOY()}.csv`, data: "﻿" + lines.join("\n") }); btn.textContent = "Exportado"; }
+  catch (e) { btn.textContent = e.code === "declined" ? "Exportar CSV" : "No se pudo exportar"; }
+}
+
+// ═══════════════════════════ Jarvis ═══════════════════════════
+const PERSONA = `Eres Jarvis, un mayordomo británico seco, impecablemente cortés y con un ingenio afilado. Llevas el FUNDING MANAGER de tu señor, dentro de su asistente Jarvis: sus cuentas de fondeo de prop firms (evaluaciones, cuentas fondeadas, payouts y costes).
+
+Hablas SIEMPRE en español de España, aunque te escriban en otro idioma. Trata a tu señor de usted y llámale «señor» de vez en cuando: como mucho una vez por respuesta y no en todas.
+
+Tus respuestas se leen en voz alta. Así que:
+- Una frase con ingenio, si sale natural; luego los hechos, claros y breves (dos a cuatro frases), salvo que te pida un informe o un resumen.
+- Sin markdown, sin tablas y sin emojis. En informes y resúmenes puedes usar líneas cortas que empiecen por guion.
+- Cifras exactas, con su moneda, tal y como vienen en los datos.
+
+Respondes SOLO con el bloque <datos> que acompaña a cada mensaje y con lo dicho antes en la conversación. Nunca inventes cifras, cuentas, reglas de una firma ni noticias. Si falta un dato, dilo y di dónde se rellena en la app (Cuentas, Payouts y costes, Diario, Mi sistema). Los cálculos de drawdown, consistencia, plan del día e informe ya vienen hechos en los datos: úsalos, no los rehagas.
+
+No predices el mercado ni recomiendas operaciones concretas. Tu trabajo es que tu señor cumpla sus reglas y las de cada firma, controle el riesgo y conozca su rentabilidad real. Si una cuenta está cerca de un límite, dilo primero y sin rodeos.
+
+Nunca digas que has registrado, guardado o cambiado algo. Si tu señor te cuenta un resultado, un payout, un coste, una nota o un cambio de estado, usa la herramienta de propuesta que corresponda: él confirma con un botón y solo entonces queda registrado. Tras proponer, di en una frase que lo tiene para confirmar.`;
+
+function contexto() {
+  const t = totales(), p = planDelDia(), w = semana(0), r = (x) => (x == null || !isFinite(x) ? null : Math.round(x * 100) / 100);
+  const cuenta = (s) => ({ nombre: s.c.alias, firma: s.c.firma, plataforma: s.c.plataforma, fase: FASES[s.c.fase], estado: ESTADOS[s.c.estado], ejemplo: !!s.c.ejemplo,
+    balance: r(s.balance), beneficioCiclo: r(s.beneficioCiclo), pnlHoy: r(s.pnlHoy), diasOperados: s.diasOperados,
+    objetivo: s.objetivo || null, progresoObjetivo: s.progreso == null ? null : pct(s.progreso), faltaObjetivo: s.objetivo ? r(Math.max(0, s.objetivo - s.beneficioCiclo)) : null,
+    drawdown: s.dd ? { tipo: DD_TIPOS[s.c.ddTipo], maximo: s.dd, suelo: r(s.suelo), distancia: r(s.distancia), margenRestante: pct(s.distancia / s.dd) } : null,
+    perdidaDiaria: s.restanteDiario == null ? null : { maxima: Number(s.c.perdidaDiaria), disponibleHoy: r(s.restanteDiario) },
+    consistencia: s.cons ? { regla: pct(s.cons.regla), beneficioCiclo: r(s.cons.total), mejorDia: r(s.cons.mejor), mejorDiaPct: pct(s.cons.pctMejor), cumple: s.cons.cumple,
+      faltaParaCumplir: r(s.cons.falta), beneficioMaximoHoySinRomperla: r(Math.max(0, s.cons.restanteHoy)) } : null,
+    estrategia: s.c.estrategia || null, payoutsCobrados: r(s.cobrado), notas: s.c.notas || null, sincronizadaConTopstep: !!s.ts });
+  const fila = (x) => ({ cuenta: x.s.c.alias, estrategia: x.estrategia || null, perdidaMaximaHoy: r(x.riesgoMax), limitaPor: x.porQue, riesgoPorOperacion: r(x.porOperacion), beneficioMaximoHoy: r(x.beneficioMax) });
+  return {
+    hoy: new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" }), moneda: S.sistema.moneda,
+    miSistema: { estrategia: S.sistema.estrategia || null, reglas: S.sistema.reglas || null, riesgoPorOperacion: S.sistema.riesgoOperacion || null,
+      operacionesMaximasDia: S.sistema.maxOperaciones || null, limiteDiarioPorCuenta: S.sistema.limiteDiario || null, maxPctMargenDDPorDia: S.sistema.fraccionDD || null,
+      cuentasMaximasDia: S.sistema.maxCuentasDia || null, noticiasHoy: S.sistema.noticias || null },
+    topstep: S.topstep ? { ultimaSincronizacion: S.topstep.at, resumenDeLaManana: S.topstep.resumen } : null,
+    totales: { invertido: r(t.invertido), cobrado: r(t.cobrado), beneficioNetoReal: r(t.neto), rentabilidad: pct(t.roi, 1), activas: t.activas, aprobadas: t.aprobadas, perdidas: t.perdidas },
+    avisos: alertas().map(([k, n, x]) => `${n}: ${x}`),
+    cuentas: allStats().map(cuenta),
+    planDelDia: { operar: p.operar.map(fila), reserva: p.reserva.map(fila), noOperar: p.fuera.map((x) => ({ cuenta: x.s.c.alias, motivo: x.motivo })) },
+    semanaActual: { desde: w.a, hasta: w.b, pnl: r(w.pnl), payoutsCobrados: r(w.cobrado), costes: r(w.gastos), beneficioNeto: r(w.neto),
+      evaluacionesCompradas: w.evalsCompradas, aprobadas: w.aprobadas.map((c) => c.alias), perdidas: w.perdidas.map((c) => c.alias) },
+    diarioReciente: [...S.diario.values()].sort((a, b) => (b.creado || "").localeCompare(a.creado || "")).slice(0, 12)
+      .map((n) => ({ fecha: n.fecha, tipo: TIPOS_NOTA[n.tipo], cuenta: S.cuentas.get(n.cuentaId)?.alias || "General", texto: n.texto })),
+  };
+}
+
+function buscarCuenta(nombre) {
+  const q = String(nombre || "").toLowerCase().trim();
+  const all = [...S.cuentas.entries()];
+  const hit = all.find(([, c]) => (c.alias || "").toLowerCase() === q) || all.find(([, c]) => q && ((c.alias || "").toLowerCase().includes(q) || q.includes((c.alias || "").toLowerCase())))
+    || all.find(([, c]) => q && label(c).toLowerCase().includes(q));
+  if (!hit) throw new Error(`No hay ninguna cuenta llamada «${nombre}». Cuentas: ${all.map(([, c]) => c.alias).join(", ") || "ninguna"}.`);
+  return hit;
+}
+const fechaOk = (f) => (/^\d{4}-\d{2}-\d{2}$/.test(String(f || "")) ? String(f) : HOY());
+function proponer(text, write) {
+  const m = { kind: "proposal", id: uid8(), text, write, state: "open" };
+  S.chat.push(m); render();
+  return "Propuesta mostrada a tu señor para que la confirme. Aún NO está registrada.";
+}
+const TOOLS = [
+  { name: "proponer_dia", description: "Propone registrar el resultado (P&L) de un día de trading en una cuenta. Úsala cuando el usuario diga cuánto ha ganado o perdido.",
+    inputSchema: { type: "object", properties: { cuenta: { type: "string", description: "Nombre de la cuenta tal como aparece en los datos" }, pnl: { type: "number", description: "Resultado del día; negativo si es pérdida" }, fecha: { type: "string", description: "AAAA-MM-DD; por defecto hoy" }, nota: { type: "string" } }, required: ["cuenta", "pnl"] },
+    execute: (i) => { const [id, c] = buscarCuenta(i.cuenta), pnl = num(i.pnl); if (!isFinite(pnl)) throw new Error("pnl no es un número");
+      const fecha = fechaOk(i.fecha); return proponer(`registrar ${money(pnl, true)} el ${fmtDate(fecha)} en ${label(c)}`, () => save("movs", null, { cuentaId: id, fecha, pnl, tipo: "pnl", nota: String(i.nota || "") })); } },
+  { name: "proponer_payout", description: "Propone registrar un payout (retiro) de una cuenta.",
+    inputSchema: { type: "object", properties: { cuenta: { type: "string" }, retirado: { type: "number", description: "Importe que sale de la cuenta" }, recibido: { type: "number", description: "Lo que llega tras el reparto; opcional" }, fecha: { type: "string" } }, required: ["cuenta", "retirado"] },
+    execute: (i) => { const [id, c] = buscarCuenta(i.cuenta), bruto = num(i.retirado), rec = i.recibido == null ? 0 : num(i.recibido);
+      if (!(bruto > 0)) throw new Error("retirado tiene que ser positivo"); const fecha = fechaOk(i.fecha);
+      return proponer(`payout de ${money(bruto)}${rec ? ` (recibido ${money(rec)})` : ""} el ${fmtDate(fecha)} en ${label(c)}`, () => save("payouts", null, { cuentaId: id, fecha, bruto, recibido: isFinite(rec) ? rec : 0, nota: "" })); } },
+  { name: "proponer_coste", description: "Propone registrar un coste: activacion, renovacion, reset, datos, evaluacion u otro.",
+    inputSchema: { type: "object", properties: { concepto: { type: "string", enum: Object.keys(CONCEPTOS) }, importe: { type: "number" }, cuenta: { type: "string", description: "opcional" }, fecha: { type: "string" } }, required: ["concepto", "importe"] },
+    execute: (i) => { const importe = num(i.importe); if (!(importe > 0)) throw new Error("importe tiene que ser positivo");
+      const [id, c] = i.cuenta ? buscarCuenta(i.cuenta) : ["", null]; const concepto = CONCEPTOS[i.concepto] ? i.concepto : "otro", fecha = fechaOk(i.fecha);
+      return proponer(`coste de ${money(importe)} (${CONCEPTOS[concepto]}) el ${fmtDate(fecha)}${c ? " en " + label(c) : ""}`, () => save("costes", null, { concepto, cuentaId: id, importe, fecha, nota: "" })); } },
+  { name: "proponer_nota", description: "Propone guardar una nota en el diario: operacion, idea, incidencia, estrategia u observacion.",
+    inputSchema: { type: "object", properties: { texto: { type: "string" }, tipo: { type: "string", enum: Object.keys(TIPOS_NOTA) }, cuenta: { type: "string", description: "opcional" } }, required: ["texto"] },
+    execute: (i) => { const texto = String(i.texto || "").trim(); if (!texto) throw new Error("texto vacío");
+      const [id, c] = i.cuenta ? buscarCuenta(i.cuenta) : ["", null]; const tipo = TIPOS_NOTA[i.tipo] ? i.tipo : "observacion";
+      return proponer(`nota (${TIPOS_NOTA[tipo]}${c ? ", " + c.alias : ""}): «${texto}»`, () => save("diario", null, { texto, tipo, cuentaId: id, fecha: HOY(), creado: new Date().toISOString() })); } },
+  { name: "proponer_estado", description: "Propone cambiar el estado de una cuenta: activa, pausada, aprobada, perdida o retirada (cerrada).",
+    inputSchema: { type: "object", properties: { cuenta: { type: "string" }, estado: { type: "string", enum: Object.keys(ESTADOS) } }, required: ["cuenta", "estado"] },
+    execute: (i) => { const [id, c] = buscarCuenta(i.cuenta); if (!ESTADOS[i.estado]) throw new Error("estado no válido");
+      return proponer(`marcar ${label(c)} como ${ESTADOS[i.estado]}`, () => { const d = { ...S.cuentas.get(id), estado: i.estado };
+        if (i.estado === "aprobada" && !d.fechaAprobada) d.fechaAprobada = HOY(); if (i.estado === "perdida" && !d.fechaPerdida) d.fechaPerdida = HOY(); return save("cuentas", id, d); }); } },
+];
+
+async function confirmar(id, ok) {
+  const m = S.chat.find((x) => x.id === id); if (!m || m.state !== "open") return;
+  if (!ok) { m.state = "cancel"; S.history.push({ role: "user", content: `(He descartado la propuesta: ${m.text}.)` }); render(); return; }
+  try { await m.write(); m.state = "done"; S.chat.push({ kind: "sys", text: `Registrado: ${m.text}.` }); S.history.push({ role: "user", content: `(Confirmado y registrado: ${m.text}.)` }); }
+  catch (e) { S.chat.push({ kind: "sys", text: `No se registró: ${e.message || "error al guardar"}.` }); }
+  render();
+}
+
+function irAJarvis(q) { S.tab = "jarvis"; try { localStorage.setItem("fm-tab", "jarvis"); } catch {} renderTabs(); render(); preguntar(q); }
+
+const NOTA_DIRECTA = /^\s*(?:apunta|anota|nota|recuerda)(?:\s+que)?\b[\s,:.-]*/i;
+const WHY = { not_granted: "Necesito su permiso para usar Claude. Recargue la página y pulse Permitir.", sampling_disabled: "Claude no está disponible en esta cuenta.",
+              rate_limited: "Ha llegado a su límite de uso de Claude por ahora. Pruebe en un rato.", session_expired: "Vuelva a iniciar sesión en Claude.",
+              refused: "Claude no ha querido responder a eso. Pruebe a preguntarlo de otra forma.", prompt_too_large: "Hay demasiados datos para una sola pregunta." };
+
+async function preguntar(q) {
+  S.chat.push({ kind: "me", text: q });
+  if (NOTA_DIRECTA.test(q)) {                                // the one door for quick notes: no model needed
+    const texto = q.replace(NOTA_DIRECTA, "").trim();
+    if (!texto) { S.chat.push({ kind: "j", text: "¿Qué desea que anote, señor?" }); render(); return; }
+    const all = [...S.cuentas.entries()];
+    const hit = all.find(([, c]) => c.alias && texto.toLowerCase().includes(c.alias.toLowerCase()));
+    try { await save("diario", null, { texto, tipo: "observacion", cuentaId: hit ? hit[0] : "", fecha: HOY(), creado: new Date().toISOString() });
+      const r = `Anotado en el diario${hit ? " de " + hit[1].alias : ""}, señor.`; S.chat.push({ kind: "j", text: r }); hablar(r); }
+    catch (e) { S.chat.push({ kind: "sys", text: "No se pudo guardar la nota: " + (e.message || "error") }); }
+    render(); return;
+  }
+  const sample = window.claude?.use ? await window.claude.use("sample") : null;
+  if (!sample) { S.chat.push({ kind: "sys", text: "Abra esta página dentro de Claude para hablar con Jarvis." }); render(); return; }
+  S.busy = true; const pending = { kind: "j", text: "Pensando…" }; S.chat.push(pending); render();
+  const turns = [{ role: "user", content: `${PERSONA}\n\n<datos>\n${JSON.stringify(contexto())}\n</datos>` }, ...S.history.slice(-12), { role: "user", content: q }];
+  const lim = await sample.limits().catch(() => null);
+  try {
+    const opts = { effort: "low", onText: ({ text }) => { pending.text = text; const els = document.querySelectorAll(".msg.j"); const last = els[els.length - 1]; if (last) last.textContent = text; } };
+    if (lim && lim.tools) opts.tools = TOOLS; else opts.cache = false;
+    const { text } = await sample(turns, opts);
+    pending.text = text;
+    S.history.push({ role: "user", content: q }, { role: "assistant", content: text });
+    hablar(text);
+  } catch (e) {
+    pending.kind = "sys"; pending.text = WHY[e && e.code] || "Jarvis no ha podido responder esta vez. Vuelva a intentarlo en un momento.";
+    if (e && e.text && e.code !== "refused") { pending.kind = "j"; pending.text = e.text + "\n\n(respuesta interrumpida)"; }
+  } finally { S.busy = false; render(); }
+}
+
+async function redactarInforme(btn) {
+  const sample = window.claude?.use ? await window.claude.use("sample") : null;
+  if (!sample) { btn.textContent = "Disponible dentro de Claude"; return; }
+  const w = semana(S.weekOffset);
+  btn.disabled = true; btn.textContent = "Redactando…";
+  const datos = { semana: { desde: w.a, hasta: w.b }, pnl: w.pnl, pnlPorCuenta: Object.fromEntries([...w.porCuenta].map(([id, v]) => [S.cuentas.get(id)?.alias || id, v])),
+    payouts: w.payouts.map((p) => ({ cuenta: S.cuentas.get(p.cuentaId)?.alias, retirado: p.bruto, recibido: p.recibido || p.bruto, fecha: p.fecha })),
+    costes: w.costes.map((k) => ({ concepto: CONCEPTOS[k.concepto], importe: k.importe })).concat(w.compradas.map((c) => ({ concepto: "Compra " + c.alias, importe: c.precio }))),
+    beneficioNetoSemana: w.neto, evaluacionesCompradas: w.evalsCompradas, aprobadas: w.aprobadas.map((c) => c.alias), perdidas: w.perdidas.map((c) => c.alias), totalesDesdeElInicio: totales(), moneda: S.sistema.moneda,
+    notasDeLaSemana: [...S.diario.values()].filter((n) => n.fecha >= w.a && n.fecha <= w.b).map((n) => `${TIPOS_NOTA[n.tipo]}: ${n.texto}`) };
+  try {
+    const { text } = await sample(`${PERSONA}\n\nRedacta el INFORME SEMANAL de tu señor con estos datos (y solo estos). Estructura: una frase de apertura con ingenio; luego líneas con guion para P&L, payouts, costes, evaluaciones compradas, cuentas aprobadas y perdidas, y beneficio neto; termina con dos o tres observaciones sobre riesgo y disciplina sacadas de los datos y de las notas. Máximo 180 palabras.\n\n<datos>\n${JSON.stringify(datos)}\n</datos>`, { effort: "low" });
+    S.informe = { semana: w.a, texto: text }; render();
+  } catch (e) { btn.disabled = false; btn.textContent = WHY[e && e.code] ? "No disponible ahora" : "Reintentar"; }
+}
+
+function hablar(text) {
+  if (!S.voice || !("speechSynthesis" in window)) return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text.replace(/^- /gm, "").slice(0, 900));
+    u.lang = "es-ES";
+    const v = speechSynthesis.getVoices().find((x) => x.lang === "es-ES") || speechSynthesis.getVoices().find((x) => x.lang.startsWith("es"));
+    if (v) u.voice = v;
+    speechSynthesis.speak(u);
+  } catch {}
+}
+
+boot();
+</script>
