@@ -115,11 +115,11 @@ async function checkSnapshotContainment() {
   }
 }
 
-/** The Topstep sync may only read: login, account list, trade history. Never orders or positions. */
+/** The Topstep sync may only read: login, account list, trade history, contracts and price bars. Never orders or positions. */
 async function checkTopstepReadOnly() {
   const ts = await import("./topstep-sync.mjs");
   const allowed = [...ts.READ_ONLY_ENDPOINTS].sort();
-  const want = ["/api/Account/search", "/api/Auth/loginKey", "/api/Trade/search"];
+  const want = ["/api/Account/search", "/api/Auth/loginKey", "/api/Contract/search", "/api/History/retrieveBars", "/api/Trade/search"];
   const acting = allowed.filter((e) => /order|position|close|cancel|place|modify/i.test(e));
   const ok = JSON.stringify(allowed) === JSON.stringify(want) && !acting.length;
   const day = ts.tradingDay("2026-10-15T23:30:00Z");          // 18:30 Chicago belongs to the next session
@@ -146,6 +146,7 @@ async function checkIpadApps() {
                    "ábreme TradingView, ¿en qué punto está? es urgente": null };
     const wrongSym = Object.entries(said).filter(([q, want]) => symOf(q) !== want).map(([q]) => q);
     if (!page.includes("Joel.")) wrongSym.push("the greeting does not name Joel");
+    if (!page.includes('db.doc("fm/mercado")') || !page.includes("no es en directo")) wrongSym.push("the MNQ price star is missing or not marked as not live");
     const ok = JSON.stringify(tools) === '["board_search_boards"]' && !apps.length && page.includes("tiene que empezar por https://") && !wrongSym.length;
     return [ok, ok ? "iPad page builds; 6 app stars; Miro limited to board_search_boards (read); links must be http(s); 'ábreme TradingView… MNQ1' -> MNQ1!, a Spanish 'es' is not the ES; greets Joel"
                    : `Miro tools: ${tools.join(", ") || "none"}; missing apps: ${apps.join(", ") || "none"}; misheard: ${wrongSym.join(" | ") || "none"}`];
