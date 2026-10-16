@@ -267,7 +267,11 @@ async function main() {
   fs.writeFileSync(outM, JSON.stringify(m, null, 1));
   doc.resumen += "\n\nMercado: " + m.texto;
   const ci = process.argv.indexOf("--checkin");
-  if (ci > 0) fs.writeFileSync(process.argv[ci + 2] || "/tmp/fm-checkin.json", JSON.stringify(checkin(list, process.argv[ci + 1] || "Londres", at), null, 1));
+  if (ci > 0) {
+    const q = checkin(list, process.argv[ci + 1] || "Londres", at);
+    if (doc.vigilancia.nuevos.length) q.pregunta = doc.vigilancia.nuevos.join(" ") + " " + q.pregunta;
+    fs.writeFileSync(process.argv[ci + 2] || "/tmp/fm-checkin.json", JSON.stringify(q, null, 1));
+  }
   fs.writeFileSync(out, JSON.stringify(doc, null, 1));
   console.log(JSON.stringify({ ok: true, out, cuentasLeidas: accounts.length, vinculadas: rules.length, avisos: doc.vigilancia.nuevos.length,
                                operaciones: Object.values(doc.cuentas).reduce((n, c) => n + (c.operaciones || 0), 0) }));
