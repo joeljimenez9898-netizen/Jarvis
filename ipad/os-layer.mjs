@@ -116,12 +116,13 @@ export const MARKUP = `
     <span class="os-pill"><b></b><em id="os-mode" style="font-style:normal">En espera</em></span>
     <span class="os-pill" style="font-size:10px">Claude · tu cuenta</span>
     <div style="width:100%">
+      <button class="os-toggle" id="os-voice">🔊 Voz <span>tocar para activar</span></button>
       <button class="os-toggle" id="os-labels" aria-pressed="true">Etiquetas <span>sí</span></button>
       <button class="os-toggle" id="os-fm">Funding Manager <span>abrir</span></button>
     </div>
   </div>
 </aside>
-<div id="os-top" class="glass"><button type="button" id="os-fit">◎ Ver todo</button><button type="button" id="os-new">Nueva conversación</button></div>
+<div id="os-top" class="glass"><button type="button" id="os-voice-top">🔊 Voz</button><button type="button" id="os-fit">◎ Ver todo</button><button type="button" id="os-new">Nueva conversación</button></div>
 <div id="os-drawers"><button type="button" class="l">☰ Cerebro</button><button type="button" class="r">J.A.R.V.I.S. ◎</button></div>`;
 
 export const SCRIPT = `
@@ -165,6 +166,18 @@ export const SCRIPT = `
       N().forEach((n) => { if (n.__tag) n.__tag.visible = on; });
     });
     $("os-fm").addEventListener("click", () => window.FM && window.FM.open());
+    const voiceOn = (e) => {
+      const tag = $("os-voice").querySelector("span");
+      if (!window.Voice || !Voice.available) { tag.textContent = "no disponible aquí"; Voice && Voice.setNote("Este navegador no deja hablar a la página. Abre Jarvis en Safari."); return; }
+      tag.textContent = "probando…";
+      Voice.hello("A su servicio, señor. Ya me oye.").then((ok) => {
+        tag.textContent = ok ? "activada" : "sin sonido";
+        $("os-voice-top").textContent = ok ? "🔊 Voz activada" : "🔇 Sin sonido";
+        if (!ok) Voice.setNote("No he podido hablar: sube el volumen, quita el modo silencio y vuelve a tocar «Voz». Si sigue sin sonar, abre Jarvis en Safari.");
+      });
+    };
+    $("os-voice").addEventListener("click", voiceOn);
+    $("os-voice-top").addEventListener("click", voiceOn);
     $("os-fit").addEventListener("click", () => Focus.clear());
     $("os-new").addEventListener("click", () => $("reset").click());
     document.querySelector("#os-drawers .l").addEventListener("click", () => { document.body.classList.toggle("os-left-open"); document.body.classList.remove("os-right-open"); });

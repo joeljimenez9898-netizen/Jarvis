@@ -56,10 +56,13 @@ for (const [a, b] of [
    "|| voices.find(v => /^es[-_]/i.test(v.lang) && v.default) || voices.find(v => /^es[-_]/i.test(v.lang)) || null;"],
   ['u.lang = "en-GB";', 'u.lang = "es-ES";'],
   ['rec.lang = "en-GB";', 'rec.lang = "es-ES";'],
+  ["      if (last) speak(last.text).then(last.resolve);", "      if (last && !helloed) speak(last.text).then(last.resolve); else if (last) last.resolve();"],
+  ["  function unlock() {", "  let helloed = false;\n  function unlock() {"],
   ['"Click the mic and talk, or type below"', '"Escribe abajo o dicta con el micrófono del teclado"'],
   ['"Type below (this browser has no speech recognition)"', '"Escribe abajo o dicta con el micrófono del teclado"'],
   ["`Listening: “${state.heard}”` : \"Listening…\"", "`Escuchando: “${state.heard}”` : \"Escuchando…\""],
   ['text = "Thinking…";', 'text = "Pensando…";'],
+  ["  window.Voice = {\n    FINISH_MS,", "  // Spoken INSIDE the tap: iPad only lets a page talk after a deliberate gesture.\n  function hello(text) {\n    helloed = true;   // the test line replaces the waiting greeting\n    queued.splice(0).forEach((q) => q.resolve());\n    unlock();\n    if (!synth) return Promise.resolve(false);\n    stopSpeaking();\n    const u = new SpeechSynthesisUtterance(text || \"A su servicio, señor.\");\n    const v = pickVoice(); if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = \"es-ES\"; }\n    u.volume = 1;\n    return new Promise((res) => {\n      let started = false;\n      u.onstart = () => { started = true; set({ speaking: true }); };\n      u.onend = () => { set({ speaking: false }); res(true); };\n      u.onerror = () => { set({ speaking: false }); res(started); };\n      if (!utter(u)) return res(false);\n      setTimeout(() => { if (!started && !synth.speaking) res(false); }, 2500);\n    });\n  }\n\n  window.Voice = {\n    hello, available: !!synth, FINISH_MS,"],
 ]) voice = must(voice, a, b);
 
 // ── 2. the second brain: graph from the user's data, and the in-page brain ──
