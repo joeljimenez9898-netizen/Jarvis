@@ -65,7 +65,7 @@ for (const [a, b] of [
   ["    rec.continuous = true;", "    rec.continuous = false;"],
   ["      if (state.listening) { try { rec.start(); } catch { stopListening(); } }", "      if (state.listening) stopListening();   // one question per tap"],
   ["    if (!Recognition || state.listening) return;\n    rec = new Recognition();", "    if (!Recognition || state.listening) return;\n    stopSpeaking();                         // a tap on the mic cuts Jarvis short\n    rec = new Recognition();"],
-  ['"not-allowed": "Microphone blocked. Allow it in the address bar and try again."', '"not-allowed": "El micrófono está bloqueado. En el iPad: Ajustes › Apps › Safari › Micrófono › Permitir, y vuelve a tocarlo. Mientras, usa el micrófono del teclado."'],
+  ['"not-allowed": "Microphone blocked. Allow it in the address bar and try again."', '"not-allowed": "El micrófono está bloqueado en esta ventana. Usa el micrófono del teclado (toca la caja de texto): te contesto igual, por escrito y en voz alta."'],
   ['"service-not-allowed": "Microphone blocked by the browser."', '"service-not-allowed": "El iPad no deja reconocer la voz aquí. Activa Ajustes › General › Teclado › Dictado, o usa el micrófono del teclado."'],
   ['"audio-capture": "No microphone found."', '"audio-capture": "No encuentro el micrófono del iPad."'],
   ["network: \"Speech recognition needs the browser's speech service. Brave and some Chromium builds don't have it; use Chrome or Edge.\"", 'network: "El reconocimiento de voz necesita internet. Revisa la conexión y vuelve a tocar el micrófono."'],
