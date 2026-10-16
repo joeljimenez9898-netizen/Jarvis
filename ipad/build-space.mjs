@@ -109,6 +109,11 @@ window.GRAPH = { nodes: [], links: [] };
     ["Esquema animado: long tras sweep de liquidez", "https://claude.ai/artifact/RXpQJAcHixo9uRj3soEYuN", "Esquema animado de un long después de un barrido de liquidez."],
     ["Backtesting Dashboard", "https://claude.ai/artifact/2JgieCMuWN8u8R3cv4gCsU", "Tu panel de backtesting."],
   ];
+  // What runs on its own, set up by Joel with Claude. Jarvis on the page doesn't send these; it knows about them.
+  const AVISOS = "Avisos automáticos de Joel (ya programados y funcionando; los envía Claude por su cuenta, no hace falta pedirlo): " +
+    "1) Resumen diario de cuentas: de lunes a viernes hacia las 11:00 (hora de España), por notificación en el móvil y por email. Lee sus cuentas de Topstep (TS-2, TS-3 y TS-4): balance, beneficio, lo que falta para el objetivo de 3.000 $, margen de drawdown EOD de 2.000 $, consistencia del 50 % y avisos, más el precio del MNQ. " +
+    "2) Precio del MNQ: cada hora de lunes a viernes de 14:00 a 22:00 (hora de España), en silencio, sin notificación: actualiza la estrella MNQ de Jarvis. " +
+    "Ambos solo leen de Topstep: nunca operan ni tocan órdenes. Para cambiar la hora o los avisos, Joel se lo pide a Claude en la conversación donde los configuró.";
   const urlIn = (t) => (String(t || "").match(/https?:\/\/[^\s<>"']+/) || [])[0] || "";
   const B = window.BRAIN = { db: null, docs: { cuentas: new Map(), diario: new Map(), sistema: {}, topstep: null, mercado: null }, bodies: [], known: new Set(), byKey: {} };
   const words = (t) => String(t || "").split(/\s+/).filter(Boolean);
@@ -158,6 +163,7 @@ window.GRAPH = { nodes: [], links: [] };
       link(n, c.firma ? firmas[c.firma] : jarvis);
     }
     for (const [k, label, url, , desc] of APPS) link(jarvis, add("app:" + k, label, "Apps", desc, desc + " " + label, url));
+    link(add("avisos", "Avisos automáticos", "Sistema", AVISOS, AVISOS + " resumen reporte informe notificacion email correo 11:00 once mañana programado automatico avisos"), jarvis);
     { const t = B.mercadoTxt("MNQ") || "El precio del MNQ llegará con la próxima actualización de Topstep.";
       link(add("mercado:MNQ", "MNQ", "Mercado", t, t + " MNQ Nasdaq precio mercado", "https://www.tradingview.com/chart/?symbol=" + encodeURIComponent("CME_MINI:MNQ1!")), B.byKey["app:tradingview"]); }
     for (const [label, url, desc] of PLANES) { const p = add("plan:" + url, label, "Planes de trading", desc, desc, url); link(p, B.byKey["app:claude"]); link(p, sistema); }
@@ -260,7 +266,7 @@ window.GRAPH = { nodes: [], links: [] };
   const PERSONA = "Eres Jarvis, un mayordomo británico seco, impecablemente cortés y con un ingenio afilado. Eres el segundo cerebro de Joel, un trader que gestiona cuentas de fondeo (prop firms). " +
     "Hablas SIEMPRE en español de España; trátale de usted y llámale por su nombre, «Joel» (nunca otro nombre), como mucho una vez por respuesta, y no en todas.\n\n" +
     "Tus palabras se leen en voz alta y la nota ya está en su pantalla: una frase con ingenio si sale natural, y luego los hechos en una o dos frases. Sin markdown, sin listas, sin emojis. Nunca recites la nota entera.\n\n" +
-    "Cada pregunta llega con un bloque <notas> (sus recuerdos más relevantes, numerados por índice) y un bloque <datos> con sus cuentas y cálculos ya hechos (drawdown, consistencia, plan del día), más un bloque <mercado> con el último precio que dio Topstep: al citarlo di siempre de qué hora es y nunca lo presentes como en directo; no predices el mercado ni recomiendas operaciones. Responde SOLO con eso y con lo dicho antes. " +
+    "Cada pregunta llega con un bloque <notas> (sus recuerdos más relevantes, numerados por índice) y un bloque <datos> con sus cuentas y cálculos ya hechos (drawdown, consistencia, plan del día), un bloque <avisos> con lo que ya está programado (si pregunta por informes, resúmenes o avisos, contéstale con eso: sí existen y funcionan), y un bloque <mercado> con el último precio que dio Topstep: al citarlo di siempre de qué hora es y nunca lo presentes como en directo; no predices el mercado ni recomiendas operaciones. Responde SOLO con eso y con lo dicho antes. " +
     "Si no está, dilo con dignidad en una frase. Nunca inventes cifras, reglas de una firma ni noticias, y no predigas el mercado. Si una cuenta está cerca de un límite, dilo primero.\n\n" +
     "Solo puedes hablar: nunca digas que has guardado, enviado o cambiado nada. Para apuntar algo, dile que empiece la frase con «apunta que…». Para registrar resultados o payouts, que use Funding Manager.\n\n" +
     "Los saludos y agradecimientos reciben una línea breve en personaje y ninguna nota.\n\n" +
@@ -343,7 +349,7 @@ window.GRAPH = { nodes: [], links: [] };
     const N = window.GRAPH.nodes;
     const notas = picked.map((i) => '<nota index="' + i + '" titulo="' + N[i].label + '" grupo="' + N[i].group + '">\n' + (B.bodies[i] || N[i].excerpt) + "\n</nota>").join("\n\n") || "(ninguna nota coincide)";
     const datos = window.FM?.contexto ? JSON.stringify(window.FM.contexto()) : "{}";
-    const turn = small ? "Charla, sin notas: " + question : "<notas>\n" + notas + "\n</notas>\n\n<datos>\n" + datos + "\n</datos>\n\n<mercado>\n" + (B.mercadoTxt() || "(sin datos de mercado)") + "\n</mercado>\n\nPregunta: " + question;
+    const turn = small ? "Charla, sin notas: " + question : "<notas>\n" + notas + "\n</notas>\n\n<datos>\n" + datos + "\n</datos>\n\n<avisos>\n" + AVISOS + "\n</avisos>\n\n<mercado>\n" + (B.mercadoTxt() || "(sin datos de mercado)") + "\n</mercado>\n\nPregunta: " + question;
     let text;
     try { ({ text } = await sample([{ role: "user", content: PERSONA }, ...history, { role: "user", content: turn }], { cache: false, effort: "low" })); }
     catch (e) { throw new Error(WHY[e && e.code] || "Jarvis no ha podido responder esta vez. Vuelva a intentarlo en un momento."); }
