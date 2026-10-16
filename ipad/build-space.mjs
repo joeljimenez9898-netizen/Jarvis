@@ -89,7 +89,7 @@ for (const [a, b] of [
   ["    hello, available: !!synth, FINISH_MS,", "    hello, prime: () => { if (!synth) return; const p = new SpeechSynthesisUtterance(\" \"); p.volume = 0; utter(p); }, available: !!synth, FINISH_MS,"],
   // iPad: speech may only start inside a tap, and dictation in between breaks that. A silent line,
   // started in the tap and kept going, holds the voice open so the answer follows it without a tap.
-  ["  function stopSpeaking() {", "  let awake = 0, chain = 0;\n  function keepAwake(ms = 90000) {\n    if (!synth || MUTED) return;\n    const running = awake > Date.now();\n    awake = Date.now() + ms;\n    if (running) return;\n    const id = ++chain;\n    const tick = () => {\n      if (id !== chain || awake <= Date.now()) { if (id === chain) awake = 0; return; }\n      const u = new SpeechSynthesisUtterance(\"silencio\"); u.volume = 0; u.rate = 0.6; u.lang = \"es-ES\";\n      live.add(u);\n      u.onend = () => { live.delete(u); tick(); };\n      u.onerror = () => { live.delete(u); if (id === chain) awake = 0; };\n      if (!utter(u)) awake = 0;\n    };\n    tick();\n  }\n  function stopSpeaking() {\n    if (awake > Date.now() && !state.speaking) { generation++; return; }   // only the silent line is playing: keep it\n    chain++; awake = 0;"],
+  ["  function stopSpeaking() {", "  let awake = 0, chain = 0;\n  function keepAwake(ms = 90000) {\n    if (!synth || MUTED) return;\n    const running = awake > Date.now();\n    awake = Date.now() + ms;\n    if (running) return;\n    const id = ++chain;\n    const tick = () => {\n      if (id !== chain || awake <= Date.now()) { if (id === chain) awake = 0; return; }\n      const u = new SpeechSynthesisUtterance(\"silencio\"); u.volume = 0.01; u.rate = 0.6; u.lang = \"es-ES\";\n      live.add(u);\n      u.onend = () => { live.delete(u); tick(); };\n      u.onerror = () => { live.delete(u); if (id === chain) awake = 0; };\n      if (!utter(u)) awake = 0;\n    };\n    tick();\n  }\n  function stopSpeaking() {\n    if (awake > Date.now() && !state.speaking) { generation++; return; }   // only the silent line is playing: keep it\n    chain++; awake = 0;"],
   ["    stopSpeaking();\n    const gen = ++generation;", "    const holding = awake > Date.now();\n    chain++; awake = 0;                     // the silent line ends; the answer is queued right behind it\n    if (!holding) stopSpeaking();\n    const gen = ++generation;"],
   ["    hello, prime:", "    hello, keepAwake, prime:"],
 ]) voice = must(voice, a, b);
@@ -98,7 +98,7 @@ for (const [a, b] of [
 const brain = String.raw`
 window.GRAPH = { nodes: [], links: [] };
 (() => {
-  const TIPOS = { operacion: "Operaciones", idea: "Ideas", incidencia: "Incidencias", estrategia: "Estrategia", observacion: "Notas", enlace: "Enlaces" };
+  const TIPOS = { operacion: "Operaciones", idea: "Ideas", incidencia: "Incidencias", estrategia: "Estrategia", observacion: "Notas", enlace: "Enlaces", sesion: "Sesiones", analisis: "Análisis de trades" };
   // Your tools, each a star. A link you save hangs from its app by its address.
   const APPS = [
     ["tradingview", "TradingView", "https://www.tradingview.com/", /tradingview/i, "Tus gráficos y alertas de TradingView. Guarda aquí el enlace de cada gráfico o idea."],
@@ -118,9 +118,10 @@ window.GRAPH = { nodes: [], links: [] };
   const AVISOS = "Avisos automáticos de Joel (ya programados y funcionando; los envía Claude por su cuenta, no hace falta pedirlo): " +
     "1) Resumen diario de cuentas: de lunes a viernes hacia las 11:00 (hora de España), por notificación en el móvil y por email. Lee sus cuentas de Topstep (TS-2, TS-3 y TS-4): balance, beneficio, lo que falta para el objetivo de 3.000 $, margen de drawdown EOD de 2.000 $, consistencia del 50 % y avisos, más el precio del MNQ. " +
     "2) Cuentas y precio del MNQ: cada hora de lunes a viernes de 14:00 a 22:00 (hora de España), en silencio, sin notificación: Jarvis lee de nuevo sus cuentas de Topstep y el MNQ, así que lo que sabe de sus cuentas tiene como mucho una hora en esas franjas. Joel no tiene que registrar nada a mano de las cuentas de Topstep; solo los payouts y lo que pagó por cada cuenta, si quiere el balance real del negocio. " +
-    "Ambos solo leen de Topstep: nunca operan ni tocan órdenes. Para cambiar la hora o los avisos, Joel se lo pide a Claude en la conversación donde los configuró.";
+    "3) Pregunta de sesión: de lunes a viernes hacia las 12:00 (sesión de Londres) y hacia las 18:00 (sesión de Nueva York), una notificación en el móvil con sus cifras del día que le pregunta cómo le ha ido; Jarvis guarda su respuesta en el diario. Joel también puede mandar a Jarvis la foto de un trade con el botón 📷 para que se la analice. " +
+    "Todos solo leen de Topstep: nunca operan ni tocan órdenes. Para cambiar la hora o los avisos, Joel se lo pide a Claude en la conversación donde los configuró.";
   const urlIn = (t) => (String(t || "").match(/https?:\/\/[^\s<>"']+/) || [])[0] || "";
-  const B = window.BRAIN = { db: null, docs: { cuentas: new Map(), diario: new Map(), sistema: {}, topstep: null, mercado: null }, bodies: [], known: new Set(), byKey: {} };
+  const B = window.BRAIN = { db: null, docs: { cuentas: new Map(), diario: new Map(), sistema: {}, topstep: null, mercado: null, checkin: null }, bodies: [], known: new Set(), byKey: {} };
   const words = (t) => String(t || "").split(/\s+/).filter(Boolean);
   const titleOf = (t) => { const w = words(t).filter((x, i) => i || !/^(que|el|la|los|las|un|una)$/i.test(x)).slice(0, 6).join(" ").replace(/[.,;:!?]+$/, "");
                            return (w[0] || "N").toUpperCase() + w.slice(1, 60) || "Nota"; };
@@ -257,6 +258,7 @@ window.GRAPH = { nodes: [], links: [] };
           if (B.started) for (const [id, d] of B.docs.diario) if (!before.has(id)) { const r = B.birth(id, d); if (r) window.galaxy.addNote(r.node, r.links, r.anchor); }
         }), first(db.doc("fm/sistema"), (snap) => { B.docs.sistema = snap.exists ? snap.data() : {}; }),
         first(db.doc("fm/topstep"), (snap) => { B.docs.topstep = snap.exists ? snap.data() : null; }),
+        first(db.doc("fm/checkin"), (snap) => { B.docs.checkin = snap.exists ? snap.data() : null; }),
         first(db.doc("fm/mercado"), (snap) => {
           B.docs.mercado = snap.exists ? snap.data() : null;
           const i = B.byKey["mercado:MNQ"], t = B.mercadoTxt("MNQ");
@@ -271,7 +273,7 @@ window.GRAPH = { nodes: [], links: [] };
   const PERSONA = "Eres Jarvis, un mayordomo británico seco, impecablemente cortés y con un ingenio afilado. Eres el segundo cerebro de Joel, un trader que gestiona cuentas de fondeo (prop firms). " +
     "Hablas SIEMPRE en español de España; trátale de usted y llámale por su nombre, «Joel» (nunca otro nombre), como mucho una vez por respuesta, y no en todas.\n\n" +
     "Tus palabras se leen en voz alta y la nota ya está en su pantalla: una frase con ingenio si sale natural, y luego los hechos en una o dos frases. Sin markdown, sin listas, sin emojis. Nunca recites la nota entera.\n\n" +
-    "Cada pregunta llega con un bloque <notas> (sus recuerdos más relevantes, numerados por índice) y un bloque <datos> con sus cuentas y cálculos ya hechos (drawdown, consistencia, plan del día), un bloque <avisos> con lo que ya está programado (si pregunta por informes, resúmenes o avisos, contéstale con eso: sí existen y funcionan), y un bloque <mercado> con el último precio que dio Topstep: al citarlo di siempre de qué hora es y nunca lo presentes como en directo; no predices el mercado ni recomiendas operaciones. Responde SOLO con eso y con lo dicho antes. " +
+    "Cada pregunta llega con un bloque <notas> (sus recuerdos más relevantes, numerados por índice) y un bloque <datos> con sus cuentas y cálculos ya hechos (drawdown, consistencia, plan del día), un bloque <avisos> con lo que ya está programado (si pregunta por informes, resúmenes o avisos, contéstale con eso: sí existen y funcionan), y un bloque <mercado> con el último precio que dio Topstep: al citarlo di siempre de qué hora es y nunca lo presentes como en directo; no predices el mercado ni recomiendas operaciones. En un mal día (pérdidas grandes, drawdown tocado, cuenta no operable) sé humano: primero una frase breve de apoyo, luego los hechos y una o dos lecciones, sin sermones. Responde SOLO con eso y con lo dicho antes. " +
     "Si no está, dilo con dignidad en una frase. Nunca inventes cifras, reglas de una firma ni noticias, y no predigas el mercado. Si una cuenta está cerca de un límite, dilo primero.\n\n" +
     "Solo puedes hablar: nunca digas que has guardado, enviado o cambiado nada. Para apuntar algo, dile que empiece la frase con «apunta que…». Para registrar resultados o payouts, que use Funding Manager.\n\n" +
     "Los saludos y agradecimientos reciben una línea breve en personaje y ninguna nota.\n\n" +
@@ -342,23 +344,48 @@ window.GRAPH = { nodes: [], links: [] };
     a.style.cssText = "display:inline-block;margin-top:10px;padding:8px 14px;border-radius:999px;background:var(--accent,#7aa7ff);color:#07101f;font-weight:600;text-decoration:none;pointer-events:auto";
     (document.querySelector("#answer .a")?.parentElement || document.getElementById("answer"))?.appendChild(a);
   };
+  const hoyISO = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+  B.checkinPending = () => { const c = B.docs.checkin; return c && !c.respondido && c.dia === hoyISO() ? c : null; };
+  // Save a line in the diary (the same door as "apunta"): it becomes a star at once.
+  B.saveNote = async (texto, tipo) => {
+    if (!B.db) return null;
+    const d = new Date();
+    const doc = { texto, tipo, cuentaId: "", fecha: hoyISO(), creado: d.toISOString(), actualizado: d.toISOString() };
+    const id = Math.random().toString(36).slice(2, 10);
+    const born = B.birth(id, doc);
+    try { await B.db.doc("fm/main").collection("diario").doc(id).set(doc); } catch (e) { B.known.delete(id); return null; }
+    if (born) { B.bodies[born.index] = texto; window.galaxy.addNote(born.node, born.links, born.anchor); }
+    return born;
+  };
   async function chat(question) {
     document.getElementById("os-open-app")?.remove();
     const opened = openRoute(question);
     if (opened) { setTimeout(B.showOpen, 600); return opened; }
     const sample = window.claude?.use ? await window.claude.use("sample") : null;
     if (!sample) throw new Error("Abra esta página dentro de Claude para que Jarvis pueda pensar.");
-    const small = SMALL.test(question.trim());
+    const image = B.pendingImage; B.pendingImage = null;
+    const ci = B.checkinPending();
+    const small = !image && SMALL.test(question.trim());
     const picked = small ? [] : rank(question);
     for (const i of last) if (picked.length < 6 && !picked.includes(i) && i < window.GRAPH.nodes.length) picked.push(i);
     const N = window.GRAPH.nodes;
     const notas = picked.map((i) => '<nota index="' + i + '" titulo="' + N[i].label + '" grupo="' + N[i].group + '">\n' + (B.bodies[i] || N[i].excerpt) + "\n</nota>").join("\n\n") || "(ninguna nota coincide)";
     const datos = window.FM?.contexto ? JSON.stringify(window.FM.contexto()) : "{}";
-    const turn = small ? "Charla, sin notas: " + question : "<notas>\n" + notas + "\n</notas>\n\n<datos>\n" + datos + "\n</datos>\n\n<avisos>\n" + AVISOS + "\n</avisos>\n\n<mercado>\n" + (B.mercadoTxt() || "(sin datos de mercado)") + "\n</mercado>\n\nPregunta: " + question;
+    let extra = "";
+    if (ci && !small) extra += "\n\n<sesion>\nEsta es la respuesta de Joel a la pregunta del día: «" + ci.pregunta + "». Comenta cómo le fue en la sesión de " + ci.sesion + " con sus cifras de hoy y sus reglas; si fue un mal día, primero una frase de apoyo y luego una o dos lecciones concretas.\n</sesion>";
+    if (image) extra += "\n\n<foto>\nJoel te manda la captura de un trade suyo" + (question.replace(/^📷.*$/, "").trim() ? " con este comentario: " + question : "") + ". Mírala con atención: describe lo que ves (instrumento, temporalidad, entrada, stop, objetivo, contexto) sin inventar lo que no se ve, compáralo con su sistema y sus reglas, di qué hizo bien y qué mejoraría, y si fue una pérdida o un mal día, apóyale y dale una o dos lecciones para la próxima vez. No recomiendes operaciones futuras concretas ni predigas el mercado.\n</foto>";
+    const turn = small ? "Charla, sin notas: " + question : "<notas>\n" + notas + "\n</notas>\n\n<datos>\n" + datos + "\n</datos>\n\n<avisos>\n" + AVISOS + "\n</avisos>\n\n<mercado>\n" + (B.mercadoTxt() || "(sin datos de mercado)") + "\n</mercado>" + extra + "\n\nPregunta: " + question;
     let text;
-    try { ({ text } = await sample([{ role: "user", content: PERSONA }, ...history, { role: "user", content: turn }], { cache: false, effort: "low" })); }
+    try { ({ text } = await sample([{ role: "user", content: PERSONA }, ...history, { role: "user", content: turn }], image ? { cache: false, images: [image] } : { cache: false, effort: "low" })); }
     catch (e) { throw new Error(WHY[e && e.code] || "Jarvis no ha podido responder esta vez. Vuelva a intentarlo en un momento."); }
     const [answer, used] = parse(text, picked);
+    // What Joel told about his session, and the advice on a trade photo, go in his diary.
+    if (ci && !small) {
+      B.docs.checkin = { ...ci, respondido: true };
+      try { await B.db.doc("fm/checkin").update({ respondido: true, respuesta: question, respondidoEn: new Date().toISOString() }); } catch {}
+      await B.saveNote("Sesión de " + ci.sesion + " (" + ci.dia.split("-").reverse().join("/") + "): " + question + " · Resultado del día: " + fmt(ci.total) + ".", "sesion");
+    }
+    if (image) await B.saveNote("Análisis de trade (" + hoyISO().split("-").reverse().join("/") + "): " + answer, "analisis");
     history.push({ role: "user", content: "Pregunta: " + question }, { role: "assistant", content: answer }); history = history.slice(-12);
     if (used.length) last = used;
     return { answer, nodes: used, about_notes: used.length > 0 };
@@ -388,7 +415,8 @@ window.GRAPH = { nodes: [], links: [] };
     const url = typeof input === "string" ? input : input.url;
     if (!url.startsWith("/")) return realFetch(input, init);
     const p = url.split("?")[0], body = init.body ? JSON.parse(init.body) : {};
-    if (p === "/api/boot") { const h = new Date().getHours(); return json({ greeting: (h >= 6 && h < 14 ? "Buenos días" : h >= 14 && h < 21 ? "Buenas tardes" : "Buenas noches") + ", Joel." }); }
+    if (p === "/api/boot") { const h = new Date().getHours(); const hi = (h >= 6 && h < 14 ? "Buenos días" : h >= 14 && h < 21 ? "Buenas tardes" : "Buenas noches") + ", Joel.", ci = B.checkinPending();
+      return json({ greeting: ci ? hi + " ¿Cómo le ha ido en la sesión de " + ci.sesion + "? Cuéntemelo cuando quiera." : hi }); }
     if (p === "/chat") { try { return json(await chat(String(body.question || "").slice(0, 2000))); } catch (e) { return json({ error: e.message, answer: "", nodes: [] }, 502); } }
     if (p === "/remember") { const [st, d] = await remember(String(body.text || "").slice(0, 4000)); return json(d, st); }
     if (p === "/action") {

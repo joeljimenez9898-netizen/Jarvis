@@ -122,6 +122,8 @@ async function checkTopstepReadOnly() {
   const want = ["/api/Account/search", "/api/Auth/loginKey", "/api/Contract/search", "/api/History/retrieveBars", "/api/Trade/search"];
   const acting = allowed.filter((e) => /order|position|close|cancel|place|modify/i.test(e));
   const ok = JSON.stringify(allowed) === JSON.stringify(want) && !acting.length;
+  const ci = ts.checkin([{ alias: "TS-3", ultimoDia: ts.tradingDay("2026-10-16T19:00:00Z"), ultimoPnl: -2002.2 }, { alias: "TS-2", ultimoDia: "2026-10-01", ultimoPnl: 50 }], "Nueva York", "2026-10-16T16:00:00Z");
+  if (ci.total !== -2002.2 || !ci.pregunta.includes("sesión de Nueva York") || ci.respondido !== false) return [false, "session question: " + JSON.stringify(ci).slice(0, 160)];
   const day = ts.tradingDay("2026-10-15T23:30:00Z");          // 18:30 Chicago belongs to the next session
   return [ok && day === "2026-10-16", ok ? `Topstep sync limited to ${allowed.join(", ")}; trading day rolls at 17:00 Chicago (${day})`
                                          : `Topstep sync allows: ${allowed.join(", ")}`];
@@ -150,6 +152,7 @@ async function checkIpadApps() {
       wrongSym.push("the page mic is not one-question-per-tap with Spanish help");
     if (!page.includes("v.length - last.length >= 4") || !page.includes("answerA.textContent.trim() === text) Voice.speak(text)")) wrongSym.push("dictation auto-send or the spoken retry is missing");
     if (!page.includes("function keepAwake(") || !page.includes("Voice.keepAwake && Voice.keepAwake(); });")) wrongSym.push("the voice is not held open from the tap to the answer");
+    if (!page.includes('db.doc("fm/checkin")') || !page.includes('images: [image]') || !page.includes('b.id = "os-listen"')) wrongSym.push("session question or trade photo is missing");
     if (!page.includes("<avisos>") || !page.includes("hacia las 11:00")) wrongSym.push("Jarvis does not know the scheduled 11:00 summary");
     if (!page.includes('db.doc("fm/mercado")') || !page.includes("no es en directo")) wrongSym.push("the MNQ price star is missing or not marked as not live");
     const ok = JSON.stringify(tools) === '["board_search_boards"]' && !apps.length && page.includes("tiene que empezar por https://") && !wrongSym.length;

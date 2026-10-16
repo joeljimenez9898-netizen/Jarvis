@@ -46,6 +46,8 @@ export const CSS = `
   #os-link { display: flex; flex-direction: column; gap: 0; }
   #os-link .os-toggle { justify-content: center; text-transform: none; letter-spacing: 0; width: 100%; }
   #os-listen { display: inline-block; margin: 10px 8px 0 0; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--accent); background: transparent; color: var(--text); font: inherit; font-size: 13px; pointer-events: auto; cursor: pointer; }
+  #os-photo { display: grid; place-items: center; width: 42px; padding: 0; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.04); color: var(--text); font-size: 18px; cursor: pointer; }
+  #os-photo[hidden] { display: none; }
   #os-listen.os-pulse { background: var(--accent); color: #07101f; animation: pulse 1.4s infinite; }
   .os-msg { font-size: 12px; color: var(--muted); min-height: 1em; margin-top: 4px; }
   #os-open-link { display: inline-block; margin: 10px 0 2px; padding: 7px 12px; border-radius: 999px; background: var(--accent); color: #07101f; font-weight: 600; font-size: 13px; text-decoration: none; }
@@ -239,9 +241,29 @@ export const SCRIPT = `
       // Silent after dictation? The iPad sometimes drops the first line while the mic hands back the
       // speaker: say it once more by itself, and only then offer the button.
       setTimeout(() => { if (spokeAt < at && window.Voice && !Voice.MUTED && answerA.textContent.trim() === text) Voice.speak(text); }, 3000);
-      setTimeout(() => { if (spokeAt < at && window.Voice && !Voice.MUTED) { b.classList.add("os-pulse"); Voice.setNote("Si no me ha oído, toque 🔊 Escuchar."); } }, 6500);
+      setTimeout(() => { if (spokeAt < at && window.Voice && !Voice.MUTED) { unheard = text; b.classList.add("os-pulse"); Voice.setNote("Toque en cualquier sitio y se lo leo."); } }, 6500);
     };
     new MutationObserver(listenBtn).observe(document.getElementById("answer"), { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["class"] });
+    // A tap anywhere plays an answer the iPad kept silent (a tap is the one thing it always allows).
+    let unheard = "";
+    document.addEventListener("pointerdown", (e) => {
+      if (!unheard || !window.Voice || (e.target.closest && e.target.closest("#mic, #q, #os-listen, #os-photo, #send"))) return;
+      const t = unheard; unheard = ""; $("os-listen")?.classList.remove("os-pulse"); Voice.speak(t);
+    }, true);
+    window.addEventListener("jarvis-spoke", () => { unheard = ""; });
+    // 📷: a photo of a trade for Jarvis to look at, where this view can send images to Claude.
+    const photo = document.createElement("button"); photo.type = "button"; photo.id = "os-photo"; photo.title = "Mándame la foto de un trade"; photo.textContent = "📷"; photo.hidden = true;
+    const pick = document.createElement("input"); pick.type = "file"; pick.hidden = true;
+    $("mic").before(photo); document.body.appendChild(pick);
+    (async () => { try { const smp = await window.claude?.use?.("sample"); const caps = smp && (await smp.limits().catch(() => null));
+      if (caps && caps.images) { photo.hidden = false; pick.accept = caps.images.mediaTypes.join(","); } } catch {} })();
+    photo.onclick = () => { window.Voice && Voice.keepAwake && Voice.keepAwake(); pick.value = ""; pick.click(); };
+    pick.onchange = () => {
+      const f = pick.files && pick.files[0]; if (!f || !window.BRAIN) return;
+      window.BRAIN.pendingImage = f;
+      if (!q.value.trim()) q.value = "📷 Analiza mi trade";
+      $("send").click();
+    };
     const voiceOn = (e) => {
       const tag = $("os-voice").querySelector("span");
       if (!window.Voice || !Voice.available) { tag.textContent = "no disponible aquí"; Voice && Voice.setNote("Este navegador no deja hablar a la página. Abre Jarvis en Safari."); return; }

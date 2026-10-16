@@ -3,6 +3,7 @@
 //
 //     node topstep-sync.mjs <dir-with-artifact-docs> [out.json] [mercado.json]
 //     node topstep-sync.mjs --mercado [mercado.json]      (only the market prices, for the hourly update)
+//     ... <dir> out.json mercado.json --checkin Londres|"Nueva York" checkin.json   (also the session question)
 //
 // Reads TOPSTEPX_USERNAME and TOPSTEPX_API_KEY from the environment (never printed), logs in,
 // reads balances and trades, and writes one document for the app (fm/topstep) plus a Spanish
@@ -73,7 +74,7 @@ export function stats(rule, acct, days, payouts) {
   const total = ciclo.reduce((a, b) => a + b, 0), mejor = Math.max(0, ...ciclo);
   const r = (Number(rule.consistencia) || 0) / 100;
   const objetivo = Number(rule.objetivo) || 0, beneficio = balance - ini;
-  return { alias: rule.alias, balance, beneficio, objetivo, falta: objetivo ? Math.max(0, objetivo - beneficio) : null,
+  return { alias: rule.alias, puedeOperar: acct.canTrade, balance, beneficio, objetivo, falta: objetivo ? Math.max(0, objetivo - beneficio) : null,
            progreso: objetivo ? beneficio / objetivo : null, suelo, distancia: suelo == null ? null : balance - suelo, dd,
            consistencia: r ? { regla: r, total, mejor, pctMejor: total > 0 ? mejor / total : null, cumple: total > 0 ? mejor <= r * total + 1e-9 : true,
                               falta: Math.max(0, mejor / r - total), maxHoy: Math.max(mejor, (r * total) / (1 - r)) } : null,
@@ -92,6 +93,7 @@ function resumen(list, at) {
       L.push(`  Consistencia ${pct(c.regla)}: mejor día ${money(c.mejor)} = ${pct(c.pctMejor)} del beneficio${c.cumple ? " (cumple)" : ` (faltan ${money(c.falta)} de beneficio para cumplir)`}. Máximo hoy sin romperla: ${money(c.maxHoy)}`);
       if (!c.cumple) alertas.push(`${s.alias}: consistencia sin cumplir`);
     }
+    if (s.puedeOperar === false) alertas.push(`${s.alias}: Topstep la marca como no operable`);
     if (s.distancia != null && s.distancia <= 0) alertas.push(`${s.alias}: ha tocado el drawdown`);
     else if (s.distancia != null && s.dd && s.distancia / s.dd < 0.3) alertas.push(`${s.alias}: menos del 30 % de margen de drawdown`);
     if (s.objetivo && s.falta === 0) alertas.push(`${s.alias}: objetivo alcanzado, revisa la consistencia y los días mínimos`);
@@ -139,6 +141,17 @@ function mercado(token) {
   return m;
 }
 
+/** The weekday session question: today's P&L per account, and what Jarvis asks. */
+export function checkin(list, sesion, at) {
+  const hoy = tradingDay(at);
+  const filas = list.map((s) => ({ alias: s.alias, pnl: s.ultimoDia === hoy ? s.ultimoPnl : 0 }));
+  const total = filas.reduce((a, f) => a + f.pnl, 0);
+  const cifras = filas.map((f) => `${f.alias} ${money(f.pnl)}`).join(", ");
+  const pregunta = `Joel, ¿cómo le ha ido en la sesión de ${sesion}? Hoy en Topstep: ${cifras} (total ${money(total)}). ` +
+                   "Cuéntemelo en Jarvis: toque el micrófono y hábleme, o mándeme la foto del trade.";
+  return { at, dia: hoy, sesion, filas, total: Math.round(total * 100) / 100, pregunta, respondido: false };
+}
+
 function login() {
   const u = (process.env.TOPSTEPX_USERNAME || "").trim(), k = (process.env.TOPSTEPX_API_KEY || "").trim();
   if (!u || !k) throw new Error("TOPSTEPX_USERNAME / TOPSTEPX_API_KEY are not set in this environment");
@@ -154,7 +167,8 @@ async function main() {
     console.log(JSON.stringify({ ok: true, out, simbolos: Object.keys(m.simbolos) }));
     return;
   }
-  const dir = process.argv[2], out = process.argv[3] || "/tmp/fm-topstep.json", outM = process.argv[4] || "/tmp/fm-mercado.json";
+  const pos = process.argv.slice(2, process.argv.includes("--checkin") ? process.argv.indexOf("--checkin") : undefined);
+  const dir = pos[0], out = pos[1] || "/tmp/fm-topstep.json", outM = pos[2] || "/tmp/fm-mercado.json";
   const rules = (dir ? readDocs(dir, "fm/main/cuentas") : []).filter((c) => c.topstepId && c.estado === "activa");
   const payouts = dir ? readDocs(dir, "fm/main/payouts") : [];
   const token = login();
@@ -182,6 +196,8 @@ async function main() {
   const m = mercado(token);
   fs.writeFileSync(outM, JSON.stringify(m, null, 1));
   doc.resumen += "\n\nMercado: " + m.texto;
+  const ci = process.argv.indexOf("--checkin");
+  if (ci > 0) fs.writeFileSync(process.argv[ci + 2] || "/tmp/fm-checkin.json", JSON.stringify(checkin(list, process.argv[ci + 1] || "Londres", at), null, 1));
   fs.writeFileSync(out, JSON.stringify(doc, null, 1));
   console.log(JSON.stringify({ ok: true, out, cuentasLeidas: accounts.length, vinculadas: rules.length,
                                operaciones: Object.values(doc.cuentas).reduce((n, c) => n + (c.operaciones || 0), 0) }));
