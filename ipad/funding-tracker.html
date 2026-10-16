@@ -1,0 +1,305 @@
+<title>Funding Manager</title>
+<style>
+.fr { --bg: #f1f4f9; --card: #fff; --line: #e2e8f0; --text: #0f172a; --muted: #64748b; --faint: #94a3b8; --green: #16a34a; --greenSoft: #dcfce7;
+      --red: #dc2626; --redSoft: #fee2e2; --blue: #3b82f6; --dark: #0f172a;
+      background: var(--bg); min-height: 100%; color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif; }
+.fr * { box-sizing: border-box; }
+.fr button, .fr input, .fr select { font-family: inherit; font-size: 14px; }
+.fr button { cursor: pointer; }
+.fr button:focus-visible, .fr input:focus-visible, .fr select:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.fr .bar { background: var(--dark); color: #fff; display: flex; align-items: center; gap: 12px; padding: 14px 20px; padding-top: max(14px, env(safe-area-inset-top)); position: sticky; top: 0; z-index: 5; }
+.fr .bar b { font-size: 19px; letter-spacing: -.01em; } .fr .bar .pro { background: #22c55e; color: #fff; font-size: 11px; font-weight: 800; letter-spacing: .1em; padding: 3px 9px; border-radius: 999px; }
+.fr .bar .sub { margin-left: auto; color: #94a3b8; font-size: 12.5px; }
+.fr #fr-back { background: rgba(255,255,255,.08); color: #fff; border: 1px solid rgba(255,255,255,.18); border-radius: 10px; padding: 7px 12px; font-weight: 600; }
+.fr #fr-back[hidden] { display: none; }
+.fr main { max-width: 1120px; margin: 0 auto; padding: 28px 18px 80px; }
+.fr .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.fr h2 { font-size: 32px; letter-spacing: -.03em; margin: 0; } .fr .head p { color: var(--muted); margin: 6px 0 0; }
+.fr .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.fr .btn { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 16px; font-weight: 600; color: var(--text); }
+.fr .btn.green { background: #22c55e; border-color: #22c55e; color: #fff; }
+.fr .btn.red { background: var(--card); border-color: #fecaca; color: var(--red); }
+.fr .row2 { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 24px 0 18px; flex-wrap: wrap; }
+.fr .tabs { display: inline-flex; background: #e2e8f0; border-radius: 12px; padding: 4px; }
+.fr .tabs button { border: 0; background: transparent; padding: 9px 22px; border-radius: 9px; color: var(--muted); font-size: 15px; }
+.fr .tabs button[aria-selected=true] { background: var(--card); color: var(--text); font-weight: 700; box-shadow: 0 1px 3px rgba(15,23,42,.1); }
+.fr select, .fr input[type=search], .fr .modal input, .fr .modal select { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; color: var(--text); }
+.fr .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+@media (max-width: 860px) { .fr .grid4 { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px) { .fr .grid4 { grid-template-columns: 1fr; } }
+.fr .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px; }
+.fr .kpi .lab { display: flex; justify-content: space-between; font-size: 11.5px; letter-spacing: .12em; color: var(--muted); font-weight: 600; }
+.fr .kpi .val { font-size: 30px; font-weight: 800; letter-spacing: -.02em; margin-top: 14px; }
+.fr .pos { color: var(--green); } .fr .neg { color: var(--red); }
+.fr .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 14px 0; }
+@media (max-width: 860px) { .fr .grid2 { grid-template-columns: 1fr; } }
+.fr h3 { margin: 0; font-size: 17px; } .fr .hint { color: var(--faint); font-size: 13px; margin: 4px 0 14px; }
+.fr .legend { display: flex; gap: 14px; justify-content: center; font-size: 12.5px; color: var(--muted); margin-bottom: 6px; }
+.fr .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.fr svg text { font-family: inherit; }
+.fr .prop { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; background: #f8fafc; }
+.fr .prop .t { display: flex; justify-content: space-between; font-weight: 700; } .fr .prop .m { color: var(--muted); font-size: 13px; margin-top: 6px; display: flex; gap: 18px; flex-wrap: wrap; }
+.fr .prop .m b { color: var(--text); }
+.fr .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.fr .chips button { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 8px 18px; color: var(--muted); }
+.fr .chips button[aria-pressed=true] { background: var(--dark); border-color: var(--dark); color: #fff; }
+.fr .cardhead { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.fr .filters { display: flex; gap: 10px; flex-wrap: wrap; margin: 16px 0; }
+.fr .tablewrap { overflow-x: auto; }
+.fr table { width: 100%; border-collapse: collapse; min-width: 760px; }
+.fr th { text-align: left; font-size: 11.5px; letter-spacing: .12em; color: var(--faint); padding: 12px 10px; border-bottom: 1px solid var(--line); font-weight: 600; }
+.fr td { padding: 13px 10px; border-bottom: 1px solid #f1f5f9; font-size: 14.5px; }
+.fr .pill { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700; }
+.fr .pill.ret { background: var(--greenSoft); color: var(--green); } .fr .pill.cost { background: var(--redSoft); color: var(--red); }
+.fr .dim { color: var(--faint); }
+.fr .ico { background: transparent; border: 0; font-size: 18px; padding: 2px 6px; }
+.fr .pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; color: var(--muted); font-size: 13px; margin-top: 12px; flex-wrap: wrap; }
+.fr .empty { color: var(--faint); text-align: center; padding: 24px; }
+.fr .modal { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: flex; align-items: center; justify-content: center; z-index: 20; padding: 16px; }
+.fr .modal[hidden] { display: none; }
+.fr .modal form { background: var(--card); border-radius: 16px; padding: 22px; width: min(460px, 100%); max-height: 90vh; overflow-y: auto; }
+.fr .modal label { display: block; font-size: 12.5px; color: var(--muted); margin-top: 12px; } .fr .modal label > * { display: block; width: 100%; margin-top: 5px; }
+.fr .modal .acts { margin-top: 18px; justify-content: flex-end; }
+.fr .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--dark); color: #fff; padding: 10px 16px; border-radius: 10px; z-index: 30; font-size: 13px; }
+.fr .toast[hidden] { display: none; }
+</style>
+<div class="fr" id="fr">
+  <div class="bar"><button id="fr-back" type="button" hidden>← Galaxia</button><span>⚡</span><b>Funding Manager</b><span class="pro">PRO</span><span class="sub">Se guarda en tu Jarvis</span></div>
+  <main>
+    <div class="head">
+      <div><h2>Funding Manager</h2><p>Gestiona tus retiradas, costes y evidencias de fondeo.</p></div>
+      <div class="acts"><button class="btn" id="fr-export" type="button">📤 Exportar datos</button><button class="btn" id="fr-import" type="button">📥 Importar datos</button></div>
+    </div>
+    <div class="row2">
+      <div class="tabs" role="tablist"><button type="button" role="tab" data-tab="resumen">Resumen</button><button type="button" role="tab" data-tab="empresas">Empresas</button></div>
+      <select id="fr-period" aria-label="Período"><option value="todo">Todos los períodos</option><option value="mes">Este mes</option><option value="mespasado">Mes pasado</option><option value="3m">Últimos 3 meses</option><option value="anio">Este año</option></select>
+    </div>
+    <section id="fr-view"></section>
+  </main>
+  <div class="modal" id="fr-modal" hidden><form id="fr-form" autocomplete="off"></form></div>
+  <div class="toast" id="fr-toast" hidden></div>
+  <input type="file" id="fr-file" accept="application/json,.json" hidden>
+</div>
+<script>
+(() => {
+"use strict";
+// Funding Manager: withdrawals (retiradas) and exam costs per prop firm. Saved in the artifact's database (fm/retiradas/movs).
+const ROOT = window.__FR_ROOT || document;
+const $ = (s) => ROOT.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const money = (n) => new Intl.NumberFormat("es-ES", { style: "currency", currency: "USD", minimumFractionDigits: 2, useGrouping: "always" }).format(Number(n) || 0);
+const MESES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+const fecha = (iso) => { if (!iso) return "—"; const [y, m, d] = iso.split("-"); return `${+d} ${MESES[+m - 1]} ${y}`; };
+const iso = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+const EMPRESAS = ["TopStep", "Lucid", "Tradeify", "Apex", "MyFundedFutures", "Take Profit Trader"];
+const SUBTIPOS = { retirada: ["Payout", "Retirada"], coste: ["Registro", "Mensualidad", "Reset", "Activación", "Otro"] };
+const S = { tab: "resumen", period: "todo", empresa: "", movs: new Map(), db: null, page: 0, sel: new Set(), f: { emp: "", tipo: "", q: "" }, edit: null };
+try { S.tab = localStorage.getItem("fr-tab") || "resumen"; } catch {}
+
+const signo = (m) => (m.tipo === "retirada" ? 1 : -1) * Math.abs(Number(m.importe) || 0);
+const all = () => [...S.movs.entries()].map(([id, v]) => ({ id, ...v })).sort((a, b) => (b.fecha || "").localeCompare(a.fecha || "") || (b.creado || "").localeCompare(a.creado || ""));
+function enPeriodo(m) {
+  if (S.period === "todo" || !m.fecha) return true;
+  const now = new Date(), ym = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+  if (S.period === "mes") return m.fecha.startsWith(ym(now));
+  if (S.period === "mespasado") return m.fecha.startsWith(ym(new Date(now.getFullYear(), now.getMonth() - 1, 1)));
+  if (S.period === "3m") return m.fecha >= iso(new Date(now.getFullYear(), now.getMonth() - 2, 1));
+  return m.fecha.startsWith(String(now.getFullYear()));
+}
+const movs = () => all().filter(enPeriodo);
+function totales(list) {
+  const ret = list.filter((m) => m.tipo === "retirada"), cost = list.filter((m) => m.tipo !== "retirada");
+  const r = ret.reduce((a, m) => a + Math.abs(Number(m.importe) || 0), 0), c = cost.reduce((a, m) => a + Math.abs(Number(m.importe) || 0), 0);
+  return { retiradas: r, costes: c, beneficio: r - c, roi: c ? ((r - c) / c) * 100 : null, nRet: ret.length, nCost: cost.length };
+}
+const porEmpresa = (list) => { const m = new Map(); for (const x of list) { const k = x.empresa || "—"; if (!m.has(k)) m.set(k, []); m.get(k).push(x); } return m; };
+
+// ── charts ─────────────────────────────────────────────────────
+function bars(labels, series, h = 260, W = 560) {
+  const padL = 56, padB = 34, padT = 10, inner = h - padB - padT;
+  const vals = series.flatMap((s) => s.values).concat(0), max = Math.max(...vals), min = Math.min(...vals);
+  const step = Math.max(50, Math.ceil(((max - min) || 100) / 5 / 50) * 50), top = Math.ceil(max / step) * step, bot = Math.floor(min / step) * step;
+  const y = (v) => padT + ((top - v) / ((top - bot) || 1)) * inner;
+  const gw = (W - padL - 10) / Math.max(1, labels.length), bw = Math.min(34, (gw - 14) / series.length);
+  let g = "";
+  for (let v = bot; v <= top; v += step) g += `<line x1="${padL}" x2="${W - 6}" y1="${y(v)}" y2="${y(v)}" stroke="#eef2f7"/><text x="${padL - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="#64748b">$${v}</text>`;
+  labels.forEach((l, i) => {
+    const x0 = padL + i * gw + (gw - bw * series.length) / 2;
+    series.forEach((s, j) => { const v = s.values[i]; if (!v) return; const a = y(Math.max(v, 0)), b = y(Math.min(v, 0));
+      g += `<rect x="${x0 + j * bw + 1}" y="${a}" width="${bw - 2}" height="${Math.max(1, b - a)}" rx="3" fill="${s.colorOf ? s.colorOf(v) : s.color}"><title>${esc(s.name)} ${esc(l)}: ${money(v)}</title></rect>`; });
+    g += `<text x="${padL + i * gw + gw / 2}" y="${h - 10}" text-anchor="middle" font-size="12" fill="#64748b">${esc(l)}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${h}" width="100%" role="img" aria-label="Gráfico">${g}</svg>`;
+}
+
+// ── views ──────────────────────────────────────────────────────
+const V = {};
+V.resumen = () => {
+  const list = movs(), t = totales(list);
+  const meses = [...new Set(list.map((m) => (m.fecha || "").slice(0, 7)).filter(Boolean))].sort();
+  const serie = (fn) => meses.map((ym) => fn(totales(list.filter((m) => (m.fecha || "").startsWith(ym)))));
+  const ranking = [...porEmpresa(list)].map(([e, l]) => [e, totales(l)]).sort((a, b) => b[1].beneficio - a[1].beneficio);
+  return `<div class="grid4">
+    <div class="card kpi"><div class="lab">BENEFICIO TOTAL <span>💰</span></div><div class="val ${t.beneficio >= 0 ? "pos" : "neg"}">${money(t.beneficio)}</div></div>
+    <div class="card kpi"><div class="lab">RETIRADAS TOTALES <span>⬆️</span></div><div class="val pos">${money(t.retiradas)}</div></div>
+    <div class="card kpi"><div class="lab">COSTE TOTAL EXÁMENES <span>⬇️</span></div><div class="val neg">${money(t.costes)}</div></div>
+    <div class="card kpi"><div class="lab">ROI GLOBAL <span>🏆</span></div><div class="val ${t.roi == null || t.roi >= 0 ? "pos" : "neg"}">${t.roi == null ? "—" : t.roi.toFixed(2) + "%"}</div></div>
+  </div>
+  <div class="grid2">
+    <div class="card"><h3>Evolución mensual</h3><p class="hint">Retiradas vs. Costes de examen</p>
+      <div class="legend"><span><i style="background:#22c55e"></i>Retiradas</span><span><i style="background:#ef4444"></i>Costes</span><span><i style="background:#3b82f6"></i>Beneficio</span></div>
+      ${meses.length ? bars(meses.map((ym) => MESES[+ym.slice(5) - 1]), [{ name: "Retiradas", color: "#22c55e", values: serie((x) => x.retiradas) },
+        { name: "Costes", color: "#ef4444", values: serie((x) => x.costes) }, { name: "Beneficio", color: "#3b82f6", values: serie((x) => x.beneficio) }]) : '<p class="empty">Sin movimientos en este período.</p>'}</div>
+    <div class="card"><h3>Ranking de props</h3><p class="hint">Orden por beneficio acumulado</p>
+      ${ranking.map(([e, x], i) => `<div class="prop"><div class="t"><span>${["🥇", "🥈", "🥉"][i] || "🏅"} ${esc(e)}</span><span class="${x.beneficio >= 0 ? "pos" : "neg"}">${x.beneficio > 0 ? "+" : ""}${money(x.beneficio)}</span></div>
+        <div class="m"><span>Retiradas <b>${money(x.retiradas)}</b></span><span>Costes <b>${money(x.costes)}</b></span></div>
+        <div class="m"><span>Media ret. <b>${money(x.nRet ? x.retiradas / x.nRet : 0)}</b></span><span>Media exam. <b>${money(x.nCost ? x.costes / x.nCost : 0)}</b></span></div></div>`).join("") || '<p class="empty">Todavía no hay empresas.</p>'}</div>
+  </div>
+  ${tabla()}`;
+};
+V.empresas = () => {
+  const list = movs(), emps = [...porEmpresa(all()).keys()].sort();
+  if (S.empresa && !emps.includes(S.empresa)) S.empresa = "";
+  const vis = S.empresa ? list.filter((m) => m.empresa === S.empresa) : list;
+  const dist = [...porEmpresa(vis)].map(([e, l]) => [e, totales(l).beneficio]);
+  return `<div class="chips"><button type="button" data-emp="" aria-pressed="${!S.empresa}">Todas</button>${emps.map((e) => `<button type="button" data-emp="${esc(e)}" aria-pressed="${S.empresa === e}">${esc(e)}</button>`).join("")}</div>
+  <div class="card"><h3>Distribución por empresa</h3><p class="hint">Beneficio neto por prop firm</p>
+    ${dist.length ? bars(dist.map(([e]) => e), [{ name: "Beneficio", colorOf: (v) => (v < 0 ? "#dc2626" : "#22c55e"), values: dist.map(([, v]) => v) }], 280, 1040) : '<p class="empty">Sin movimientos en este período.</p>'}</div>
+  <div style="height:14px"></div>${tabla(S.empresa)}`;
+};
+function tabla(fixedEmp) {
+  const q = S.f.q.trim().toLowerCase(), emp = fixedEmp || S.f.emp;
+  const rows = movs().filter((m) => (!emp || m.empresa === emp) && (!S.f.tipo || m.tipo === S.f.tipo) &&
+    (!q || [m.empresa, m.subtipo, m.notas, m.fecha].join(" ").toLowerCase().includes(q)));
+  const pages = Math.max(1, Math.ceil(rows.length / 10)); S.page = Math.min(S.page, pages - 1);
+  const page = rows.slice(S.page * 10, S.page * 10 + 10), emps = [...porEmpresa(all()).keys()].sort();
+  return `<div class="card"><div class="cardhead"><div><h3>Movimientos</h3><p class="hint" style="margin-bottom:0">Listado paginado de retiradas y costes de examen.</p></div>
+    <div class="acts">${S.sel.size ? `<button class="btn red" type="button" data-act="delsel">🗑 Borrar ${S.sel.size}</button>` : ""}<button class="btn green" type="button" data-act="new">+ Nuevo movimiento</button></div></div>
+  <div class="filters">${fixedEmp ? "" : `<select data-f="emp"><option value="">Todas las empresas</option>${emps.map((e) => `<option ${S.f.emp === e ? "selected" : ""}>${esc(e)}</option>`).join("")}</select>`}
+    <select data-f="tipo"><option value="">Todos los movimientos</option><option value="retirada" ${S.f.tipo === "retirada" ? "selected" : ""}>Retiradas</option><option value="coste" ${S.f.tipo === "coste" ? "selected" : ""}>Costes de examen</option></select>
+    <input data-f="q" type="search" placeholder="🔍 Buscar..." value="${esc(S.f.q)}"></div>
+  <div class="tablewrap"><table><thead><tr><th><input type="checkbox" data-act="selall" aria-label="Seleccionar todos" ${page.length && page.every((m) => S.sel.has(m.id)) ? "checked" : ""}></th><th>FECHA</th><th>EMPRESA</th><th>TIPO</th><th>SUBTIPO</th><th>IMPORTE</th><th>NOTAS</th><th>ACCIONES</th></tr></thead><tbody>
+  ${page.map((m) => { const v = signo(m); return `<tr><td><input type="checkbox" data-sel="${esc(m.id)}" aria-label="Seleccionar" ${S.sel.has(m.id) ? "checked" : ""}></td><td>${fecha(m.fecha)}</td><td><b>${esc(m.empresa)}</b></td>
+    <td><span class="pill ${m.tipo === "retirada" ? "ret" : "cost"}">${m.tipo === "retirada" ? "Retirada" : "Coste de examen"}</span></td><td class="dim">${esc(m.subtipo || "—")}</td>
+    <td class="${v >= 0 ? "pos" : "neg"}"><b>${v > 0 ? "+" : ""}${money(v)}</b></td><td class="dim">${esc(m.notas || "—")}</td>
+    <td><button class="ico" type="button" data-edit="${esc(m.id)}" title="Editar">✏️</button><button class="ico" type="button" data-del="${esc(m.id)}" title="Borrar">🗑️</button></td></tr>`; }).join("") || '<tr><td colspan="8" class="empty">Sin movimientos. Pulsa «+ Nuevo movimiento» o importa los datos de tu app anterior.</td></tr>'}
+  </tbody></table></div>
+  <div class="pager">Página ${S.page + 1} de ${pages} · ${rows.length} movimientos<button class="btn" type="button" data-page="-1">Anterior</button><button class="btn" type="button" data-page="1">Siguiente</button></div></div>`;
+}
+function render() {
+  ROOT.querySelectorAll(".fr .tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === S.tab));
+  $("#fr-period").value = S.period;
+  const focus = ROOT.activeElement && ROOT.activeElement.dataset && ROOT.activeElement.dataset.f, pos = focus === "q" ? ROOT.activeElement.selectionStart : null;
+  $("#fr-view").innerHTML = (V[S.tab] || V.resumen)();
+  if (focus) { const el = $(`#fr-view [data-f="${focus}"]`); if (el) { el.focus(); if (pos != null) el.setSelectionRange(pos, pos); } }
+}
+
+// ── form ───────────────────────────────────────────────────────
+function openForm(id) {
+  const m = id ? { ...S.movs.get(id) } : { fecha: iso(new Date()), empresa: S.empresa || "TopStep", tipo: "coste", subtipo: "Registro", importe: "", notas: "" };
+  S.edit = id || null;
+  const opts = (arr, v) => arr.map((x) => `<option ${x === v ? "selected" : ""}>${esc(x)}</option>`).join("");
+  $("#fr-form").innerHTML = `<h3>${id ? "Editar" : "Nuevo"} movimiento</h3>
+    <label>Fecha<input name="fecha" type="date" required value="${esc(m.fecha)}"></label>
+    <label>Empresa<input name="empresa" list="fr-emps" required value="${esc(m.empresa)}"><datalist id="fr-emps">${EMPRESAS.map((e) => `<option value="${e}">`).join("")}</datalist></label>
+    <label>Tipo<select name="tipo"><option value="coste" ${m.tipo !== "retirada" ? "selected" : ""}>Coste de examen</option><option value="retirada" ${m.tipo === "retirada" ? "selected" : ""}>Retirada</option></select></label>
+    <label>Subtipo<select name="subtipo">${opts([...new Set([...SUBTIPOS[m.tipo === "retirada" ? "retirada" : "coste"], m.subtipo].filter(Boolean))], m.subtipo)}</select></label>
+    <label>Importe (US$)<input name="importe" type="number" step="0.01" min="0" required value="${esc(Math.abs(Number(m.importe)) || "")}"></label>
+    <label>Notas<input name="notas" type="text" value="${esc(m.notas)}"></label>
+    <div class="acts">${id ? '<button class="btn red" type="button" data-act="delform">Borrar</button>' : ""}<button class="btn" type="button" data-act="cancel">Cancelar</button><button class="btn green" type="submit">Guardar</button></div>`;
+  $("#fr-modal").hidden = false;
+}
+$("#fr-form").addEventListener("change", (e) => {
+  if (e.target.name !== "tipo") return;
+  const sub = $("#fr-form").elements.subtipo; sub.innerHTML = SUBTIPOS[e.target.value].map((x) => `<option>${x}</option>`).join("");
+});
+$("#fr-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const f = e.target.elements, d = { fecha: f.fecha.value, empresa: f.empresa.value.trim(), tipo: f.tipo.value, subtipo: f.subtipo.value, importe: Math.abs(Number(f.importe.value) || 0), notas: f.notas.value.trim() };
+  if (!d.empresa || !d.importe) return toast("Pon la empresa y el importe.");
+  if (!S.db) return toast("Abre el Funding Manager dentro de Claude para guardar.");
+  const col = S.db.doc("fm/retiradas").collection("movs");
+  if (S.edit) await col.doc(S.edit).set({ ...S.movs.get(S.edit), ...d }); else await col.doc().set({ ...d, creado: new Date().toISOString() });
+  $("#fr-modal").hidden = true; toast("Movimiento guardado.");
+});
+async function borrar(ids) {
+  if (!S.db || !ids.length) return;
+  if (!confirm(ids.length > 1 ? `¿Borrar ${ids.length} movimientos?` : "¿Borrar este movimiento?")) return;
+  for (const id of ids) { await S.db.doc("fm/retiradas").collection("movs").doc(id).delete(); S.sel.delete(id); }
+  $("#fr-modal").hidden = true; toast(ids.length > 1 ? "Movimientos borrados." : "Movimiento borrado.");
+}
+function toast(t) { const el = $("#fr-toast"); el.textContent = t; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => (el.hidden = true), 2600); }
+
+$("#fr").addEventListener("click", (e) => {
+  const t = e.target.closest("button, input[type=checkbox]"); if (!t) return;
+  if (t.dataset.tab) { S.tab = t.dataset.tab; S.page = 0; try { localStorage.setItem("fr-tab", S.tab); } catch {} return render(); }
+  if (t.dataset.emp != null && t.tagName === "BUTTON") { S.empresa = t.dataset.emp; S.page = 0; return render(); }
+  if (t.dataset.page) { S.page = Math.max(0, S.page + Number(t.dataset.page)); return render(); }
+  if (t.dataset.edit) return openForm(t.dataset.edit);
+  if (t.dataset.del) return borrar([t.dataset.del]);
+  if (t.dataset.sel) { t.checked ? S.sel.add(t.dataset.sel) : S.sel.delete(t.dataset.sel); return render(); }
+  const a = t.dataset.act;
+  if (a === "new") return openForm(null);
+  if (a === "cancel") { $("#fr-modal").hidden = true; return; }
+  if (a === "delform") return borrar([S.edit]);
+  if (a === "delsel") return borrar([...S.sel]);
+  if (a === "selall") { const ids = [...ROOT.querySelectorAll("#fr-view [data-sel]")].map((x) => x.dataset.sel); ids.forEach((id) => (t.checked ? S.sel.add(id) : S.sel.delete(id))); return render(); }
+});
+$("#fr").addEventListener("input", (e) => { const k = e.target.dataset.f; if (k) { S.f[k] = e.target.value; S.page = 0; render(); } });
+$("#fr-period").addEventListener("change", (e) => { S.period = e.target.value; S.page = 0; render(); });
+$("#fr-modal").addEventListener("click", (e) => { if (e.target.id === "fr-modal") $("#fr-modal").hidden = true; });
+
+// Export / import: one JSON file. Import also reads the export of Joel's earlier Funding Manager.
+$("#fr-export").addEventListener("click", async () => {
+  const text = JSON.stringify({ app: "funding-manager", version: 1, exportado: new Date().toISOString(), movimientos: all() }, null, 1), filename = `funding-manager-${iso(new Date())}.json`;
+  try { const dl = await window.claude?.use?.("downloads"); if (dl) { await dl.save({ filename, data: text }); return; } } catch (err) { if (err && err.code === "declined") return; }
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type: "application/json" })); a.download = filename; a.click();
+});
+$("#fr-import").addEventListener("click", () => $("#fr-file").click());
+function leerExport(data) {
+  const lists = [];
+  const walk = (x) => { if (Array.isArray(x)) { if (x.some((o) => o && typeof o === "object" && !Array.isArray(o))) lists.push(x); x.forEach(walk); } else if (x && typeof x === "object") Object.values(x).forEach(walk); };
+  walk(data);
+  const pick = (o, ks) => { for (const k of Object.keys(o)) if (ks.includes(k.toLowerCase())) return o[k]; };
+  const out = [];
+  for (const l of lists) for (const o of l) {
+    if (!o || typeof o !== "object") continue;
+    const imp = Number(pick(o, ["importe", "amount", "monto", "cantidad", "valor", "value"]));
+    const f = String(pick(o, ["fecha", "date", "dia", "day"]) || "").slice(0, 10);
+    if (!Number.isFinite(imp) || !/^\d{4}-\d{2}-\d{2}$/.test(f)) continue;
+    const tipoTxt = String(pick(o, ["tipo", "type", "kind", "categoria", "category"]) || "").toLowerCase();
+    const tipo = /retir|withdraw|payout|pago recibido|ingreso/.test(tipoTxt) || (!tipoTxt && imp > 0) ? "retirada" : "coste";
+    out.push({ id: pick(o, ["id"]) != null ? String(pick(o, ["id"])) : null, fecha: f, empresa: String(pick(o, ["empresa", "company", "firm", "prop", "propfirm", "broker"]) || "—"),
+               tipo, subtipo: String(pick(o, ["subtipo", "subtype", "concepto", "detalle"]) || ""), importe: Math.abs(imp), notas: String(pick(o, ["notas", "notes", "nota", "note", "descripcion", "description"]) || "") });
+  }
+  return out;
+}
+$("#fr-file").addEventListener("change", async () => {
+  const f = $("#fr-file").files[0]; $("#fr-file").value = ""; if (!f) return;
+  let data; try { data = JSON.parse(await f.text()); } catch { return toast("Ese archivo no es una copia de datos."); }
+  const list = leerExport(data);
+  if (!list.length) return toast("No he encontrado movimientos en ese archivo.");
+  if (!S.db) return toast("Abre el Funding Manager dentro de Claude para importar.");
+  if (!confirm(`¿Importar ${list.length} movimientos?`)) return;
+  const col = S.db.doc("fm/retiradas").collection("movs");
+  for (const { id, ...d } of list) await (id ? col.doc(id.replace(/[^A-Za-z0-9_\-.~:@+]/g, "_")) : col.doc()).set({ ...d, creado: new Date().toISOString() });
+  toast(`Importados ${list.length} movimientos.`);
+});
+
+// What Jarvis reads when Joel asks about withdrawals and exam costs.
+function contexto() {
+  const l = all(), t = totales(l), r2 = (n) => Math.round(n * 100) / 100;
+  return { moneda: "USD", beneficioTotal: r2(t.beneficio), retiradasTotales: r2(t.retiradas), costeTotalExamenes: r2(t.costes), roiGlobal: t.roi == null ? null : r2(t.roi) + "%",
+    porEmpresa: [...porEmpresa(l)].map(([e, x]) => { const s = totales(x); return { empresa: e, retiradas: r2(s.retiradas), costes: r2(s.costes), beneficio: r2(s.beneficio) }; }),
+    ultimosMovimientos: l.slice(0, 12).map((m) => ({ fecha: m.fecha, empresa: m.empresa, tipo: m.tipo === "retirada" ? "retirada" : "coste de examen", subtipo: m.subtipo, importe: r2(signo(m)), notas: m.notas || undefined })) };
+}
+window.FUNDING = { contexto, render };
+
+(async () => {
+  render();
+  const db = window.claude?.use ? await window.claude.use("db") : null;
+  S.db = db; if (!db) return;
+  db.doc("fm/retiradas").collection("movs").onSnapshot((snap) => { S.movs.clear(); for (const d of snap.docs) S.movs.set(d.id, d.data()); render(); }, () => {});
+})();
+})();
+</script>

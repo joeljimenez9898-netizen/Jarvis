@@ -134,6 +134,7 @@ export const MARKUP = `
       <button class="os-toggle" id="os-labels" aria-pressed="true">Etiquetas <span>sí</span></button>
       <button class="os-toggle" id="os-fm">Plan de Futuros <span>abrir</span></button>
       <button class="os-toggle" id="os-cap">Capital propio <span>abrir</span></button>
+      <button class="os-toggle" id="os-fr">Funding Manager <span>abrir</span></button>
     </div>
   </div>
 </aside>
@@ -182,6 +183,7 @@ export const SCRIPT = `
     });
     $("os-fm").addEventListener("click", () => window.FM && window.FM.open());
     $("os-cap").addEventListener("click", () => window.FM && window.FM.openCapital && window.FM.openCapital());
+    $("os-fr").addEventListener("click", () => window.FM && window.FM.openFunding && window.FM.openFunding());
     // Inspector: a star with an address gets a button that opens it in its app.
     const panel = $("panel");
     const showLink = () => {

@@ -164,6 +164,7 @@ async function checkIpadApps() {
     if (!page.includes('db.doc("fm/checkin")') || !page.includes('images: [image]') || !page.includes('b.id = "os-listen"')) wrongSym.push("session question or trade photo is missing");
     if (!page.includes('id="plan-host"') || !page.includes("planDeFuturos: window.PLAN?.contexto") || !page.includes("Control Maestro")) wrongSym.push("the Plan de Futuros panel is not wired into Jarvis");
     if (!page.includes("const tsOps = () =>") || !page.includes("function semanasAll(") || !page.includes("Calculada por Jarvis con Topstep")) wrongSym.push("Topstep trades and weeks are not filled in automatically in the Plan");
+    if (!page.includes('id="fr-host"') || !page.includes("fundingManager: window.FUNDING?.contexto") || !page.includes('doc("fm/retiradas").collection("movs")') || !page.includes('id="os-fr"')) wrongSym.push("the Funding Manager (withdrawals and exam costs) is not wired into Jarvis");
     if (!page.includes('id="cap-host"') || !page.includes("capitalPropio: window.CAPITAL?.contexto") || !page.includes('db.doc("fm/capital")')) wrongSym.push("Capital propio is not wired into Jarvis");
     if (!page.includes("<avisos>") || !page.includes("hacia las 11:00")) wrongSym.push("Jarvis does not know the scheduled 11:00 summary");
     if (!page.includes('db.doc("fm/mercado")') || !page.includes("no es en directo")) wrongSym.push("the MNQ price star is missing or not marked as not live");
