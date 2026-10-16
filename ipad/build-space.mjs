@@ -112,7 +112,7 @@ window.GRAPH = { nodes: [], links: [] };
   // What runs on its own, set up by Joel with Claude. Jarvis on the page doesn't send these; it knows about them.
   const AVISOS = "Avisos automáticos de Joel (ya programados y funcionando; los envía Claude por su cuenta, no hace falta pedirlo): " +
     "1) Resumen diario de cuentas: de lunes a viernes hacia las 11:00 (hora de España), por notificación en el móvil y por email. Lee sus cuentas de Topstep (TS-2, TS-3 y TS-4): balance, beneficio, lo que falta para el objetivo de 3.000 $, margen de drawdown EOD de 2.000 $, consistencia del 50 % y avisos, más el precio del MNQ. " +
-    "2) Precio del MNQ: cada hora de lunes a viernes de 14:00 a 22:00 (hora de España), en silencio, sin notificación: actualiza la estrella MNQ de Jarvis. " +
+    "2) Cuentas y precio del MNQ: cada hora de lunes a viernes de 14:00 a 22:00 (hora de España), en silencio, sin notificación: Jarvis lee de nuevo sus cuentas de Topstep y el MNQ, así que lo que sabe de sus cuentas tiene como mucho una hora en esas franjas. Joel no tiene que registrar nada a mano de las cuentas de Topstep; solo los payouts y lo que pagó por cada cuenta, si quiere el balance real del negocio. " +
     "Ambos solo leen de Topstep: nunca operan ni tocan órdenes. Para cambiar la hora o los avisos, Joel se lo pide a Claude en la conversación donde los configuró.";
   const urlIn = (t) => (String(t || "").match(/https?:\/\/[^\s<>"']+/) || [])[0] || "";
   const B = window.BRAIN = { db: null, docs: { cuentas: new Map(), diario: new Map(), sistema: {}, topstep: null, mercado: null }, bodies: [], known: new Set(), byKey: {} };

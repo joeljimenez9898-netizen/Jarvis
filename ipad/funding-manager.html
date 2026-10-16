@@ -800,7 +800,7 @@ function contexto() {
     miSistema: { estrategia: S.sistema.estrategia || null, reglas: S.sistema.reglas || null, riesgoPorOperacion: S.sistema.riesgoOperacion || null,
       operacionesMaximasDia: S.sistema.maxOperaciones || null, limiteDiarioPorCuenta: S.sistema.limiteDiario || null, maxPctMargenDDPorDia: S.sistema.fraccionDD || null,
       cuentasMaximasDia: S.sistema.maxCuentasDia || null, noticiasHoy: S.sistema.noticias || null },
-    topstep: S.topstep ? { ultimaSincronizacion: S.topstep.at, resumenDeLaManana: S.topstep.resumen } : null,
+    topstep: S.topstep ? { ultimaSincronizacion: S.topstep.at, ultimoResumen: S.topstep.resumen } : null,
     totales: { invertido: r(t.invertido), cobrado: r(t.cobrado), beneficioNetoReal: r(t.neto), rentabilidad: pct(t.roi, 1), activas: t.activas, aprobadas: t.aprobadas, perdidas: t.perdidas },
     avisos: alertas().map(([k, n, x]) => `${n}: ${x}`),
     cuentas: allStats().map(cuenta),

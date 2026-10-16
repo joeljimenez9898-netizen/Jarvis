@@ -202,7 +202,7 @@ export const SCRIPT = `
     try { micBlocked = localStorage.getItem("jarvis-mic-blocked") === "1"; } catch {}
     const q = $("q");
     window.addEventListener("jarvis-mic-blocked", () => { micBlocked = true; try { localStorage.setItem("jarvis-mic-blocked", "1"); } catch {} });
-    let dictating = false, idle = null;
+    let dictating = false;
     document.addEventListener("click", (e) => {
       if (!micBlocked || !e.target.closest || !e.target.closest("#mic")) return;
       e.preventDefault(); e.stopImmediatePropagation();
@@ -210,13 +210,19 @@ export const SCRIPT = `
       dictating = true; q.value = ""; q.focus();          // focus inside the tap: iPad opens the keyboard
       window.Voice && Voice.setNote("Toque el 🎤 del teclado y hable. Cuando haga una pausa, se lo envío.");
     }, true);
-    q.addEventListener("input", () => {
-      if (!dictating) return;
-      clearTimeout(idle);
-      idle = setTimeout(() => { if (dictating && q.value.trim()) { dictating = false; q.blur(); $("send").click(); } }, 2200);
-    });
-    q.addEventListener("keydown", (e) => { if (e.key === "Enter") { dictating = false; clearTimeout(idle); } });
-    q.addEventListener("blur", () => { if (dictating && !q.value.trim()) dictating = false; });
+    // Watch the box itself, not its events: iPad dictation doesn't always fire them. Words arriving
+    // several letters at a time are dictation (typing adds one), so it counts even without the page mic.
+    let last = "", still = 0;
+    setInterval(() => {
+      const v = q.value;
+      if (document.activeElement !== q) { last = v; still = 0; return; }
+      if (v !== last) { if (v.length - last.length >= 4) dictating = true; last = v; still = 0; return; }
+      if (!dictating || !v.trim()) return;
+      still += 300;
+      if (still >= 2100) { dictating = false; still = 0; last = ""; q.blur(); $("send").click(); }
+    }, 300);
+    q.addEventListener("keydown", (e) => { if (e.key === "Enter") dictating = false; });
+    q.addEventListener("pointerdown", () => { window.Voice && Voice.prime && Voice.prime(); });   // each tap keeps the voice awake
     // Every answer gets a "🔊 Escuchar" button. If the iPad stayed silent, it lights up: a tap always plays.
     let spokeAt = 0, shown = "";
     window.addEventListener("jarvis-spoke", () => { spokeAt = Date.now(); const b = $("os-listen"); if (b) b.classList.remove("os-pulse"); });
@@ -230,7 +236,10 @@ export const SCRIPT = `
         b.onclick = () => { b.classList.remove("os-pulse"); window.Voice && Voice.speak(answerA.textContent); };
         document.getElementById("answer").appendChild(b); }
       const at = Date.now();
-      setTimeout(() => { if (spokeAt < at && window.Voice && !Voice.MUTED) { b.classList.add("os-pulse"); Voice.setNote("Si no me ha oído, toque 🔊 Escuchar."); } }, 2500);
+      // Silent after dictation? The iPad sometimes drops the first line while the mic hands back the
+      // speaker: say it once more by itself, and only then offer the button.
+      setTimeout(() => { if (spokeAt < at && window.Voice && !Voice.MUTED && answerA.textContent.trim() === text) Voice.speak(text); }, 1800);
+      setTimeout(() => { if (spokeAt < at && window.Voice && !Voice.MUTED) { b.classList.add("os-pulse"); Voice.setNote("Si no me ha oído, toque 🔊 Escuchar."); } }, 4500);
     };
     new MutationObserver(listenBtn).observe(document.getElementById("answer"), { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["class"] });
     const voiceOn = (e) => {
