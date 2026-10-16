@@ -198,7 +198,7 @@ export const SCRIPT = `
       const tag = $("os-voice").querySelector("span");
       if (!window.Voice || !Voice.available) { tag.textContent = "no disponible aquí"; Voice && Voice.setNote("Este navegador no deja hablar a la página. Abre Jarvis en Safari."); return; }
       tag.textContent = "probando…";
-      Voice.hello("A su servicio, señor. Ya me oye.").then((ok) => {
+      Voice.hello("A su servicio, Joel. Ya me oye.").then((ok) => {
         tag.textContent = ok ? "activada" : "sin sonido";
         $("os-voice-top").textContent = ok ? "🔊 Voz activada" : "🔇 Sin sonido";
         if (!ok) Voice.setNote("No he podido hablar: sube el volumen, quita el modo silencio y vuelve a tocar «Voz». Si sigue sin sonar, abre Jarvis en Safari.");

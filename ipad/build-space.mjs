@@ -62,7 +62,7 @@ for (const [a, b] of [
   ['"Type below (this browser has no speech recognition)"', '"Escribe abajo o dicta con el micrófono del teclado"'],
   ["`Listening: “${state.heard}”` : \"Listening…\"", "`Escuchando: “${state.heard}”` : \"Escuchando…\""],
   ['text = "Thinking…";', 'text = "Pensando…";'],
-  ["  window.Voice = {\n    FINISH_MS,", "  // Spoken INSIDE the tap: iPad only lets a page talk after a deliberate gesture.\n  function hello(text) {\n    helloed = true;   // the test line replaces the waiting greeting\n    queued.splice(0).forEach((q) => q.resolve());\n    unlock();\n    if (!synth) return Promise.resolve(false);\n    stopSpeaking();\n    const u = new SpeechSynthesisUtterance(text || \"A su servicio, señor.\");\n    const v = pickVoice(); if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = \"es-ES\"; }\n    u.volume = 1;\n    return new Promise((res) => {\n      let started = false;\n      u.onstart = () => { started = true; set({ speaking: true }); };\n      u.onend = () => { set({ speaking: false }); res(true); };\n      u.onerror = () => { set({ speaking: false }); res(started); };\n      if (!utter(u)) return res(false);\n      setTimeout(() => { if (!started && !synth.speaking) res(false); }, 2500);\n    });\n  }\n\n  window.Voice = {\n    hello, available: !!synth, FINISH_MS,"],
+  ["  window.Voice = {\n    FINISH_MS,", "  // Spoken INSIDE the tap: iPad only lets a page talk after a deliberate gesture.\n  function hello(text) {\n    helloed = true;   // the test line replaces the waiting greeting\n    queued.splice(0).forEach((q) => q.resolve());\n    unlock();\n    if (!synth) return Promise.resolve(false);\n    stopSpeaking();\n    const u = new SpeechSynthesisUtterance(text || \"A su servicio, Joel.\");\n    const v = pickVoice(); if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = \"es-ES\"; }\n    u.volume = 1;\n    return new Promise((res) => {\n      let started = false;\n      u.onstart = () => { started = true; set({ speaking: true }); };\n      u.onend = () => { set({ speaking: false }); res(true); };\n      u.onerror = () => { set({ speaking: false }); res(started); };\n      if (!utter(u)) return res(false);\n      setTimeout(() => { if (!started && !synth.speaking) res(false); }, 2500);\n    });\n  }\n\n  window.Voice = {\n    hello, available: !!synth, FINISH_MS,"],
 ]) voice = must(voice, a, b);
 
 // ── 2. the second brain: graph from the user's data, and the in-page brain ──
@@ -215,8 +215,8 @@ window.GRAPH = { nodes: [], links: [] };
   })();
 
   // ── the brain: what server.mjs does, in the page, in Spanish ──
-  const PERSONA = "Eres Jarvis, un mayordomo británico seco, impecablemente cortés y con un ingenio afilado. Eres el segundo cerebro de tu señor, un trader que gestiona cuentas de fondeo (prop firms). " +
-    "Hablas SIEMPRE en español de España; trátale de usted y llámale «señor» como mucho una vez por respuesta, y no en todas.\n\n" +
+  const PERSONA = "Eres Jarvis, un mayordomo británico seco, impecablemente cortés y con un ingenio afilado. Eres el segundo cerebro de Joel, un trader que gestiona cuentas de fondeo (prop firms). " +
+    "Hablas SIEMPRE en español de España; trátale de usted y llámale por su nombre, «Joel» (nunca otro nombre), como mucho una vez por respuesta, y no en todas.\n\n" +
     "Tus palabras se leen en voz alta y la nota ya está en su pantalla: una frase con ingenio si sale natural, y luego los hechos en una o dos frases. Sin markdown, sin listas, sin emojis. Nunca recites la nota entera.\n\n" +
     "Cada pregunta llega con un bloque <notas> (sus recuerdos más relevantes, numerados por índice) y un bloque <datos> con sus cuentas y cálculos ya hechos (drawdown, consistencia, plan del día). Responde SOLO con eso y con lo dicho antes. " +
     "Si no está, dilo con dignidad en una frase. Nunca inventes cifras, reglas de una firma ni noticias, y no predigas el mercado. Si una cuenta está cerca de un límite, dilo primero.\n\n" +
@@ -246,7 +246,52 @@ window.GRAPH = { nodes: [], links: [] };
   }
   const WHY = { not_granted: "Necesito su permiso para usar Claude. Recargue la página y pulse Permitir.", rate_limited: "Ha llegado a su límite de uso de Claude por ahora. Pruebe en un rato.",
                 session_expired: "Vuelva a iniciar sesión en Claude.", sampling_disabled: "Claude no está disponible en esta cuenta." };
+  // "Ábreme TradingView en el MNQ": answered here, with a button to tap (iPad only opens a page from a tap).
+  const SYMBOLS = [[/\bm\s*n\s*q\b|micro nasdaq/, "CME_MINI:MNQ1!", "MNQ1!"], [/\bn\s*q\b|nasdaq/, "CME_MINI:NQ1!", "NQ1!"],
+    [/\bm\s*e\s*s\b|micro s\s*&?\s*p/, "CME_MINI:MES1!", "MES1!"], [/\bES\b|\be-?mini s\s*&?\s*p|s\s*&?\s*p\s*500|sp500/, "CME_MINI:ES1!", "ES1!"],
+    [/\bm\s*y\s*m\b|micro dow/, "CBOT_MINI:MYM1!", "MYM1!"], [/\by\s*m\b|\bdow\b/, "CBOT_MINI:YM1!", "YM1!"],
+    [/\bm\s*2\s*k\b|micro russell/, "CME_MINI:M2K1!", "M2K1!"], [/\br\s*t\s*y\b|russell/, "CME_MINI:RTY1!", "RTY1!"],
+    [/\bm\s*g\s*c\b|micro oro/, "COMEX:MGC1!", "MGC1!"], [/\bg\s*c\b|\boro\b|gold/, "COMEX:GC1!", "GC1!"],
+    [/\bm\s*c\s*l\b|micro petroleo/, "NYMEX:MCL1!", "MCL1!"], [/\bc\s*l\b|petroleo|crudo/, "NYMEX:CL1!", "CL1!"]];
+  const OPEN = /\b(abre|abreme|abrir|abrid|abra|abrame|ensename|ensenam|muestrame|pon|ponme|llevame|ve a)\b/;
+  function openRoute(question) {
+    const q = String(question).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (!OPEN.test(q)) return null;
+    const N = window.GRAPH.nodes, app = APPS.find(([k, label]) => q.includes(label.toLowerCase()) || q.includes(k));
+    let target = null, label = "";
+    if (app && app[0] === "tradingview") {
+      const front = (t) => t.replace(/([A-Za-z])1!?/g, "$1 ");   // MNQ1 / MNQ1! -> MNQ
+      const sym = SYMBOLS.find(([re]) => re.test(front(re.source.startsWith("\\bES") ? question : q)));   // "es" is a Spanish word; only ES in capitals is the future
+      target = sym ? "https://www.tradingview.com/chart/?symbol=" + encodeURIComponent(sym[1]) : app[2];
+      label = sym ? "TradingView · " + sym[2] : "TradingView";
+    } else {
+      // a star with an address named in the question (a Miro board, a plan, a saved link), longest name first
+      const fold = (t) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const hit = N.filter((n) => n.url && n.label.length > 3 && q.includes(fold(n.label))).sort((a, b) => b.label.length - a.label.length)[0];
+      if (hit) { target = hit.url; label = hit.label; }
+      else if (app) { target = app[2]; label = app[1]; }
+    }
+    if (!target) return null;
+    const star = app ? B.byKey["app:" + app[0]] : N.findIndex((n) => n.url === target);
+    B.openNext = { url: target, label };
+    const precio = /precio|punto|cotiza|como esta|donde esta|nivel|va el|va la/.test(q) && label.startsWith("TradingView");
+    return { answer: "Aquí tiene " + label + ", Joel: toque el botón para abrirlo." +
+             (precio ? " El precio en directo no lo veo desde aquí: TradingView no deja que Jarvis lea sus gráficos, así que esa mirada es suya." : ""),
+             nodes: star >= 0 && star != null ? [star] : [], about_notes: false };
+  }
+  B.showOpen = () => {
+    const o = B.openNext; B.openNext = null;
+    document.getElementById("os-open-app")?.remove();
+    if (!o) return;
+    const a = document.createElement("a"); a.id = "os-open-app"; a.href = o.url; a.target = "_blank"; a.rel = "noopener";
+    a.textContent = "Abrir " + o.label + " ↗";
+    a.style.cssText = "display:inline-block;margin-top:10px;padding:8px 14px;border-radius:999px;background:var(--accent,#7aa7ff);color:#07101f;font-weight:600;text-decoration:none;pointer-events:auto";
+    (document.querySelector("#answer .a")?.parentElement || document.getElementById("answer"))?.appendChild(a);
+  };
   async function chat(question) {
+    document.getElementById("os-open-app")?.remove();
+    const opened = openRoute(question);
+    if (opened) { setTimeout(B.showOpen, 600); return opened; }
     const sample = window.claude?.use ? await window.claude.use("sample") : null;
     if (!sample) throw new Error("Abra esta página dentro de Claude para que Jarvis pueda pensar.");
     const small = SMALL.test(question.trim());
@@ -266,7 +311,7 @@ window.GRAPH = { nodes: [], links: [] };
   }
   async function remember(text) {
     const content = String(text).replace(/^\s*(?:remember that|apunta|anota|recuerda|guarda)(?:\s+que)?\b[\s,.:;]*/i, "").trim();
-    if (!content) return [400, { ok: false, answer: "¿Qué desea que apunte, señor?" }];
+    if (!content) return [400, { ok: false, answer: "¿Qué desea que apunte, Joel?" }];
     if (!B.db) return [500, { ok: false, answer: "No puedo guardarlo: abra Jarvis dentro de Claude." }];
     const low = content.toLowerCase();
     const hit = [...B.docs.cuentas.entries()].find(([, c]) => c.alias && low.includes(c.alias.toLowerCase()));
@@ -277,10 +322,10 @@ window.GRAPH = { nodes: [], links: [] };
     const r = B.birth(id, doc);                       // marks it known, so the live snapshot won't birth it twice
     try { await B.db.doc("fm/main").collection("diario").doc(id).set(doc); }
     catch (e) { B.known.delete(id); return [500, { ok: false, answer: "No se ha guardado: " + (e.message || "error") + "." }]; }
-    if (!r) return [200, { ok: true, answer: "Apuntado, señor." }];
+    if (!r) return [200, { ok: true, answer: "Apuntado, Joel." }];
     B.bodies[r.index] = doc.texto;
     history.push({ role: "user", content: "Apunta que " + content }, { role: "assistant", content: "[APUNTE] RECEIPT ok=true titulo=" + r.node.label + " index=" + r.index });
-    return [200, { ok: true, answer: "Apuntado, señor: " + r.node.label + ".", ...r }];
+    return [200, { ok: true, answer: "Apuntado, Joel: " + r.node.label + ".", ...r }];
   }
 
   const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
@@ -289,14 +334,14 @@ window.GRAPH = { nodes: [], links: [] };
     const url = typeof input === "string" ? input : input.url;
     if (!url.startsWith("/")) return realFetch(input, init);
     const p = url.split("?")[0], body = init.body ? JSON.parse(init.body) : {};
-    if (p === "/api/boot") return json({ greeting: "Buenos días, señor." });
+    if (p === "/api/boot") { const h = new Date().getHours(); return json({ greeting: (h >= 6 && h < 14 ? "Buenos días" : h >= 14 && h < 21 ? "Buenas tardes" : "Buenas noches") + ", Joel." }); }
     if (p === "/chat") { try { return json(await chat(String(body.question || "").slice(0, 2000))); } catch (e) { return json({ error: e.message, answer: "", nodes: [] }, 502); } }
     if (p === "/remember") { const [st, d] = await remember(String(body.text || "").slice(0, 4000)); return json(d, st); }
     if (p === "/action") {
-      if (String(body.tag).toUpperCase() === "RESET") { history = []; last = []; return json({ answer: "Pizarra limpia, señor.", nodes: [], about_notes: false, births: [], action: { tag: "RESET", ok: true } }); }
-      return json({ answer: "Eso no puedo hacerlo desde aquí, señor.", nodes: [], about_notes: false, births: [], action: { ok: false } });
+      if (String(body.tag).toUpperCase() === "RESET") { history = []; last = []; return json({ answer: "Pizarra limpia, Joel.", nodes: [], about_notes: false, births: [], action: { tag: "RESET", ok: true } }); }
+      return json({ answer: "Eso no puedo hacerlo desde aquí, Joel.", nodes: [], about_notes: false, births: [], action: { ok: false } });
     }
-    if (p === "/teardown/start") return json({ ok: false, answer: "El taller de desmontaje necesita el Mac, señor.", nodes: [], births: [], action: { tag: "TEARDOWN", ok: false } });
+    if (p === "/teardown/start") return json({ ok: false, answer: "El taller de desmontaje necesita el Mac, Joel.", nodes: [], births: [], action: { tag: "TEARDOWN", ok: false } });
     return json({ error: "no disponible aquí" }, 404);
   };
 })();

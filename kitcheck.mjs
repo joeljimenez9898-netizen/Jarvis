@@ -136,9 +136,19 @@ async function checkIpadApps() {
     const page = fs.readFileSync(out, "utf8");
     const tools = [...new Set([...page.matchAll(/callTool\("Miro", "([^"]+)"/g)].map((m) => m[1]))];
     const apps = ["TradingView", "Excalidraw", "Miro", "YouTube", "Instagram", "Apps de Claude"].filter((a) => !page.includes('"' + a + '"'));
-    const ok = JSON.stringify(tools) === '["board_search_boards"]' && !apps.length && page.includes("tiene que empezar por https://");
-    return [ok, ok ? "iPad page builds; 6 app stars; Miro limited to board_search_boards (read); links must be http(s)"
-                   : `Miro tools: ${tools.join(", ") || "none"}; missing apps: ${apps.join(", ") || "none"}`];
+    // the spoken "ábreme TradingView en el MNQ1" route, with the page's own symbol table
+    const i = page.indexOf("const SYMBOLS"), j = page.indexOf("const OPEN", i);
+    const SYMBOLS = new Function(page.slice(i, j) + "; return SYMBOLS;")();
+    const front = (t) => t.replace(/([A-Za-z])1!?/g, "$1 ");
+    const symOf = (q) => { const x = q.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const f = SYMBOLS.find(([re]) => re.test(front(re.source.startsWith("\\bES") ? q : x))); return f ? f[2] : null; };
+    const said = { "Oye Jarvis, ábreme TradingView y mira en qué punto está el MNQ1": "MNQ1!", "ábreme TradingView en el ES": "ES1!",
+                   "ábreme TradingView, ¿en qué punto está? es urgente": null };
+    const wrongSym = Object.entries(said).filter(([q, want]) => symOf(q) !== want).map(([q]) => q);
+    if (!page.includes("Joel.")) wrongSym.push("the greeting does not name Joel");
+    const ok = JSON.stringify(tools) === '["board_search_boards"]' && !apps.length && page.includes("tiene que empezar por https://") && !wrongSym.length;
+    return [ok, ok ? "iPad page builds; 6 app stars; Miro limited to board_search_boards (read); links must be http(s); 'ábreme TradingView… MNQ1' -> MNQ1!, a Spanish 'es' is not the ES; greets Joel"
+                   : `Miro tools: ${tools.join(", ") || "none"}; missing apps: ${apps.join(", ") || "none"}; misheard: ${wrongSym.join(" | ") || "none"}`];
   } finally { fs.rmSync(out, { force: true }); }
 }
 
