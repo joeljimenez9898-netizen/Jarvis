@@ -146,9 +146,11 @@ async function checkIpadApps() {
                    "ábreme TradingView, ¿en qué punto está? es urgente": null };
     const wrongSym = Object.entries(said).filter(([q, want]) => symOf(q) !== want).map(([q]) => q);
     if (!page.includes("Joel.")) wrongSym.push("the greeting does not name Joel");
+    if (!page.includes("rec.continuous = false;") || !page.includes("if (state.listening) stopListening();   // one question per tap") || !page.includes("El micrófono está bloqueado"))
+      wrongSym.push("the page mic is not one-question-per-tap with Spanish help");
     if (!page.includes('db.doc("fm/mercado")') || !page.includes("no es en directo")) wrongSym.push("the MNQ price star is missing or not marked as not live");
     const ok = JSON.stringify(tools) === '["board_search_boards"]' && !apps.length && page.includes("tiene que empezar por https://") && !wrongSym.length;
-    return [ok, ok ? "iPad page builds; 6 app stars; Miro limited to board_search_boards (read); links must be http(s); 'ábreme TradingView… MNQ1' -> MNQ1!, a Spanish 'es' is not the ES; greets Joel"
+    return [ok, ok ? "iPad page builds; 6 app stars; Miro limited to board_search_boards (read); links must be http(s); 'ábreme TradingView… MNQ1' -> MNQ1!, a Spanish 'es' is not the ES; greets Joel; page mic: one question per tap, then written + spoken answer"
                    : `Miro tools: ${tools.join(", ") || "none"}; missing apps: ${apps.join(", ") || "none"}; misheard: ${wrongSym.join(" | ") || "none"}`];
   } finally { fs.rmSync(out, { force: true }); }
 }
