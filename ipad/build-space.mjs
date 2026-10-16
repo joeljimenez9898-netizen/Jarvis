@@ -87,6 +87,11 @@ for (const [a, b] of [
   ["        u.onend = u.onerror = () => { live.delete(u); done(); };", "        u.onstart = () => window.dispatchEvent(new Event(\"jarvis-spoke\"));\n        u.onend = u.onerror = () => { live.delete(u); done(); };"],
   // A silent line spoken inside a tap re-arms the iPad's voice for the answer that follows.
   ["    hello, available: !!synth, FINISH_MS,", "    hello, prime: () => { if (!synth) return; const p = new SpeechSynthesisUtterance(\" \"); p.volume = 0; utter(p); }, available: !!synth, FINISH_MS,"],
+  // iPad: speech may only start inside a tap, and dictation in between breaks that. A silent line,
+  // started in the tap and kept going, holds the voice open so the answer follows it without a tap.
+  ["  function stopSpeaking() {", "  let awake = 0, chain = 0;\n  function keepAwake(ms = 90000) {\n    if (!synth || MUTED) return;\n    const running = awake > Date.now();\n    awake = Date.now() + ms;\n    if (running) return;\n    const id = ++chain;\n    const tick = () => {\n      if (id !== chain || awake <= Date.now()) { if (id === chain) awake = 0; return; }\n      const u = new SpeechSynthesisUtterance(\"silencio\"); u.volume = 0; u.rate = 0.6; u.lang = \"es-ES\";\n      live.add(u);\n      u.onend = () => { live.delete(u); tick(); };\n      u.onerror = () => { live.delete(u); if (id === chain) awake = 0; };\n      if (!utter(u)) awake = 0;\n    };\n    tick();\n  }\n  function stopSpeaking() {\n    if (awake > Date.now() && !state.speaking) { generation++; return; }   // only the silent line is playing: keep it\n    chain++; awake = 0;"],
+  ["    stopSpeaking();\n    const gen = ++generation;", "    const holding = awake > Date.now();\n    chain++; awake = 0;                     // the silent line ends; the answer is queued right behind it\n    if (!holding) stopSpeaking();\n    const gen = ++generation;"],
+  ["    hello, prime:", "    hello, keepAwake, prime:"],
 ]) voice = must(voice, a, b);
 
 // ── 2. the second brain: graph from the user's data, and the in-page brain ──

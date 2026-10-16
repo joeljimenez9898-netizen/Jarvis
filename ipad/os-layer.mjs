@@ -206,7 +206,7 @@ export const SCRIPT = `
     document.addEventListener("click", (e) => {
       if (!micBlocked || !e.target.closest || !e.target.closest("#mic")) return;
       e.preventDefault(); e.stopImmediatePropagation();
-      if (window.Voice) { Voice.stopSpeaking(); Voice.prime && Voice.prime(); }
+      if (window.Voice) { Voice.stopSpeaking(); Voice.keepAwake && Voice.keepAwake(); }
       dictating = true; q.value = ""; q.focus();          // focus inside the tap: iPad opens the keyboard
       window.Voice && Voice.setNote("Toque el 🎤 del teclado y hable. Cuando haga una pausa, se lo envío.");
     }, true);
@@ -222,7 +222,7 @@ export const SCRIPT = `
       if (still >= 2100) { dictating = false; still = 0; last = ""; q.blur(); $("send").click(); }
     }, 300);
     q.addEventListener("keydown", (e) => { if (e.key === "Enter") dictating = false; });
-    q.addEventListener("pointerdown", () => { window.Voice && Voice.prime && Voice.prime(); });   // each tap keeps the voice awake
+    q.addEventListener("pointerdown", () => { window.Voice && Voice.keepAwake && Voice.keepAwake(); });   // each tap holds the voice open for the answer
     // Every answer gets a "🔊 Escuchar" button. If the iPad stayed silent, it lights up: a tap always plays.
     let spokeAt = 0, shown = "";
     window.addEventListener("jarvis-spoke", () => { spokeAt = Date.now(); const b = $("os-listen"); if (b) b.classList.remove("os-pulse"); });
@@ -238,8 +238,8 @@ export const SCRIPT = `
       const at = Date.now();
       // Silent after dictation? The iPad sometimes drops the first line while the mic hands back the
       // speaker: say it once more by itself, and only then offer the button.
-      setTimeout(() => { if (spokeAt < at && window.Voice && !Voice.MUTED && answerA.textContent.trim() === text) Voice.speak(text); }, 1800);
-      setTimeout(() => { if (spokeAt < at && window.Voice && !Voice.MUTED) { b.classList.add("os-pulse"); Voice.setNote("Si no me ha oído, toque 🔊 Escuchar."); } }, 4500);
+      setTimeout(() => { if (spokeAt < at && window.Voice && !Voice.MUTED && answerA.textContent.trim() === text) Voice.speak(text); }, 3000);
+      setTimeout(() => { if (spokeAt < at && window.Voice && !Voice.MUTED) { b.classList.add("os-pulse"); Voice.setNote("Si no me ha oído, toque 🔊 Escuchar."); } }, 6500);
     };
     new MutationObserver(listenBtn).observe(document.getElementById("answer"), { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["class"] });
     const voiceOn = (e) => {
