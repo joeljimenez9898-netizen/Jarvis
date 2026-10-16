@@ -175,10 +175,9 @@ async function main() {
   const accounts = call("/api/Account/search", { onlyActiveAccounts: true }, token).accounts || [];
   const at = new Date().toISOString(), since = new Date(Date.now() - HISTORY_DAYS * 86400000).toISOString();
   const doc = { at, desde: since.slice(0, 10), cuentas: {} };
-  const list = [];
-  for (const rule of rules) {
-    const acct = accounts.find((a) => String(a.id) === String(rule.topstepId));
-    if (!acct) { doc.cuentas[rule.topstepId] = { error: "no aparece entre las cuentas activas de Topstep" }; continue; }
+  // Every active Topstep account is read, so any account the app links by its ID updates by itself;
+  // the summary covers the ones Jarvis has rules for.
+  for (const acct of accounts) {
     const trades = call("/api/Trade/search", { accountId: acct.id, startTimestamp: since, endTimestamp: at }, token).trades || [];
     const days = {};
     let unknown = 0;
@@ -190,7 +189,12 @@ async function main() {
     }
     doc.cuentas[acct.id] = { nombre: acct.name, balance: acct.balance, puedeOperar: acct.canTrade, simulada: acct.simulated, dias: days,
                              operaciones: trades.length, sinFecha: unknown };
-    list.push(stats(rule, acct, days, payouts));
+  }
+  const list = [];
+  for (const rule of rules) {
+    const acct = accounts.find((a) => String(a.id) === String(rule.topstepId));
+    if (!acct) { doc.cuentas[rule.topstepId] = { error: "no aparece entre las cuentas activas de Topstep" }; continue; }
+    list.push(stats(rule, acct, doc.cuentas[acct.id].dias, payouts));
   }
   doc.resumen = rules.length ? resumen(list, at) : "No hay cuentas de Jarvis vinculadas a Topstep (campo «ID de cuenta en Topstep»).";
   const m = mercado(token);
