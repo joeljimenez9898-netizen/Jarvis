@@ -4,20 +4,30 @@ A 3D map of your markdown notes, with a brain you can ask questions.
 
 ```
 notes/                 your .md files (30 sample notes about a coffee roastery)
-build.py               indexer -> viewer/graph-data.js   (standard library only)
+build.mjs              indexer -> viewer/graph-data.js   (Node standard library only)
 viewer/index.html      the galaxy (3d-force-graph + three from a CDN, pinned)
-server.py              http://127.0.0.1:4700, serves viewer/ and POST /chat
-config.json            your Anthropic key + model (gitignored, never served)
+server.mjs             http://127.0.0.1:4700, serves viewer/ and POST /chat
+config.json            optional: model, notes_dir, claude_cmd (gitignored, never served)
 ```
 
 ## Run it
 
+No Python, no API key, nothing to `npm install` in the project. You need Node.js 22 or newer and
+[Claude Code](https://claude.com/claude-code), signed in with your Claude subscription:
+
 ```bash
-pip install -r requirements.txt
-cp config.example.json config.json      # then put your key in it
-python3 build.py                        # or: python3 build.py ~/path/to/notes
-python3 server.py
+npm install -g @anthropic-ai/claude-code   # once
+claude                                     # once: type /login, sign in with your Claude account
+
+cp config.example.json config.json         # optional: pick a model, a notes folder
+node build.mjs                             # or: node build.mjs ~/path/to/notes
+node server.mjs
 ```
+
+The brain is Claude Code itself: every answer is one `claude -p` run with no tools, no MCP
+servers and no saved session, started with `ANTHROPIC_API_KEY` removed from its environment,
+so it always uses your subscription. It is never started with `--bare` (that mode needs an
+API key). If `claude` isn't on your PATH, set `"claude_cmd"` in `config.json` (or `CLAUDE_CMD`).
 
 Open http://127.0.0.1:4700. Click a star to fly to it, Esc to go back, `/` to
 jump to the question bar, "New" to start a fresh conversation.
@@ -33,21 +43,21 @@ mkdir -p ~/.jarvis-tools/rea && cd ~/.jarvis-tools/rea
 npm install rea-agents@6.5.0 --save-exact --ignore-scripts
 ```
 
-It needs Node.js 22.19+ (or 24.11+, or 26+) and Google Chrome. `teardown.py` finds both even
+It needs Node.js 22.19+ (or 24.11+, or 26+) and Google Chrome. `teardown.mjs` finds both even
 when the server starts without your shell's PATH. `GET /teardown/diag` reports what's ready
 and what's missing. Say "tear down example.com", or `POST /teardown {"url": ...}`.
 
-The law, enforced in `teardown.py`: only REA's passive website commands may run. Pages open in
+The law, enforced in `teardown.mjs`: only REA's passive website commands may run. Pages open in
 a headless Chrome with a fresh profile (no logins, no cookies), and nothing sends input.
 Addresses must be http(s), with no credentials and no private-network or cloud-metadata
-hosts. Localhost is allowed, for your own projects. Teardowns run in a browser Jarvis owns (`browser.py`, standard library only). Each job gets a
+hosts. Localhost is allowed, for your own projects. Teardowns run in a browser Jarvis owns (`browser.mjs`, Node standard library only). Each job gets a
 brand-new Chrome profile in `~/.jarvis-tools/rea/profiles/<job id>`, so it never touches your
 everyday Chrome, cookies or logins. A fresh profile also means no cache, so file sizes are
 honest. Chrome listens on 127.0.0.1:9333 at 1280×820. Jarvis waits for the page to finish
 loading plus 2.5 seconds for intro animations. Its small DevTools client does two things only:
 read page facts and send mouse-wheel scrolls. When the job ends, Chrome is closed, anything
 still using the profile is killed, and the folder is deleted. Try it with
-`python3 browser.py https://nodejs.org/en --headless`. Set `JARVIS_TEARDOWN_HEADLESS=1` to keep
+`node browser.mjs https://nodejs.org/en --headless`. Set `JARVIS_TEARDOWN_HEADLESS=1` to keep
 teardown windows off your screen.
 
 Each teardown captures five kinds of evidence. Every line is labelled with who captured it:
@@ -63,7 +73,7 @@ REA, Jarvis's own browser reads, or Jarvis scanning the code REA captured.
 4. **Asset log** (Jarvis browser). Every file from every origin, read from the browser's own timeline:
    sizes, grouped by kind, the 12 largest. Files whose server hides their size are counted, not guessed.
 5. **Fingerprints** (Jarvis scan). License banners in comments (three.js revision, GSAP, postprocessing,
-   …) plus code markers. They live in one table in `evidence.py`, ordered 3D engine, animation, smooth
+   …) plus code markers. They live in one table in `evidence.mjs`, ordered 3D engine, animation, smooth
    scroll, effects, compression, then build tools. Runtime globals such as `window.__THREE__`
    corroborate them.
 
@@ -91,30 +101,30 @@ the totals and "Read the full teardown", which opens the note with Open in Obsid
 fit and never covers the answer or other panels (the snapshot goes first). Say "show me the last
 teardown", "open the full teardown", "close the teardown" or "cancel the teardown".
 
-**Proving it.** `python3 kitcheck.py` runs the offline checks in about a second: addresses,
-fingerprints, digest attribution, and snapshot containment. `python3 drill.py [url]` runs one real
+**Proving it.** `node kitcheck.mjs` runs the offline checks in about a second: addresses,
+fingerprints, digest attribution, and snapshot containment. `node drill.mjs [url]` runs one real
 headless teardown and puts everything back exactly as it was. A crashed teardown's Chrome is
 cleaned up when the server next starts.
 
 To upgrade REA, change `PINNED_REA` in
-`teardown.py` and re-run the install with the new version. Nothing ever installs "latest".
+`teardown.mjs` and re-run the install with the new version. Nothing ever installs "latest".
 
 ## Preflight
 
 ```bash
-python3 server.py          # terminal 1
-python3 preflight.py       # terminal 2
+node server.mjs            # terminal 1
+node preflight.mjs         # terminal 2
 ```
 
-`preflight.py` runs every live chain end to end against the running system: no mocks. It checks
-that the server is up, the graph loads, `/chat` answers, the API key and model are real, and
+`preflight.mjs` runs every live chain end to end against the running system: no mocks. It checks
+that the server is up, the graph loads, `/chat` answers, Claude Code answers on your subscription (one real call, with no API key and no `--bare`), and
 `/remember` writes a note that the next question can retrieve (the test note is removed
 afterwards). It also checks that the served files match the disk and the server isn't running
 stale code, that `config.json` can't be reached from the browser, and that a `?mute=1` tab
 stays silent in a real browser. It ends with `N pass, N fail, N warn` and exits non-zero on
 any failure.
 
-The live mute check needs Playwright (`pip install playwright && playwright install chromium`).
+The live mute check uses Playwright if npm can find it (`npm install -g playwright`).
 Without it, that check only verifies the source and reports a warning.
 
 ## How it fits together
@@ -124,22 +134,22 @@ Without it, that check only verifies the source and reports a warning.
   one mentions the other's title or they share a `[[wikilink]]`. A node's `id` is
   always its index in `nodes`.
 - **Brain.** `POST /chat {"question": "..."}` scores every note by keyword overlap
-  (title matches weigh more), sends the top 6 to Claude, and returns
+  (title matches weigh more), sends the top 6 to Claude (through `claude -p`), and returns
   `{"answer": "...", "nodes": [indexes used]}`. The last six exchanges are kept
   server-side, so follow-up questions work.
-- **Key safety.** `config.json` sits in the project root. The server only serves
+- **Config safety.** `config.json` sits in the project root. The server only serves
   `viewer/`, binds to 127.0.0.1, and rejects other hosts and origins.
 
-Re-run `build.py` whenever your notes change. The server picks up the new
+Re-run `node build.mjs` whenever your notes change. The server picks up the new
 `graph-data.js` without a restart.
 
 ## Growing the brain by voice
 
 Say or type anything starting with "remember that" and it becomes a real note:
 
-- `server.py` → `add_note()` writes `notes/captures/<first few words>.md` with today's date,
-  links it with the same rules `build.py` uses, appends it to `viewer/graph-data.js`, and adds
-  it to the live search index. The next question can cite it without re-running `build.py`.
+- `server.mjs` → `addNote()` writes `notes/captures/<first few words>.md` with today's date,
+  links it with the same rules `build.mjs` uses, appends it to `viewer/graph-data.js`, and adds
+  it to the live search index. The next question can cite it without re-running `build.mjs`.
 - `viewer/index.html` → `addNote()` places it beside its most related note, pulses it and
   flies the camera to it, all without a reload.
 - Anything that adds notes at runtime should go through these two functions.
@@ -148,7 +158,7 @@ Say or type anything starting with "remember that" and it becomes a real note:
 
 ## Personality
 
-The whole character is one commented block at the top of `server.py`:
+The whole character is one commented block at the top of `server.mjs`:
 
 - `PERSONA` is the system prompt: a dry, polite British butler who says "sir" now and then,
   gives one witty line plus the facts, and says plainly when the notes don't cover something.
@@ -156,7 +166,7 @@ The whole character is one commented block at the top of `server.py`:
   comes from the graph data.
 - `CONTROL_TAGS` lists the actions the brain can ask for: `[RESET]`, `[SHOW: title]` and
   `[REINDEX]`. When asked for one, the model replies with just the tag and the server runs it.
-  To add one, put an entry in `CONTROL_TAGS` and a `@tag_handler("NAME")` function below it.
+  To add one, put an entry in `CONTROL_TAGS` and a handler in `TAG_HANDLERS` below it.
 - `RECEIPT_LINES` is what gets said after a tag ran or failed. These lines come from the
   handler's receipt, never from the model, so the assistant can't claim an action it
   didn't take. Unknown tags and other requests ("email Priya") get a polite refusal.
