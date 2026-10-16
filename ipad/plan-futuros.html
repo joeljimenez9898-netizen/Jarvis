@@ -82,6 +82,11 @@
 .pf .tog[aria-pressed="true"] { background: #22c55e; }
 .pf .riskinfo { background: var(--navy); color: #cbd5e1; border-radius: 14px; padding: 16px 20px; line-height: 1.6; }
 .pf .riskinfo b { color: var(--gold); }
+.pf .ficha { margin-top: 16px; }
+.pf .ficha td b.v { font-size: 15px; }
+.pf .estado { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #dcfce7; color: #15803d; }
+.pf .estado.dll80 { background: #fef3c7; color: #b45309; } .pf .estado.dll100 { background: #fee2e2; color: #b91c1c; } .pf .estado.dpt100 { background: #dbeafe; color: #1d4ed8; }
+.pf .banner.warn { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
 .pf .bulk { background: var(--navy); color: #e2e8f0; border-radius: 18px; padding: 20px 22px; margin: 16px 0; display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
 .pf .bulk label { display: grid; gap: 6px; font-size: 14px; color: #cbd5e1; }
 .pf .bulk input, .pf .bulk select { background: var(--navy2); color: #fff; border: 1px solid #334155; border-radius: 10px; padding: 10px 12px; }
@@ -187,6 +192,18 @@ function dayMap() {
   return m;
 }
 const capital = (cs) => cs.reduce((a, c) => a + (Number(c.balanceIni) || 0), 0);
+// Today's trading day as Topstep counts it (a session that opens at 17:00 Chicago belongs to the next date).
+const tradingDay = (t) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(new Date(t).getTime() + 7 * 3600 * 1000));
+// Watching the daily limits: today's P&L of each live account linked to Topstep against its loss limit and profit target.
+const NIVEL = { dll80: "⚠️ Cerca del límite", dll100: "🛑 Límite pasado", dpt100: "🎯 Objetivo alcanzado" };
+function vigil() {
+  const hoy = tradingDay(Date.now());
+  return cuentas().filter((c) => ts(c) && (c.estado === "ACTIVA" || c.estado === "EXAM")).map((c) => {
+    const r = riskOf(c), v = Math.round(((ts(c).dias || {})[hoy] || 0) * 100) / 100;
+    const dll = r.dllOn ? Number(r.dll) || null : null, dpt = r.dptOn ? Number(r.dpt) || null : null;
+    return { c, r, hoy: v, dll, dpt, nivel: dll && v <= -dll ? "dll100" : dll && v <= -0.8 * dll ? "dll80" : dpt && v >= dpt ? "dpt100" : null };
+  });
+}
 function grupoStats(g, days = dayMap()) {
   const cs = cuentas().filter((c) => c.grupo === g.id);
   const lunes = monday(iso(new Date()));
@@ -245,7 +262,8 @@ V.dashboard = () => {
   const series = g12.map((g, i) => ({ name: g.nombre, color: i ? "#3b82f6" : "#22c55e",
     values: labels.map((l) => { const w = sem.find((s) => s.semana === l && s.grupo === g.id); return w ? semanaStats(w, days).pnl : 0; }) }));
   const top = cs.map((c) => [c, pnl(c)]).filter(([, v]) => v).sort((a, b) => b[1] - a[1]).slice(0, 8);
-  return `<div class="banner ${p.ok ? "ok" : "bad"}">${esc(p.txt)}</div>
+  const alertas = vigil().filter((x) => x.nivel);
+  return `<div class="banner ${p.ok ? "ok" : "bad"}">${esc(p.txt)}</div>${alertas.map((x) => `<div class="banner warn">${NIVEL[x.nivel]} · ${esc(x.c.codigo)} lleva ${x.hoy > 0 ? "+" : ""}${money(x.hoy)} hoy</div>`).join("")}
   <div class="grid4">
     <div class="card kpi"><div class="lab">P&amp;L TOTAL SISTEMA <span>💰</span></div><div class="val ${cls(total)}">${money(total)}</div></div>
     <div class="card kpi"><div class="lab">CAPITAL BAJO GESTIÓN <span>🏦</span></div><div class="val blue">${money(cap)}</div></div>
@@ -388,6 +406,7 @@ V.riesgo = () => {
   return `<div class="cardhead"><div><span style="font-size:28px">⚙️</span><p class="hint">Administra las reglas de gestión de riesgo para todas tus cuentas</p></div>
     <div style="margin-left:auto;display:flex;gap:10px"><button class="btn green" type="button" data-act="guardar-riesgo">💾 Guardar cambios</button><button class="btn" type="button" data-act="reset-riesgo">↺ Restablecer</button></div></div>
   <div class="riskinfo">⚠️ <b>Gestión de Riesgo por Plataforma:</b> Los límites de pérdida y ganancia se aplican directamente en Tradelio/NinjaTrader mediante la configuración del copiador. Usa estos valores como referencia exacta para introducirlos en la plataforma.${g2 ? `<br>Los límites del <b style="color:#fff">${esc(g2.nombre)}</b> aplican ratio <b>${esc(g2.ratio.split(":")[0])}x</b> — los valores ya están ajustados.` : ""}</div>
+  ${ficha()}
   <div class="filters" style="margin-top:16px"><input data-f="rq" type="search" placeholder="🔍 Buscar cuenta..." value="${esc(S.f.rq)}">
     <select data-f="rg"><option value="">Todos los grupos</option>${grupos().map((g) => `<option value="${g.id}" ${S.f.rg === g.id ? "selected" : ""}>${esc(g.nombre)}</option>`).join("")}</select></div>
   <div class="bulk"><h4>⚡ Aplicar a cuentas seleccionadas (${S.sel.size})</h4>
@@ -406,6 +425,19 @@ V.riesgo = () => {
     <td><select data-r="${c.id}.dptAccion">${ACCIONES.map((a) => `<option ${r.dptAccion === a ? "selected" : ""}>${a}</option>`).join("")}</select></td></tr>`; }).join("") || '<tr><td colspan="8" class="empty">Sin cuentas.</td></tr>'}
   </tbody></table></div>`;
 };
+// What to type in TopstepX for each live Topstep account. Jarvis only reads Topstep, so Joel copies these values himself.
+function ficha() {
+  const v = vigil();
+  if (!v.length) return "";
+  return `<div class="card ficha"><h3>📋 Ficha para TopstepX</h3><p class="hint">Jarvis solo lee Topstep, no puede cambiar nada allí. Copia estos valores una vez en los ajustes de riesgo de TopstepX (límite de pérdida diaria personal y objetivo de ganancia diaria personal); el multiplicador va en tu copiador. Jarvis vigila cada hora lo que llevas hoy y te avisa.</p>
+  <div class="tablewrap"><table><thead><tr><th>CUENTA</th><th>ID TOPSTEP</th><th>LÍMITE PÉRDIDA DIARIA</th><th>OBJETIVO GANANCIA DIARIA</th><th>MULT. (COPIADOR)</th><th>HOY</th><th>ESTADO</th></tr></thead><tbody>
+  ${v.map((x) => `<tr><td><b>${esc(x.c.codigo)}</b></td><td class="dim">${esc(x.c.topstepId)}</td>
+    <td>${x.dll ? `<b class="v neg">${money(x.dll)}</b><br><small class="dim">${esc(x.r.dllAccion)}</small>` : '<span class="dim">sin límite</span>'}</td>
+    <td>${x.dpt ? `<b class="v pos">${money(x.dpt)}</b><br><small class="dim">${esc(x.r.dptAccion)}</small>` : '<span class="dim">sin objetivo</span>'}</td>
+    <td><b>${esc(x.r.mult)}</b></td><td class="${cls(x.hoy)}"><b>${x.hoy > 0 ? "+" : ""}${money(x.hoy)}</b></td>
+    <td><span class="estado ${x.nivel || ""}">${x.nivel ? NIVEL[x.nivel] : "✅ Dentro"}</span></td></tr>`).join("")}
+  </tbody></table></div></div>`;
+}
 V.calendario = () => {
   const C = S.cal, days = dayMap(), cs = cuentas().filter((c) => (!C.g || c.grupo === C.g) && (!C.c || c.id === C.c)), cap = capital(cs) || 1;
   const dayVal = (d) => cs.reduce((a, c) => a + ((days[c.id] || {})[d] || 0), 0);
@@ -582,6 +614,8 @@ function contexto() {
     operacionesRecientes: os.slice(0, 15).map((o) => ({ origen: o.auto ? "Topstep (automática)" : "apuntada a mano", fecha: o.fecha, cuenta: cCode(o.cuenta), instrumento: o.instr, direccion: o.dir, contratos: o.contratos, pnl: o.pnl, resultado: o.resultado })),
     semanas: semanasAll(days).sort((a, b) => (b.inicio || "").localeCompare(a.inicio || "")).slice(0, 12).map((w) => { const st = semanaStats(w, days);
       return { semana: w.semana, inicio: w.inicio, grupo: gName(w.grupo), pnl: Math.round(st.pnl * 100) / 100, pctCapital: Math.round(st.pct * 100) / 100, operaciones: st.ops, automatica: !!w.auto }; }),
+    vigilanciaHoy: vigil().map((x) => ({ cuenta: x.c.codigo, pnlHoy: x.hoy, limitePerdidaDiaria: x.dll, objetivoDiario: x.dpt, estado: x.nivel ? NIVEL[x.nivel] : "dentro de sus límites" })),
+    fichaTopstepX: vigil().map((x) => ({ cuenta: x.c.codigo, idTopstep: x.c.topstepId, limitePerdidaDiaria: x.dll, accionLimite: x.r.dllAccion, objetivoGananciaDiaria: x.dpt, accionObjetivo: x.r.dptAccion, multiplicadorCopiador: x.r.mult })),
     winRate: os.length ? Math.round((os.filter((o) => o.resultado === "TP").length / os.length) * 1000) / 10 + "%" : null,
     reglas: REGLAS.map(([t, rs]) => t + ": " + rs.map(([a, b]) => `${a} = ${b}`).join("; ")),
   };

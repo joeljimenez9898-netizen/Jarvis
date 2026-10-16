@@ -175,6 +175,30 @@ export function operaciones(fills) {
   }).sort((a, b) => (a.cierra < b.cierra ? 1 : -1));
 }
 
+/**
+ * Watching Joel's own daily limits (the Riesgo tab of his Plan de Futuros, fm/plan/cuentas): today's P&L of each
+ * live account linked to Topstep against its daily loss limit and daily profit target. Each warning is given once a day.
+ */
+export function vigilancia(planCuentas, cuentasTs, at, prev) {
+  const hoy = tradingDay(at), ya = new Set(prev && prev.fecha === hoy ? prev.avisados || [] : []);
+  const filas = [], nuevos = [];
+  for (const c of planCuentas) {
+    const t = c.topstepId && cuentasTs[c.topstepId];
+    if (!t || !t.dias || !["ACTIVA", "EXAM"].includes(c.estado)) continue;
+    const pnl = Math.round((t.dias[hoy] || 0) * 100) / 100;
+    const dll = c.dllOn === false ? null : Number(c.dll ?? Math.abs(Number(c.sl) || 0)) || null;
+    const dpt = c.dptOn === false ? null : Number(c.dpt ?? (Number(c.tp) || 0)) || null;
+    const nivel = dll && pnl <= -dll ? "dll100" : dll && pnl <= -0.8 * dll ? "dll80" : dpt && pnl >= dpt ? "dpt100" : null;
+    filas.push({ cuenta: c.codigo, hoy: pnl, limitePerdida: dll, objetivo: dpt, nivel });
+    if (!nivel || ya.has(c.codigo + ":" + nivel) || (nivel === "dll80" && ya.has(c.codigo + ":dll100"))) continue;
+    ya.add(c.codigo + ":" + nivel);
+    nuevos.push(nivel === "dll100" ? `🛑 ${c.codigo} ha pasado su límite de pérdida diaria: lleva ${money(pnl)} hoy (límite ${money(-dll)}). Su plan dice: ${c.dllAccion || "Liquidar"}.`
+      : nivel === "dll80" ? `⚠️ ${c.codigo} lleva ${money(pnl)} hoy: está al ${pct(-pnl / dll)} de su límite de pérdida diaria (${money(-dll)}).`
+      : `🎯 ${c.codigo} ha llegado a su objetivo diario: lleva ${money(pnl)} hoy (objetivo ${money(dpt)}). Su plan dice: ${c.dptAccion || "Liquidar"}.`);
+  }
+  return { fecha: hoy, at, cuentas: filas, avisados: [...ya], nuevos };
+}
+
 /** The weekday session question: today's P&L per account, and what Jarvis asks. */
 export function checkin(list, sesion, at) {
   const hoy = tradingDay(at);
@@ -233,13 +257,19 @@ async function main() {
     list.push(stats(rule, acct, doc.cuentas[acct.id].dias, payouts));
   }
   doc.resumen = rules.length ? resumen(list, at) : "No hay cuentas de Jarvis vinculadas a Topstep (campo «ID de cuenta en Topstep»).";
+  // the limits Joel set in his Plan de Futuros, and what was already said today (the previous fm/topstep, saved under <dir>/fm/topstep.json)
+  const prevFile = dir && path.join(dir, "fm", "topstep.json");
+  const raw = prevFile && fs.existsSync(prevFile) ? JSON.parse(fs.readFileSync(prevFile, "utf8")) : null;
+  const prev = raw && raw.data && typeof raw.data === "object" ? raw.data : raw;
+  doc.vigilancia = vigilancia(dir ? readDocs(dir, "fm/plan/cuentas") : [], doc.cuentas, at, prev && prev.vigilancia);
+  if (doc.vigilancia.nuevos.length) doc.resumen = "Vigilancia de límites:\n" + doc.vigilancia.nuevos.join("\n") + "\n\n" + doc.resumen;
   const m = mercado(token);
   fs.writeFileSync(outM, JSON.stringify(m, null, 1));
   doc.resumen += "\n\nMercado: " + m.texto;
   const ci = process.argv.indexOf("--checkin");
   if (ci > 0) fs.writeFileSync(process.argv[ci + 2] || "/tmp/fm-checkin.json", JSON.stringify(checkin(list, process.argv[ci + 1] || "Londres", at), null, 1));
   fs.writeFileSync(out, JSON.stringify(doc, null, 1));
-  console.log(JSON.stringify({ ok: true, out, cuentasLeidas: accounts.length, vinculadas: rules.length,
+  console.log(JSON.stringify({ ok: true, out, cuentasLeidas: accounts.length, vinculadas: rules.length, avisos: doc.vigilancia.nuevos.length,
                                operaciones: Object.values(doc.cuentas).reduce((n, c) => n + (c.operaciones || 0), 0) }));
 }
 

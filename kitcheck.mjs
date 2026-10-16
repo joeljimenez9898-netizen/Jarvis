@@ -133,8 +133,16 @@ async function checkTopstepReadOnly() {
   const o = ops[0] || {};
   if (ops.length !== 1 || o.dir !== "SHORT" || o.entrada !== 30004 || o.salida !== 29941 || o.contratos !== 12 || o.pnl !== 1503.36 || o.dur !== 5 || o.fecha !== "2026-10-16")
     return [false, "trades from fills: " + JSON.stringify(ops).slice(0, 200)];
+  // Joel's own daily limits are watched, each warning once a day; a lost account is not watched
+  const at = "2026-10-16T15:00:00Z", d = ts.tradingDay(at);
+  const pc = [{ codigo: "TS-2", estado: "EXAM", topstepId: "1", dll: 1000 }, { codigo: "TS-3", estado: "PERDIDA", topstepId: "2", dll: 1000 }];
+  const v1 = ts.vigilancia(pc, { 1: { dias: { [d]: -850 } }, 2: { dias: { [d]: -2000 } } }, at, null);
+  const v2 = ts.vigilancia(pc, { 1: { dias: { [d]: -1050 } }, 2: { dias: {} } }, at, v1);
+  const v3 = ts.vigilancia(pc, { 1: { dias: { [d]: -1100 } }, 2: { dias: {} } }, at, v2);
+  if (v1.nuevos.length !== 1 || !v1.nuevos[0].includes("85 %") || v2.nuevos.length !== 1 || !v2.nuevos[0].includes("ha pasado") || v3.nuevos.length)
+    return [false, "daily limit watch: " + JSON.stringify([v1.nuevos, v2.nuevos, v3.nuevos])];
   const day = ts.tradingDay("2026-10-15T23:30:00Z");          // 18:30 Chicago belongs to the next session
-  return [ok && day === "2026-10-16", ok ? `Topstep sync limited to ${allowed.join(", ")}; trading day rolls at 17:00 Chicago (${day}); fills become whole trades (SHORT 12 MNQ, +1.503,36 net)`
+  return [ok && day === "2026-10-16", ok ? `Topstep sync limited to ${allowed.join(", ")}; trading day rolls at 17:00 Chicago (${day}); fills become whole trades (SHORT 12 MNQ, +1.503,36 net); daily limits warned once (85 %, then passed)`
                                          : `Topstep sync allows: ${allowed.join(", ")}`];
 }
 
@@ -166,6 +174,7 @@ async function checkIpadApps() {
     if (!page.includes("const tsOps = () =>") || !page.includes("function semanasAll(") || !page.includes("Calculada por Jarvis con Topstep")) wrongSym.push("Topstep trades and weeks are not filled in automatically in the Plan");
     if (!page.includes('id="fr-host"') || !page.includes("fundingManager: window.FUNDING?.contexto") || !page.includes('doc("fm/retiradas").collection("movs")') || !page.includes('id="os-fr"')) wrongSym.push("the Funding Manager (withdrawals and exam costs) is not wired into Jarvis");
     if (!page.includes("async function movRoute(") || !page.includes("const mov = await movRoute(question, sample)") || !page.includes("const mov = await movRoute(String(text), movSample)") || !page.includes("if (!data.node) { Voice.speak(data.answer); return; }")) wrongSym.push("saying «regístrame el payout / la compra del examen» does not reach the Funding Manager");
+    if (!page.includes("📋 Ficha para TopstepX") || !page.includes("fichaTopstepX: vigil()") || !page.includes("nunca digas que puedes cambiar ajustes")) wrongSym.push("the TopstepX limits sheet is missing from the Plan");
     if (!page.includes('id="cap-host"') || !page.includes("capitalPropio: window.CAPITAL?.contexto") || !page.includes('db.doc("fm/capital")')) wrongSym.push("Capital propio is not wired into Jarvis");
     if (!page.includes("<avisos>") || !page.includes("hacia las 11:00")) wrongSym.push("Jarvis does not know the scheduled 11:00 summary");
     if (!page.includes('db.doc("fm/mercado")') || !page.includes("no es en directo")) wrongSym.push("the MNQ price star is missing or not marked as not live");
