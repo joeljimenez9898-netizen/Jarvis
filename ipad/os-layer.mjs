@@ -194,6 +194,27 @@ export const SCRIPT = `
       if (msg.textContent === "Guardado.") { $("os-link-t").value = ""; $("os-link-u").value = ""; }
     });
     if (window.BRAIN && window.BRAIN.loadMiro) window.BRAIN.loadMiro().then((s) => { const h = document.querySelector("#os-hubs"); if (h) h.title = "Miro: " + s; });
+    // Where the page can't use the microphone (Claude's frame blocks it), the mic button opens the
+    // keyboard instead: tap its 🎤, speak, and the question goes by itself when the dictation pauses.
+    let micBlocked = false;
+    try { micBlocked = localStorage.getItem("jarvis-mic-blocked") === "1"; } catch {}
+    const q = $("q");
+    window.addEventListener("jarvis-mic-blocked", () => { micBlocked = true; try { localStorage.setItem("jarvis-mic-blocked", "1"); } catch {} });
+    let dictating = false, idle = null;
+    document.addEventListener("click", (e) => {
+      if (!micBlocked || !e.target.closest || !e.target.closest("#mic")) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      if (window.Voice) Voice.stopSpeaking();
+      dictating = true; q.value = ""; q.focus();          // focus inside the tap: iPad opens the keyboard
+      window.Voice && Voice.setNote("Toque el 🎤 del teclado y hable. Cuando haga una pausa, se lo envío.");
+    }, true);
+    q.addEventListener("input", () => {
+      if (!dictating) return;
+      clearTimeout(idle);
+      idle = setTimeout(() => { if (dictating && q.value.trim()) { dictating = false; q.blur(); $("send").click(); } }, 2200);
+    });
+    q.addEventListener("keydown", (e) => { if (e.key === "Enter") { dictating = false; clearTimeout(idle); } });
+    q.addEventListener("blur", () => { if (dictating && !q.value.trim()) dictating = false; });
     const voiceOn = (e) => {
       const tag = $("os-voice").querySelector("span");
       if (!window.Voice || !Voice.available) { tag.textContent = "no disponible aquí"; Voice && Voice.setNote("Este navegador no deja hablar a la página. Abre Jarvis en Safari."); return; }

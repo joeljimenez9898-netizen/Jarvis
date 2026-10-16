@@ -65,7 +65,7 @@ for (const [a, b] of [
   ["    rec.continuous = true;", "    rec.continuous = false;"],
   ["      if (state.listening) { try { rec.start(); } catch { stopListening(); } }", "      if (state.listening) stopListening();   // one question per tap"],
   ["    if (!Recognition || state.listening) return;\n    rec = new Recognition();", "    if (!Recognition || state.listening) return;\n    stopSpeaking();                         // a tap on the mic cuts Jarvis short\n    rec = new Recognition();"],
-  ['"not-allowed": "Microphone blocked. Allow it in the address bar and try again."', '"not-allowed": "El micrófono está bloqueado en esta ventana. Usa el micrófono del teclado (toca la caja de texto): te contesto igual, por escrito y en voz alta."'],
+  ['"not-allowed": "Microphone blocked. Allow it in the address bar and try again."', '"not-allowed": "El micrófono está bloqueado en esta ventana. Toque otra vez el micrófono: abro el teclado, toque su 🎤 y hable. Lo envío yo solo."'],
   ['"service-not-allowed": "Microphone blocked by the browser."', '"service-not-allowed": "El iPad no deja reconocer la voz aquí. Activa Ajustes › General › Teclado › Dictado, o usa el micrófono del teclado."'],
   ['"audio-capture": "No microphone found."', '"audio-capture": "No encuentro el micrófono del iPad."'],
   ["network: \"Speech recognition needs the browser's speech service. Brave and some Chromium builds don't have it; use Chrome or Edge.\"", 'network: "El reconocimiento de voz necesita internet. Revisa la conexión y vuelve a tocar el micrófono."'],
@@ -74,6 +74,7 @@ for (const [a, b] of [
   ["      if (!Recognition) {\n        mic.disabled = true;\n        mic.title = \"This browser has no speech recognition. Use Chrome, Edge or Safari.\";\n      }",
    "      mic.title = \"Toca y habla: Jarvis te contesta por escrito y en voz alta\";\n      if (!Recognition) {\n        mic.onclick = () => set({ note: \"Aquí no puedo usar el micrófono de la página. Abre Jarvis en Safari, o usa el micrófono del teclado.\" });\n      }"],
   ['set({ note: "Stopped." })', 'set({ note: "Me callo." })'],
+  ["      stopListening(why);", "      if (e.error === \"not-allowed\" || e.error === \"service-not-allowed\") window.dispatchEvent(new Event(\"jarvis-mic-blocked\"));\n      stopListening(why);"],
   // Read aloud like a person: no brackets, no "1!" contract suffix, and "30.075" is one number, not two sentences.
   ['    text = String(text || "").trim();', '    text = String(text || "").replace(/\\s*\\([^)]*\\)/g, "").replace(/([A-Z])1!/g, "$1").replace(/ · /g, ", ").replace(/↗/g, "").trim();'],
   ['const parts = text.replace(/\\s+/g, " ").match(/[^.!?;]+[.!?;]*\\s*/g) || [text];', 'const parts = text.replace(/\\s+/g, " ").match(/(?:[^.!?;]|[.,](?=\\d))+[.!?;]*\\s*/g) || [text];'],
