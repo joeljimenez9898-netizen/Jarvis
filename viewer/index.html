@@ -182,7 +182,7 @@
     const f = document.getElementById("fallback");
     f.style.display = "grid";
     f.textContent = typeof GRAPH === "undefined"
-      ? "graph-data.js is missing. Run: python3 build.py"
+      ? "graph-data.js is missing. Run: node build.mjs"
       : "Couldn't load the 3D libraries from the CDN. Check your internet connection.";
   }, 10000);
 </script>

@@ -19,7 +19,7 @@
 //                    The model never writes these, so it can never claim "done".
 // ═════════════════════════════════════════════════════════════════════════════
 
-const BOOT_GREETING = "Hello, sir.";
+export const BOOT_GREETING = "Hello, sir.";
 
 const CONTROL_TAGS = {
   RESET:    { usage: "[RESET]",
@@ -34,7 +34,7 @@ const CONTROL_TAGS = {
                     "at; QUESTION is what they want to know" },
 };
 
-const RECEIPT_LINES = {
+export const RECEIPT_LINES = {
   RESET:   { ok: "Slate wiped, sir. I remember nothing, professionally.",
              fail: "I'm afraid the slate refused to wipe: {reason}." },
   SHOW:    { ok: "{title}, as requested.",
@@ -94,7 +94,7 @@ character and no notes.
 After every reply except a bare tag, add a final line: USED: followed by the
 comma-separated indexes of the notes you actually relied on, or USED: none.`;
 
-const SYSTEM_PROMPT = PERSONA.replace("{tags}",
+export const SYSTEM_PROMPT = PERSONA.replace("{tags}",
   Object.values(CONTROL_TAGS).map((t) => `  ${t.usage}  when ${t.when}`).join("\n"));
 
 // The teardown bay's analyst: one call per teardown, given the evidence digest.
