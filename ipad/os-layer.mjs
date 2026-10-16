@@ -131,7 +131,7 @@ export const MARKUP = `
     <div style="width:100%">
       <button class="os-toggle" id="os-voice">🔊 Voz <span>tocar para activar</span></button>
       <button class="os-toggle" id="os-labels" aria-pressed="true">Etiquetas <span>sí</span></button>
-      <button class="os-toggle" id="os-fm">Funding Manager <span>abrir</span></button>
+      <button class="os-toggle" id="os-fm">Plan de Futuros <span>abrir</span></button>
     </div>
   </div>
 </aside>
@@ -251,6 +251,21 @@ export const SCRIPT = `
       const t = unheard; unheard = ""; $("os-listen")?.classList.remove("os-pulse"); Voice.speak(t);
     }, true);
     window.addEventListener("jarvis-spoke", () => { unheard = ""; });
+    // The session question (fm/checkin) arrives while Jarvis is open: it appears on the answer card and Jarvis says it aloud.
+    // On a fresh page load the boot greeting already carries it, so only a question that lands later is announced here.
+    { const t0 = Date.now(); let announced = null;
+      setInterval(() => {
+        const B = window.BRAIN, c = B && B.checkinPending && B.checkinPending();
+        if (!c || c.at === announced) return;
+        if (announced === null && Date.now() - t0 < 12000) { announced = c.at; return; }
+        announced = c.at;
+        const card = $("answer");
+        card.className = "glass show";
+        card.querySelector(".q").textContent = "Jarvis · sesión de " + c.sesion;
+        card.querySelector(".chips").replaceChildren();
+        card.querySelector(".a").textContent = c.pregunta;
+        if (window.Voice) { Voice.stopSpeaking && Voice.stopSpeaking(); Voice.speak(c.pregunta); }
+      }, 3000); }
     // 📷: a photo of a trade for Jarvis to look at, where this view can send images to Claude.
     const photo = document.createElement("button"); photo.type = "button"; photo.id = "os-photo"; photo.title = "Mándame la foto de un trade"; photo.textContent = "📷"; photo.hidden = true;
     const pick = document.createElement("input"); pick.type = "file"; pick.hidden = true;

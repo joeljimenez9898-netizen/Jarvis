@@ -10,6 +10,7 @@ const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..")
 const HERE = path.dirname(new URL(import.meta.url).pathname);
 const OUT = process.argv[2] || path.join(HERE, "jarvis-space.html");
 const FM_SRC = path.join(HERE, "funding-manager.html");
+const PLAN_SRC = path.join(HERE, "plan-futuros.html");
 const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
 const must = (s, a, b) => { if (!s.includes(a)) throw new Error("not found: " + a.slice(0, 90)); return s.split(a).join(b); };
 
@@ -19,7 +20,7 @@ for (const [a, b] of [
   ["<title>Knowledge Galaxy</title>", "<title>Jarvis</title>"],
   ["<h3>CONNECTED</h3>", "<h3>CONECTADO CON</h3>"],
   ['<div id="title"><h1>KNOWLEDGE GALAXY</h1><p id="stats"></p></div>',
-   '<div id="title"><h1>JARVIS</h1><p id="stats"></p><button type="button" id="fm-open">Funding Manager</button></div>'],
+   '<div id="title"><h1>JARVIS</h1><p id="stats"></p><button type="button" id="fm-open">Plan de Futuros</button></div>'],
   ["${nodes.length} notes indexed · ${links.length} connections · ${groups.length} groups", "${nodes.length} recuerdos · ${links.length} conexiones · ${groups.length} grupos"],
   ["`${greeting} ${nodes.length} notes indexed.`", "`${greeting} ${nodes.length} recuerdos en tu segundo cerebro.`"],
   ["`${nodes.length} notes indexed.`", "`${nodes.length} recuerdos en tu segundo cerebro.`"],
@@ -275,7 +276,7 @@ window.GRAPH = { nodes: [], links: [] };
     "Tus palabras se leen en voz alta y la nota ya está en su pantalla: una frase con ingenio si sale natural, y luego los hechos en una o dos frases. Sin markdown, sin listas, sin emojis. Nunca recites la nota entera.\n\n" +
     "Cada pregunta llega con un bloque <notas> (sus recuerdos más relevantes, numerados por índice) y un bloque <datos> con sus cuentas y cálculos ya hechos (drawdown, consistencia, plan del día), un bloque <avisos> con lo que ya está programado (si pregunta por informes, resúmenes o avisos, contéstale con eso: sí existen y funcionan), y un bloque <mercado> con el último precio que dio Topstep: al citarlo di siempre de qué hora es y nunca lo presentes como en directo; no predices el mercado ni recomiendas operaciones. En un mal día (pérdidas grandes, drawdown tocado, cuenta no operable) sé humano: primero una frase breve de apoyo, luego los hechos y una o dos lecciones, sin sermones. Responde SOLO con eso y con lo dicho antes. " +
     "Si no está, dilo con dignidad en una frase. Nunca inventes cifras, reglas de una firma ni noticias, y no predigas el mercado. Si una cuenta está cerca de un límite, dilo primero.\n\n" +
-    "Solo puedes hablar: nunca digas que has guardado, enviado o cambiado nada. Para apuntar algo, dile que empiece la frase con «apunta que…». Para registrar resultados o payouts, que use Funding Manager.\n\n" +
+    "Solo puedes hablar: nunca digas que has guardado, enviado o cambiado nada. Para apuntar algo, dile que empiece la frase con «apunta que…». Para registrar operaciones, cuentas o la revisión del domingo, que use el Plan de Futuros (botón «Plan de Futuros»). En <datos>, «planDeFuturos» trae sus grupos (MAESTRA, GRUPO 1, GRUPO 2, SUPLENTES), cuentas, riesgo, operaciones y reglas de rotación, suplentes y pausa grupal: úsalo cuando pregunte por su plan, sus grupos o qué cuenta toca.\n\n" +
     "Los saludos y agradecimientos reciben una línea breve en personaje y ninguna nota.\n\n" +
     "Después de cada respuesta añade una última línea: USED: y los índices de las notas en las que te has basado, separados por comas, o USED: none.";
   const STOP = new Set("a al algo como con cual cuales cuando de del desde donde dos el ella ellas ellos en entre era es esa ese eso esta este esto estos fue ha han hay la las le les lo los mas me mi mis muy no nos o para pero por que quien se ser si sin sobre su sus te tengo tiene tu tus un una uno unos y ya yo cuanto cuanta cuantos dime decir hacer puedo como va van esta estan the of and to is what".split(" "));
@@ -370,7 +371,7 @@ window.GRAPH = { nodes: [], links: [] };
     for (const i of last) if (picked.length < 6 && !picked.includes(i) && i < window.GRAPH.nodes.length) picked.push(i);
     const N = window.GRAPH.nodes;
     const notas = picked.map((i) => '<nota index="' + i + '" titulo="' + N[i].label + '" grupo="' + N[i].group + '">\n' + (B.bodies[i] || N[i].excerpt) + "\n</nota>").join("\n\n") || "(ninguna nota coincide)";
-    const datos = window.FM?.contexto ? JSON.stringify(window.FM.contexto()) : "{}";
+    const datos = JSON.stringify({ ...(window.FM?.contexto ? window.FM.contexto() : {}), planDeFuturos: window.PLAN?.contexto ? window.PLAN.contexto() : null });
     let extra = "";
     if (ci && !small) extra += "\n\n<sesion>\nEsta es la respuesta de Joel a la pregunta del día: «" + ci.pregunta + "». Comenta cómo le fue en la sesión de " + ci.sesion + " con sus cifras de hoy y sus reglas; si fue un mal día, primero una frase de apoyo y luego una o dos lecciones concretas.\n</sesion>";
     if (image) extra += "\n\n<foto>\nJoel te manda la captura de un trade suyo" + (question.replace(/^📷.*$/, "").trim() ? " con este comentario: " + question : "") + ". Mírala con atención: describe lo que ves (instrumento, temporalidad, entrada, stop, objetivo, contexto) sin inventar lo que no se ve, compáralo con su sistema y sus reglas, di qué hizo bien y qué mejoraría, y si fue una pérdida o un mal día, apóyale y dale una o dos lecciones para la próxima vez. No recomiendes operaciones futuras concretas ni predigas el mercado.\n</foto>";
@@ -456,6 +457,12 @@ for (const [a, b] of [
 fmScript = fmScript.split("document.addEventListener(").join("FMROOT.addEventListener(");
 if (/document\.(addEventListener|querySelector)/.test(fmScript)) throw new Error("FM script still reaches into document");
 
+const plan = fs.readFileSync(PLAN_SRC, "utf8");
+const planCss = plan.slice(plan.indexOf("<style>") + 7, plan.indexOf("</style>"));
+const planMarkup = plan.slice(plan.indexOf("</style>") + 8, plan.indexOf("<script>"));
+const planScript = plan.slice(plan.indexOf("<script>") + 8, plan.lastIndexOf("</script>"));
+if (/:root|document\.querySelector|document\.getElementById/.test(planCss + planScript)) throw new Error("the Plan reaches outside its shadow root");
+
 const shell = `
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
@@ -463,17 +470,26 @@ const shell = `
              letter-spacing: .06em; padding: 9px 14px; border-radius: 999px; cursor: pointer; pointer-events: auto; }
   #fm-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   #fm-host { position: fixed; inset: 0; z-index: 50; overflow-y: auto; background: #0e131b; -webkit-overflow-scrolling: touch; }
+  #plan-host { position: fixed; inset: 0; z-index: 50; overflow-y: auto; background: #f1f4f9; -webkit-overflow-scrolling: touch; }
 </style>
 <div id="fm-host" hidden></div>
+<div id="plan-host" hidden></div>
 <script>
 (() => {
 const FMHOST = document.getElementById("fm-host");
 const FMROOT = FMHOST.attachShadow({ mode: "open" });
 FMROOT.innerHTML = ${JSON.stringify(`<style>${css}</style><div class="fm-body">${markup}</div>`).replace(/</g, "\\u003c")};
 ${fmScript}
-const open = () => { FMHOST.hidden = false; render(); };
-const close = () => { FMHOST.hidden = true; };
+// The Plan de Futuros is the panel Joel sees; the FM above keeps running unseen for its Topstep figures.
+const PLANHOST = document.getElementById("plan-host");
+const PROOT = PLANHOST.attachShadow({ mode: "open" });
+PROOT.innerHTML = ${JSON.stringify(`<style>${planCss}</style>${planMarkup}`).replace(/</g, "\\u003c")};
+window.__PLAN_ROOT = PROOT;
+${planScript}
+const open = () => { PLANHOST.hidden = false; window.PLAN && window.PLAN.render(); };
+const close = () => { PLANHOST.hidden = true; FMHOST.hidden = true; };
 window.FM.open = open; window.FM.close = close;
+const back = PROOT.getElementById("pf-back"); back.hidden = false; back.addEventListener("click", close);
 FMROOT.getElementById("fm-back").addEventListener("click", close);
 document.getElementById("fm-open").addEventListener("click", open);
 })();

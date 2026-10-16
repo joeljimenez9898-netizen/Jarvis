@@ -153,6 +153,7 @@ async function checkIpadApps() {
     if (!page.includes("v.length - last.length >= 4") || !page.includes("answerA.textContent.trim() === text) Voice.speak(text)")) wrongSym.push("dictation auto-send or the spoken retry is missing");
     if (!page.includes("function keepAwake(") || !page.includes("Voice.keepAwake && Voice.keepAwake(); });")) wrongSym.push("the voice is not held open from the tap to the answer");
     if (!page.includes('db.doc("fm/checkin")') || !page.includes('images: [image]') || !page.includes('b.id = "os-listen"')) wrongSym.push("session question or trade photo is missing");
+    if (!page.includes('id="plan-host"') || !page.includes("planDeFuturos: window.PLAN?.contexto") || !page.includes("Control Maestro")) wrongSym.push("the Plan de Futuros panel is not wired into Jarvis");
     if (!page.includes("<avisos>") || !page.includes("hacia las 11:00")) wrongSym.push("Jarvis does not know the scheduled 11:00 summary");
     if (!page.includes('db.doc("fm/mercado")') || !page.includes("no es en directo")) wrongSym.push("the MNQ price star is missing or not marked as not live");
     const ok = JSON.stringify(tools) === '["board_search_boards"]' && !apps.length && page.includes("tiene que empezar por https://") && !wrongSym.length;
