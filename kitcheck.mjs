@@ -124,8 +124,17 @@ async function checkTopstepReadOnly() {
   const ok = JSON.stringify(allowed) === JSON.stringify(want) && !acting.length;
   const ci = ts.checkin([{ alias: "TS-3", ultimoDia: ts.tradingDay("2026-10-16T19:00:00Z"), ultimoPnl: -2002.2 }, { alias: "TS-2", ultimoDia: "2026-10-01", ultimoPnl: 50 }], "Nueva York", "2026-10-16T16:00:00Z");
   if (ci.total !== -2002.2 || !ci.pregunta.includes("sesión de Nueva York") || ci.respondido !== false) return [false, "session question: " + JSON.stringify(ci).slice(0, 160)];
+  // whole trades from fills: a short opened in one fill and closed in two fills of one order is one trade, fees of both sides off
+  const ops = ts.operaciones([
+    { id: 1, contractId: "CON.F.US.MNQ.Z26", creationTimestamp: "2026-10-16T13:30:54Z", price: 30004, profitAndLoss: null, fees: 4.32, side: 1, size: 12, orderId: 10 },
+    { id: 2, contractId: "CON.F.US.MNQ.Z26", creationTimestamp: "2026-10-16T13:35:39Z", price: 29941, profitAndLoss: 1008, fees: 2.88, side: 0, size: 8, orderId: 11 },
+    { id: 3, contractId: "CON.F.US.MNQ.Z26", creationTimestamp: "2026-10-16T13:35:40Z", price: 29941, profitAndLoss: 504, fees: 1.44, side: 0, size: 4, orderId: 11 },
+    { id: 4, contractId: "CON.F.US.MNQ.Z26", creationTimestamp: "2026-10-16T14:00:00Z", price: 1, profitAndLoss: 99, fees: 0, side: 0, size: 1, voided: true }]);
+  const o = ops[0] || {};
+  if (ops.length !== 1 || o.dir !== "SHORT" || o.entrada !== 30004 || o.salida !== 29941 || o.contratos !== 12 || o.pnl !== 1503.36 || o.dur !== 5 || o.fecha !== "2026-10-16")
+    return [false, "trades from fills: " + JSON.stringify(ops).slice(0, 200)];
   const day = ts.tradingDay("2026-10-15T23:30:00Z");          // 18:30 Chicago belongs to the next session
-  return [ok && day === "2026-10-16", ok ? `Topstep sync limited to ${allowed.join(", ")}; trading day rolls at 17:00 Chicago (${day})`
+  return [ok && day === "2026-10-16", ok ? `Topstep sync limited to ${allowed.join(", ")}; trading day rolls at 17:00 Chicago (${day}); fills become whole trades (SHORT 12 MNQ, +1.503,36 net)`
                                          : `Topstep sync allows: ${allowed.join(", ")}`];
 }
 
@@ -154,6 +163,7 @@ async function checkIpadApps() {
     if (!page.includes("function keepAwake(") || !page.includes("Voice.keepAwake && Voice.keepAwake(); });")) wrongSym.push("the voice is not held open from the tap to the answer");
     if (!page.includes('db.doc("fm/checkin")') || !page.includes('images: [image]') || !page.includes('b.id = "os-listen"')) wrongSym.push("session question or trade photo is missing");
     if (!page.includes('id="plan-host"') || !page.includes("planDeFuturos: window.PLAN?.contexto") || !page.includes("Control Maestro")) wrongSym.push("the Plan de Futuros panel is not wired into Jarvis");
+    if (!page.includes("const tsOps = () =>") || !page.includes("function semanasAll(") || !page.includes("Calculada por Jarvis con Topstep")) wrongSym.push("Topstep trades and weeks are not filled in automatically in the Plan");
     if (!page.includes('id="cap-host"') || !page.includes("capitalPropio: window.CAPITAL?.contexto") || !page.includes('db.doc("fm/capital")')) wrongSym.push("Capital propio is not wired into Jarvis");
     if (!page.includes("<avisos>") || !page.includes("hacia las 11:00")) wrongSym.push("Jarvis does not know the scheduled 11:00 summary");
     if (!page.includes('db.doc("fm/mercado")') || !page.includes("no es en directo")) wrongSym.push("the MNQ price star is missing or not marked as not live");

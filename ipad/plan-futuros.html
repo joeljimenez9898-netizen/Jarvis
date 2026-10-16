@@ -166,7 +166,9 @@ if (!TABS.some(([k]) => k === S.tab)) S.tab = "dashboard";
 const list = (m) => [...m.entries()].map(([id, v]) => ({ id, ...v }));
 const grupos = () => list(S.grupos).sort((a, b) => (a.orden ?? 99) - (b.orden ?? 99));
 const cuentas = () => list(S.cuentas).sort((a, b) => (a.orden ?? 99) - (b.orden ?? 99) || String(a.codigo).localeCompare(b.codigo));
-const ops = () => list(S.ops).sort((a, b) => (b.fecha || "").localeCompare(a.fecha || "") || (b.creado || "").localeCompare(a.creado || ""));
+// Operations: the ones Joel logs plus, for accounts linked to Topstep, every trade Jarvis reads from Topstep.
+const tsOps = () => cuentas().flatMap((c) => (ts(c)?.trades || []).map((t) => ({ ...t, id: "ts-" + t.id, cuenta: c.id, auto: true, creado: t.cierra })));
+const ops = () => [...list(S.ops), ...tsOps()].sort((a, b) => (b.fecha || "").localeCompare(a.fecha || "") || (b.creado || "").localeCompare(a.creado || ""));
 const gName = (id) => S.grupos.get(id)?.nombre || "—";
 const cCode = (id) => S.cuentas.get(id)?.codigo || "—";
 
@@ -237,7 +239,7 @@ V.dashboard = () => {
   const tp = os.filter((o) => o.resultado === "TP" || (o.resultado !== "SL" && o.resultado !== "BE" && Number(o.pnl) > 0)).length;
   const wr = os.length ? ((tp / os.length) * 100).toFixed(1) + "%" : "—";
   const gs = grupos().filter((g) => g.estado !== "RESERVA");
-  const sem = list(S.semanas).sort((a, b) => (a.inicio || "").localeCompare(b.inicio || ""));
+  const sem = semanasAll(days).sort((a, b) => (a.inicio || "").localeCompare(b.inicio || ""));
   const labels = [...new Set(sem.map((s) => s.semana))];
   const g12 = grupos().filter((g) => g.estado === "ACTIVO").slice(0, 2);
   const series = g12.map((g, i) => ({ name: g.nombre, color: i ? "#3b82f6" : "#22c55e",
@@ -295,19 +297,35 @@ V.operaciones = () => {
     (!q || [cCode(o.cuenta), o.instr, o.dir, o.nota, o.fecha].join(" ").toLowerCase().includes(q)));
   const pages = Math.max(1, Math.ceil(all.length / 8)); S.page.ops = Math.min(S.page.ops, pages - 1);
   const rows = all.slice(S.page.ops * 8, S.page.ops * 8 + 8);
-  return `<div class="card"><div class="cardhead"><div><h3>Operaciones</h3><p class="hint">Historial completo de trades por cuenta.</p></div><button class="btn green" type="button" data-new="op">+ Nueva operación</button></div>
+  return `<div class="card"><div class="cardhead"><div><h3>Operaciones</h3><p class="hint">Historial completo de trades por cuenta. Las de cuentas vinculadas a Topstep las apunta Jarvis solo.</p></div><button class="btn green" type="button" data-new="op">+ Nueva operación</button></div>
   <div class="filters"><select data-f="og"><option value="">Todos los grupos</option>${grupos().map((g) => `<option value="${g.id}" ${S.f.og === g.id ? "selected" : ""}>${esc(g.nombre)}</option>`).join("")}</select>
     <select data-f="oc"><option value="">Todas las cuentas</option>${cuentas().map((c) => `<option value="${c.id}" ${S.f.oc === c.id ? "selected" : ""}>${esc(c.codigo)}</option>`).join("")}</select>
     <select data-f="or"><option value="">Todos los resultados</option>${["TP", "SL", "BE"].map((t) => `<option ${S.f.or === t ? "selected" : ""}>${t}</option>`).join("")}</select>
     <input data-f="oq" type="search" placeholder="🔍 Buscar..." value="${esc(S.f.oq)}"></div>
   <div class="tablewrap"><table><thead><tr><th>#</th><th>FECHA</th><th>CUENTA</th><th>GRUPO</th><th>INSTR.</th><th>DIR.</th><th>ENTRADA</th><th>SALIDA</th><th>CONTR.</th><th>P&amp;L ($)</th><th>RESULTADO</th><th>DUR. (min)</th><th></th></tr></thead><tbody>
-  ${rows.map((o, i) => `<tr><td class="dim">${S.page.ops * 8 + i + 1}</td><td>${fecha(o.fecha)}</td><td><b>${esc(cCode(o.cuenta))}</b></td><td class="dim">${esc(gName(S.cuentas.get(o.cuenta)?.grupo))}</td>
+  ${rows.map((o, i) => `<tr><td class="dim">${S.page.ops * 8 + i + 1}</td><td>${fecha(o.fecha)}</td><td><b>${esc(cCode(o.cuenta))}</b>${o.auto ? '<span class="live" title="Leída de Topstep">TOPSTEP</span>' : ""}</td><td class="dim">${esc(gName(S.cuentas.get(o.cuenta)?.grupo))}</td>
     <td><b>${esc(o.instr)}</b></td><td><span class="pill dir ${esc(o.dir)}">${esc(o.dir)}</span></td><td>${o.entrada || "—"}</td><td>${o.salida || "—"}</td><td>${o.contratos || "—"}</td>
     <td class="${cls(Number(o.pnl))}"><b>${Number(o.pnl) > 0 ? "+" : ""}${money(o.pnl)}</b></td><td><span class="pill res-${esc(o.resultado)}">${esc(o.resultado || "—")}</span></td><td class="dim">${o.dur || "—"}</td>
-    <td><button class="ico" type="button" data-edit="op" data-id="${o.id}" title="Editar">✏️</button></td></tr>`).join("") || '<tr><td colspan="13" class="empty">Sin operaciones con ese filtro.</td></tr>'}
+    <td>${o.auto ? "" : `<button class="ico" type="button" data-edit="op" data-id="${o.id}" title="Editar">✏️</button>`}</td></tr>`).join("") || '<tr><td colspan="13" class="empty">Sin operaciones con ese filtro.</td></tr>'}
   </tbody></table></div>
   <div class="pager">Página ${S.page.ops + 1} de ${pages} · ${all.length} operaciones<button class="btn" type="button" data-page="ops:-1">Anterior</button><button class="btn" type="button" data-page="ops:1">Siguiente</button></div></div>`;
 };
+// Weeks: the ones Joel adds plus one per group for every week with results, filled in by Jarvis.
+function semanasAll(days = dayMap()) {
+  const manual = list(S.semanas), base = manual.map((w) => w.inicio).filter(Boolean).sort()[0];
+  const nombre = (lunes) => { if (base) return "S" + (Math.round((new Date(lunes + "T12:00:00") - new Date(monday(base) + "T12:00:00")) / (7 * 86400000)) + 1);
+    const d = new Date(lunes + "T12:00:00"); d.setDate(d.getDate() + 3); const y = new Date(d.getFullYear(), 0, 4);
+    return "S" + (1 + Math.round(((d - y) / 86400000 - 3 + ((y.getDay() + 6) % 7)) / 7)); };
+  const auto = new Map();
+  for (const g of grupos()) for (const c of cuentas().filter((c) => c.grupo === g.id))
+    for (const [d, v] of Object.entries(days[c.id] || {})) {
+      if (!v) continue;
+      const lunes = monday(d), key = g.id + "|" + lunes;
+      if (manual.some((w) => w.grupo === g.id && w.inicio && monday(w.inicio) === lunes)) continue;
+      if (!auto.has(key)) auto.set(key, { id: "auto-" + key, grupo: g.id, inicio: lunes, semana: nombre(lunes), auto: true });
+    }
+  return [...manual, ...auto.values()];
+}
 function semanaStats(w, days = dayMap()) {
   const cs = cuentas().filter((c) => c.grupo === w.grupo), fin = addDays(w.inicio, 7);
   const per = cs.map((c) => [c, Object.entries(days[c.id] || {}).filter(([d]) => d >= w.inicio && d < fin).reduce((a, [, v]) => a + v, 0)]);
@@ -318,12 +336,12 @@ function semanaStats(w, days = dayMap()) {
            mejor: mejor && mejor[1] > 0 ? mejor[0].codigo : "—", peor: peor && peor[1] < 0 ? peor[0].codigo : "—", ops: nops };
 }
 V.semanas = () => {
-  const days = dayMap(), ws = list(S.semanas).sort((a, b) => (b.inicio || "").localeCompare(a.inicio || "") || gName(a.grupo).localeCompare(gName(b.grupo)));
-  return `<div class="card"><div class="cardhead"><div><h3>Seguimiento Semanal</h3><p class="hint">P&amp;L y estado por grupo cada semana.</p></div><button class="btn green" type="button" data-new="semana">+ Nueva semana</button></div>
+  const days = dayMap(), ws = semanasAll(days).sort((a, b) => (b.inicio || "").localeCompare(a.inicio || "") || gName(a.grupo).localeCompare(gName(b.grupo)));
+  return `<div class="card"><div class="cardhead"><div><h3>Seguimiento Semanal</h3><p class="hint">P&amp;L y estado por grupo cada semana. Las marcadas AUTO las rellena Jarvis con Topstep.</p></div><button class="btn green" type="button" data-new="semana">+ Nueva semana</button></div>
   <div class="tablewrap"><table><thead><tr><th>SEMANA</th><th>FECHA INICIO</th><th>GRUPO</th><th>P&amp;L SEMANA ($)</th><th>% CAPITAL</th><th>CTAS VERDES</th><th>CTAS ROJAS</th><th>MEJOR CUENTA</th><th>PEOR CUENTA</th><th># OPS</th><th></th></tr></thead><tbody>
-  ${ws.map((w) => { const s = semanaStats(w, days); return `<tr><td><b>${esc(w.semana)}</b></td><td>${fecha(w.inicio)}</td><td>${esc(gName(w.grupo))}</td><td class="${cls(s.pnl)}"><b>${s.pnl >= 0 ? "+" : ""}${money(s.pnl)}</b></td>
+  ${ws.map((w) => { const s = semanaStats(w, days); return `<tr><td><b>${esc(w.semana)}</b>${w.auto ? '<span class="live" title="Calculada por Jarvis con Topstep">AUTO</span>' : ""}</td><td>${fecha(w.inicio)}</td><td>${esc(gName(w.grupo))}</td><td class="${cls(s.pnl)}"><b>${s.pnl >= 0 ? "+" : ""}${money(s.pnl)}</b></td>
     <td class="${cls(s.pnl)}"><b>${s.pct.toFixed(2)}%</b></td><td class="pos"><b>${s.verdes}</b></td><td class="dim">${s.rojas}</td><td class="dim">${esc(s.mejor)}</td><td class="dim">${esc(s.peor)}</td><td>${s.ops}</td>
-    <td><button class="ico" type="button" data-edit="semana" data-id="${w.id}" title="Editar">✏️</button></td></tr>`; }).join("") || '<tr><td colspan="11" class="empty">Sin semanas todavía.</td></tr>'}
+    <td>${w.auto ? "" : `<button class="ico" type="button" data-edit="semana" data-id="${w.id}" title="Editar">✏️</button>`}</td></tr>`; }).join("") || '<tr><td colspan="11" class="empty">Sin semanas todavía.</td></tr>'}
   </tbody></table></div></div>`;
 };
 const REGLAS = [
@@ -561,7 +579,9 @@ function contexto() {
       balanceInicial: c.balanceIni, pnlActual: v, pctPnl: c.balanceIni ? Math.round((v / c.balanceIni) * 10000) / 100 : 0, tpObjetivo: c.tp, slLimite: c.sl,
       faltaParaTP: Math.round(((Number(c.tp) || 0) - v) * 100) / 100, margenHastaSL: Math.round((v - (Number(c.sl) || 0)) * 100) / 100, datosDeTopstep: !!ts(c),
       riesgo: { multiplicador: r.mult, limitePerdidaDiaria: r.dllOn ? r.dll : null, objetivoGananciaDiaria: r.dptOn ? r.dpt : null } }; }),
-    operacionesRecientes: os.slice(0, 15).map((o) => ({ fecha: o.fecha, cuenta: cCode(o.cuenta), instrumento: o.instr, direccion: o.dir, contratos: o.contratos, pnl: o.pnl, resultado: o.resultado })),
+    operacionesRecientes: os.slice(0, 15).map((o) => ({ origen: o.auto ? "Topstep (automática)" : "apuntada a mano", fecha: o.fecha, cuenta: cCode(o.cuenta), instrumento: o.instr, direccion: o.dir, contratos: o.contratos, pnl: o.pnl, resultado: o.resultado })),
+    semanas: semanasAll(days).sort((a, b) => (b.inicio || "").localeCompare(a.inicio || "")).slice(0, 12).map((w) => { const st = semanaStats(w, days);
+      return { semana: w.semana, inicio: w.inicio, grupo: gName(w.grupo), pnl: Math.round(st.pnl * 100) / 100, pctCapital: Math.round(st.pct * 100) / 100, operaciones: st.ops, automatica: !!w.auto }; }),
     winRate: os.length ? Math.round((os.filter((o) => o.resultado === "TP").length / os.length) * 1000) / 10 + "%" : null,
     reglas: REGLAS.map(([t, rs]) => t + ": " + rs.map(([a, b]) => `${a} = ${b}`).join("; ")),
   };

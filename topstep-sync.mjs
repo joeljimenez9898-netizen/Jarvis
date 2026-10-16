@@ -25,6 +25,7 @@ export const READ_ONLY_ENDPOINTS = new Set(["/api/Auth/loginKey", "/api/Account/
                                            "/api/Contract/search", "/api/History/retrieveBars"]);
 export const MERCADO = ["MNQ"];
 const HISTORY_DAYS = 90;
+const OPS_DAYS = HISTORY_DAYS, OPS_MAX = 400;  // the trade list in fm/topstep, newest first
 
 function call(endpoint, body, token) {
   if (!READ_ONLY_ENDPOINTS.has(endpoint)) throw new Error(`refused: ${endpoint} is not a read-only endpoint`);
@@ -141,6 +142,39 @@ function mercado(token) {
   return m;
 }
 
+/**
+ * Whole trades from Topstep's fills (half-turns). A fill with no P&L opens; one with P&L closes,
+ * matched first-in first-out per contract. The fills of one closing order make one trade. P&L is net
+ * of the fees of both sides, so a day's trades add up to that day's P&L.
+ */
+export function operaciones(fills) {
+  const open = {}, byOrder = new Map();
+  const sorted = fills.filter((f) => !f.voided && f.creationTimestamp).sort((a, b) => (a.creationTimestamp < b.creationTimestamp ? -1 : 1));
+  for (const f of sorted) {
+    const q = (open[f.contractId] ||= []), size = Number(f.size) || 0;
+    if (f.profitAndLoss == null) { q.push({ left: size, size, price: f.price, at: f.creationTimestamp, fee: Number(f.fees) || 0 }); continue; }
+    let left = size, cost = 0, matched = 0, fees = Number(f.fees) || 0, first = null;
+    while (left > 0 && q.length) {
+      const lot = q[0], n = Math.min(left, lot.left);
+      cost += n * lot.price; matched += n; fees += (lot.fee * n) / lot.size; first ||= lot.at;
+      lot.left -= n; left -= n; if (!lot.left) q.shift();
+    }
+    const key = f.orderId ?? f.id, t = byOrder.get(key) || { id: String(key), contrato: f.contractId, side: f.side, size: 0, exitCost: 0, cost: 0, matched: 0,
+                                                        bruto: 0, fees: 0, abre: first, cierra: f.creationTimestamp };
+    t.size += size; t.exitCost += size * f.price; t.cost += cost; t.matched += matched; t.bruto += Number(f.profitAndLoss) || 0; t.fees += fees;
+    t.abre = t.abre && first ? (t.abre < first ? t.abre : first) : t.abre || first; t.cierra = f.creationTimestamp;
+    byOrder.set(key, t);
+  }
+  const r2 = (n) => Math.round(n * 100) / 100;
+  return [...byOrder.values()].map((t) => {
+    const pnl = r2(t.bruto - t.fees);
+    return { id: t.id, fecha: tradingDay(t.cierra), instr: (t.contrato.split(".")[3] || t.contrato), dir: t.side === 1 ? "LONG" : "SHORT",
+             entrada: t.matched ? r2(t.cost / t.matched) : null, salida: r2(t.exitCost / t.size), contratos: t.size, pnl, bruto: r2(t.bruto),
+             resultado: pnl > 0 ? "TP" : pnl < 0 ? "SL" : "BE", dur: t.abre ? Math.max(0, Math.round((new Date(t.cierra) - new Date(t.abre)) / 60000)) : null,
+             abre: t.abre, cierra: t.cierra };
+  }).sort((a, b) => (a.cierra < b.cierra ? 1 : -1));
+}
+
 /** The weekday session question: today's P&L per account, and what Jarvis asks. */
 export function checkin(list, sesion, at) {
   const hoy = tradingDay(at);
@@ -175,6 +209,7 @@ async function main() {
   const accounts = call("/api/Account/search", { onlyActiveAccounts: true }, token).accounts || [];
   const at = new Date().toISOString(), since = new Date(Date.now() - HISTORY_DAYS * 86400000).toISOString();
   const doc = { at, desde: since.slice(0, 10), cuentas: {} };
+  const opsSince = new Date(Date.now() - OPS_DAYS * 86400000).toISOString();
   // Every active Topstep account is read, so any account the app links by its ID updates by itself;
   // the summary covers the ones Jarvis has rules for.
   for (const acct of accounts) {
@@ -188,7 +223,8 @@ async function main() {
       days[d] = Math.round(((days[d] || 0) + (Number(t.profitAndLoss) || 0) - (Number(t.fees) || 0)) * 100) / 100;
     }
     doc.cuentas[acct.id] = { nombre: acct.name, balance: acct.balance, puedeOperar: acct.canTrade, simulada: acct.simulated, dias: days,
-                             operaciones: trades.length, sinFecha: unknown };
+                             operaciones: trades.length, sinFecha: unknown,
+                             trades: operaciones(trades).filter((o) => o.cierra >= opsSince).slice(0, OPS_MAX) };
   }
   const list = [];
   for (const rule of rules) {
