@@ -45,6 +45,8 @@ export const CSS = `
   .os-in { width: 100%; box-sizing: border-box; background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 10px; color: var(--text); font: inherit; font-size: 13px; padding: 9px 11px; outline: none; margin-bottom: 6px; }
   #os-link { display: flex; flex-direction: column; gap: 0; }
   #os-link .os-toggle { justify-content: center; text-transform: none; letter-spacing: 0; width: 100%; }
+  #os-listen { display: inline-block; margin: 10px 8px 0 0; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--accent); background: transparent; color: var(--text); font: inherit; font-size: 13px; pointer-events: auto; cursor: pointer; }
+  #os-listen.os-pulse { background: var(--accent); color: #07101f; animation: pulse 1.4s infinite; }
   .os-msg { font-size: 12px; color: var(--muted); min-height: 1em; margin-top: 4px; }
   #os-open-link { display: inline-block; margin: 10px 0 2px; padding: 7px 12px; border-radius: 999px; background: var(--accent); color: #07101f; font-weight: 600; font-size: 13px; text-decoration: none; }
   #os-results { margin-top: 6px; display: grid; gap: 2px; }
@@ -204,7 +206,7 @@ export const SCRIPT = `
     document.addEventListener("click", (e) => {
       if (!micBlocked || !e.target.closest || !e.target.closest("#mic")) return;
       e.preventDefault(); e.stopImmediatePropagation();
-      if (window.Voice) Voice.stopSpeaking();
+      if (window.Voice) { Voice.stopSpeaking(); Voice.prime && Voice.prime(); }
       dictating = true; q.value = ""; q.focus();          // focus inside the tap: iPad opens the keyboard
       window.Voice && Voice.setNote("Toque el 🎤 del teclado y hable. Cuando haga una pausa, se lo envío.");
     }, true);
@@ -215,6 +217,22 @@ export const SCRIPT = `
     });
     q.addEventListener("keydown", (e) => { if (e.key === "Enter") { dictating = false; clearTimeout(idle); } });
     q.addEventListener("blur", () => { if (dictating && !q.value.trim()) dictating = false; });
+    // Every answer gets a "🔊 Escuchar" button. If the iPad stayed silent, it lights up: a tap always plays.
+    let spokeAt = 0, shown = "";
+    window.addEventListener("jarvis-spoke", () => { spokeAt = Date.now(); const b = $("os-listen"); if (b) b.classList.remove("os-pulse"); });
+    const answerA = document.querySelector("#answer .a");
+    const listenBtn = () => {
+      const text = answerA.textContent.trim();
+      if (!text || text === shown || document.getElementById("answer").classList.contains("thinking")) return;
+      shown = text;
+      let b = $("os-listen");
+      if (!b) { b = document.createElement("button"); b.type = "button"; b.id = "os-listen"; b.textContent = "🔊 Escuchar";
+        b.onclick = () => { b.classList.remove("os-pulse"); window.Voice && Voice.speak(answerA.textContent); };
+        document.getElementById("answer").appendChild(b); }
+      const at = Date.now();
+      setTimeout(() => { if (spokeAt < at && window.Voice && !Voice.MUTED) { b.classList.add("os-pulse"); Voice.setNote("Si no me ha oído, toque 🔊 Escuchar."); } }, 2500);
+    };
+    new MutationObserver(listenBtn).observe(document.getElementById("answer"), { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["class"] });
     const voiceOn = (e) => {
       const tag = $("os-voice").querySelector("span");
       if (!window.Voice || !Voice.available) { tag.textContent = "no disponible aquí"; Voice && Voice.setNote("Este navegador no deja hablar a la página. Abre Jarvis en Safari."); return; }

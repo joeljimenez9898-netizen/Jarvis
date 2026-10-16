@@ -83,6 +83,10 @@ for (const [a, b] of [
   ["`Listening: “${state.heard}”` : \"Listening…\"", "`Escuchando: “${state.heard}”` : \"Escuchando…\""],
   ['text = "Thinking…";', 'text = "Pensando…";'],
   ["  window.Voice = {\n    FINISH_MS,", "  // Spoken INSIDE the tap: iPad only lets a page talk after a deliberate gesture.\n  function hello(text) {\n    helloed = true;   // the test line replaces the waiting greeting\n    queued.splice(0).forEach((q) => q.resolve());\n    unlock();\n    if (!synth) return Promise.resolve(false);\n    stopSpeaking();\n    const u = new SpeechSynthesisUtterance(text || \"A su servicio, Joel.\");\n    const v = pickVoice(); if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = \"es-ES\"; }\n    u.volume = 1;\n    return new Promise((res) => {\n      let started = false;\n      u.onstart = () => { started = true; set({ speaking: true }); };\n      u.onend = () => { set({ speaking: false }); res(true); };\n      u.onerror = () => { set({ speaking: false }); res(started); };\n      if (!utter(u)) return res(false);\n      setTimeout(() => { if (!started && !synth.speaking) res(false); }, 2500);\n    });\n  }\n\n  window.Voice = {\n    hello, available: !!synth, FINISH_MS,"],
+  // Tell the page when sound really started, so a silent iPad can offer the answer on a tap.
+  ["        u.onend = u.onerror = () => { live.delete(u); done(); };", "        u.onstart = () => window.dispatchEvent(new Event(\"jarvis-spoke\"));\n        u.onend = u.onerror = () => { live.delete(u); done(); };"],
+  // A silent line spoken inside a tap re-arms the iPad's voice for the answer that follows.
+  ["    hello, available: !!synth, FINISH_MS,", "    hello, prime: () => { if (!synth) return; const p = new SpeechSynthesisUtterance(\" \"); p.volume = 0; utter(p); }, available: !!synth, FINISH_MS,"],
 ]) voice = must(voice, a, b);
 
 // ── 2. the second brain: graph from the user's data, and the in-page brain ──
