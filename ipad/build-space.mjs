@@ -32,6 +32,8 @@ for (const [a, b] of [
   ['<button type="submit" id="send">Ask</button>', '<button type="submit" id="send">Preguntar</button>'],
   ['"Searching your notes"', '"Buscando en tu segundo cerebro"'],
   ['"Writing it down"', '"Apuntándolo"'],
+  ["    if (!addNote(data.node, data.links, data.anchor)) {",
+   "    if (!data.node) { Voice.speak(data.answer); return; }   // kept somewhere other than the diary (a movement in the Funding Manager)\n    if (!addNote(data.node, data.links, data.anchor)) {"],
   ["\"No links yet. Mention another note's title and it will join up.\"", '"Aún sin conexiones. Menciona una cuenta u otra nota y se unirán."'],
   ["const REMEMBER = /^\\s*remember that\\b/i;", "const REMEMBER = /^\\s*(?:remember that|apunta|anota|recuerda|guarda)\\b/i;"],
   ["Voice.addRoute(/^remember that\\b/, (m, sentence) => remember(sentence));",
@@ -278,7 +280,7 @@ window.GRAPH = { nodes: [], links: [] };
     "Tus palabras se leen en voz alta y la nota ya está en su pantalla: una frase con ingenio si sale natural, y luego los hechos en una o dos frases. Sin markdown, sin listas, sin emojis. Nunca recites la nota entera.\n\n" +
     "Cada pregunta llega con un bloque <notas> (sus recuerdos más relevantes, numerados por índice) y un bloque <datos> con sus cuentas y cálculos ya hechos (drawdown, consistencia, plan del día), un bloque <avisos> con lo que ya está programado (si pregunta por informes, resúmenes o avisos, contéstale con eso: sí existen y funcionan), y un bloque <mercado> con el último precio que dio Topstep: al citarlo di siempre de qué hora es y nunca lo presentes como en directo; no predices el mercado ni recomiendas operaciones. En un mal día (pérdidas grandes, drawdown tocado, cuenta no operable) sé humano: primero una frase breve de apoyo, luego los hechos y una o dos lecciones, sin sermones. Responde SOLO con eso y con lo dicho antes. " +
     "Si no está, dilo con dignidad en una frase. Nunca inventes cifras, reglas de una firma ni noticias, y no predigas el mercado. Si una cuenta está cerca de un límite, dilo primero.\n\n" +
-    "Solo puedes hablar: nunca digas que has guardado, enviado o cambiado nada. Para apuntar algo, dile que empiece la frase con «apunta que…». Para registrar operaciones, cuentas o la revisión del domingo, que use el Plan de Futuros (botón «Plan de Futuros»). En <datos>, «planDeFuturos» trae sus grupos (MAESTRA, GRUPO 1, GRUPO 2, SUPLENTES), cuentas, riesgo, operaciones y reglas de rotación, suplentes y pausa grupal: úsalo cuando pregunte por su plan, sus grupos o qué cuenta toca. «capitalPropio» es su cuenta de capital propio en euros (riesgo compuesto sobre el saldo de hoy, stops máximos al día, racha): úsalo cuando pregunte por su capital propio, cuánto arriesga hoy o cuántos stops le quedan; para registrar un win o un loss, que use el botón «Capital propio». «fundingManager» son sus retiradas (payouts) y costes de examen por prop firm, con beneficio neto y ROI: úsalo cuando pregunte cuánto ha retirado, cuánto lleva gastado en exámenes o si le sale rentable una empresa; para apuntar una retirada o un coste, que use el botón «Funding Manager».\n\n" +
+    "Solo puedes hablar: nunca digas que has guardado, enviado o cambiado nada. Para apuntar algo, dile que empiece la frase con «apunta que…». Para registrar operaciones, cuentas o la revisión del domingo, que use el Plan de Futuros (botón «Plan de Futuros»). En <datos>, «planDeFuturos» trae sus grupos (MAESTRA, GRUPO 1, GRUPO 2, SUPLENTES), cuentas, riesgo, operaciones y reglas de rotación, suplentes y pausa grupal: úsalo cuando pregunte por su plan, sus grupos o qué cuenta toca. «capitalPropio» es su cuenta de capital propio en euros (riesgo compuesto sobre el saldo de hoy, stops máximos al día, racha): úsalo cuando pregunte por su capital propio, cuánto arriesga hoy o cuántos stops le quedan; para registrar un win o un loss, que use el botón «Capital propio». «fundingManager» son sus retiradas (payouts) y costes de examen por prop firm, con beneficio neto y ROI: úsalo cuando pregunte cuánto ha retirado, cuánto lleva gastado en exámenes o si le sale rentable una empresa; para apuntar una retirada o un coste, que te lo diga en una frase («regístrame la compra de un examen de Topstep de 50 dólares», «apunta el payout de 500 de TS-2») y Jarvis lo guarda solo, o que use el botón «Funding Manager».\n\n" +
     "Los saludos y agradecimientos reciben una línea breve en personaje y ninguna nota.\n\n" +
     "Después de cada respuesta añade una última línea: USED: y los índices de las notas en las que te has basado, separados por comas, o USED: none.";
   const STOP = new Set("a al algo como con cual cuales cuando de del desde donde dos el ella ellas ellos en entre era es esa ese eso esta este esto estos fue ha han hay la las le les lo los mas me mi mis muy no nos o para pero por que quien se ser si sin sobre su sus te tengo tiene tu tus un una uno unos y ya yo cuanto cuanta cuantos dime decir hacer puedo como va van esta estan the of and to is what".split(" "));
@@ -360,12 +362,54 @@ window.GRAPH = { nodes: [], links: [] };
     if (born) { B.bodies[born.index] = texto; window.galaxy.addNote(born.node, born.links, born.anchor); }
     return born;
   };
+  // "Regístrame la compra de un examen de Topstep de 50 dólares" / "apunta el payout de 500 de TS-2": Claude reads the
+  // details and Jarvis saves them in the Funding Manager (fm/retiradas/movs). If the amount or the firm is missing, Jarvis asks.
+  const MOV_WHAT = /(examen|evaluaci[oó]n|challenge|combine|payout|retirada|retiro|reset|mensualidad|suscripci[oó]n|activaci[oó]n|cobro)/i;
+  const MOV_DO = /(registr|apunt|anot|a[ñn]ad|mete|guard|compr[eéa]|he comprado|pagu[eé]|he pagado|cobr[eé]|he cobrado|me han pagado|retir[eé]|he retirado|he hecho)/i;
+  const MOV_ASK = /^\s*¿?\s*(cu[aá]nt|qu[eé]\b|c[oó]mo|cu[aá]l|por qu[eé]|d[oó]nde|me sale|vale la pena)/i;
+  B.pendingMov = null;
+  const usd = (n) => new Intl.NumberFormat("es-ES", { style: "currency", currency: "USD", minimumFractionDigits: 2, useGrouping: "always" }).format(n);
+  async function movRoute(question, sample) {
+    const q = String(question).trim();
+    const pend = B.pendingMov && Date.now() - B.pendingMov.at < 5 * 60000 && q.length < 160 && !MOV_ASK.test(q) ? B.pendingMov : null;
+    if (!pend && (!MOV_WHAT.test(q) || !MOV_DO.test(q) || MOV_ASK.test(q))) return null;
+    if (!sample) return null;
+    const hoy = hoyISO();
+    const ask = "Extrae un movimiento para el Funding Manager de Joel (retiradas y costes de examen de prop firms) de su frase. Hoy es " + hoy + ".\n" +
+      (pend ? "Ya sabías esto de antes: " + JSON.stringify(pend.mov) + ". Su frase nueva completa lo que faltaba.\n" : "") +
+      "Responde SOLO con un JSON, sin texto alrededor: {\"tipo\": \"coste\" o \"retirada\", \"empresa\": nombre o null, \"subtipo\": texto, \"importe\": número positivo en dólares o null, \"fecha\": \"AAAA-MM-DD\", \"notas\": texto o \"\"}.\n" +
+      "Reglas: comprar o pagar un examen, challenge, evaluación o combine es tipo coste con subtipo Registro (Mensualidad, Reset o Activación si lo dice). Un payout, retirada o cobro es tipo retirada con subtipo Payout. " +
+      "Empresas: TopStep, Lucid, Tradeify, Apex u otra que diga; una cuenta TS-… es TopStep, L-… es Lucid, T-… es Tradeify, y la cuenta va en notas. Si no dice la empresa o el importe, pon null: no lo inventes. " +
+      "«Ayer» es el día anterior a hoy; si no dice fecha, hoy.\n\nFrase: " + q;
+    let mov;
+    try { const { text } = await sample([{ role: "user", content: ask }], { cache: false, effort: "low" }); mov = JSON.parse((text.match(/\{[\s\S]*\}/) || ["null"])[0]); } catch { mov = null; }
+    if (!mov || (mov.tipo !== "coste" && mov.tipo !== "retirada")) return pend ? (B.pendingMov = null, null) : null;
+    const m = { tipo: mov.tipo, empresa: mov.empresa ? String(mov.empresa).trim() : (pend && pend.mov.empresa) || null,
+                subtipo: String(mov.subtipo || (mov.tipo === "retirada" ? "Payout" : "Registro")), importe: Math.abs(Number(mov.importe)) || (pend && pend.mov.importe) || null,
+                fecha: /^\d{4}-\d{2}-\d{2}$/.test(mov.fecha || "") ? mov.fecha : hoy, notas: String(mov.notas || "") };
+    const que = m.tipo === "retirada" ? "el payout" : "el coste del examen";
+    if (!m.importe || !m.empresa) {
+      B.pendingMov = { mov: m, at: Date.now() };
+      const pregunta = !m.importe ? "¿De cuánto fue " + que + (m.empresa ? " de " + m.empresa : "") + ", Joel?" : "¿De qué empresa es " + que + " de " + usd(m.importe) + ", Joel?";
+      history.push({ role: "user", content: "Pregunta: " + q }, { role: "assistant", content: pregunta }); history = history.slice(-12);
+      return { answer: !m.importe ? "¿De cuánto fue " + que + (m.empresa ? " de " + m.empresa : "") + ", Joel?" : "¿De qué empresa es " + que + " de " + usd(m.importe) + ", Joel?", nodes: [], about_notes: false };
+    }
+    B.pendingMov = null;
+    if (!B.db) return { answer: "No puedo guardarlo: abra Jarvis dentro de Claude.", nodes: [], about_notes: false };
+    try { await B.db.doc("fm/retiradas").collection("movs").doc().set({ ...m, creado: new Date().toISOString(), origen: "voz" }); }
+    catch (e) { return { answer: "No se ha guardado el movimiento, Joel. Pruebe otra vez o apúntelo en el Funding Manager.", nodes: [], about_notes: false }; }
+    const answer = "Hecho, Joel: he apuntado en el Funding Manager " + (m.tipo === "retirada" ? "un payout" : "un coste de examen") + " de " + m.empresa + " (" + m.subtipo + ") de " +
+      usd(m.importe) + ", con fecha " + m.fecha.split("-").reverse().join("/") + (m.notas ? " · " + m.notas : "") + ". Si algo no está bien, lo puede cambiar o borrar allí.";
+    history.push({ role: "user", content: "Pregunta: " + q }, { role: "assistant", content: answer }); history = history.slice(-12);
+    return { answer, nodes: [], about_notes: false };
+  }
   async function chat(question) {
     document.getElementById("os-open-app")?.remove();
     const opened = openRoute(question);
     if (opened) { setTimeout(B.showOpen, 600); return opened; }
     const sample = window.claude?.use ? await window.claude.use("sample") : null;
     if (!sample) throw new Error("Abra esta página dentro de Claude para que Jarvis pueda pensar.");
+    if (!B.pendingImage) { const mov = await movRoute(question, sample); if (mov) return mov; }
     const image = B.pendingImage; B.pendingImage = null;
     const ci = B.checkinPending();
     const small = !image && SMALL.test(question.trim());
@@ -397,6 +441,9 @@ window.GRAPH = { nodes: [], links: [] };
     const content = String(text).replace(/^\s*(?:remember that|apunta|anota|recuerda|guarda)(?:\s+que)?\b[\s,.:;]*/i, "").trim();
     if (!content) return [400, { ok: false, answer: "¿Qué desea que apunte, Joel?" }];
     if (!B.db) return [500, { ok: false, answer: "No puedo guardarlo: abra Jarvis dentro de Claude." }];
+    const movSample = window.claude?.use ? await window.claude.use("sample") : null;
+    const mov = await movRoute(String(text), movSample);   // with its verb: «apunta el payout…»
+    if (mov) return [200, { ok: true, answer: mov.answer }];
     const low = content.toLowerCase();
     const hit = [...B.docs.cuentas.entries()].find(([, c]) => c.alias && low.includes(c.alias.toLowerCase()));
     const tipo = /estrategia|regla|setup/.test(low) ? "estrategia" : /idea/.test(low) ? "idea" : /error|fallo|problema|incidencia/.test(low) ? "incidencia" : /entr[eé]|oper[eé]|gan[eé]|perd[ií]|trade/.test(low) ? "operacion" : "observacion";
