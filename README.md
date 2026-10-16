@@ -10,6 +10,15 @@ server.mjs             http://127.0.0.1:4700, serves viewer/ and POST /chat
 config.json            optional: model, notes_dir, claude_cmd (gitignored, never served)
 ```
 
+## En un Mac, sin saber nada técnico
+
+1. Descarga el ZIP del proyecto (en GitHub: botón verde **Code → Download ZIP**) y ábrelo.
+2. En la carpeta, haz **clic derecho en «Iniciar Jarvis» → Abrir → Abrir** (solo la primera vez;
+   macOS pregunta porque el archivo viene de internet). Después basta con doble clic.
+3. La primera vez descarga Node.js y Claude Code en `~/.jarvis-tools` (sin contraseña de
+   administrador) y abre el navegador para que entres con tu cuenta de Claude.
+4. Jarvis se abre solo en http://127.0.0.1:4700. Para apagarlo, cierra la ventana de Terminal.
+
 ## Run it
 
 No Python, no API key, nothing to `npm install` in the project. You need Node.js 22 or newer and
