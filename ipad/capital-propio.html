@@ -64,6 +64,13 @@
 .cp .tabla tr.tu td { color: var(--text); font-weight: 700; background: var(--accentSoft); }
 .cp .tabla td.mal { color: var(--coral); }
 .cp .tabla tr.sim td { color: var(--text); font-weight: 700; background: var(--raised); outline: 1px solid var(--accent); }
+.cp .modo { display: flex; gap: 8px; margin: 0 0 14px; flex-wrap: wrap; }
+.cp .modo button { background: var(--raised); border: 1px solid var(--borderLight); color: var(--muted); border-radius: 999px; padding: 9px 14px; font-size: 13px; font-weight: 600; }
+.cp .modo button.on { border-color: var(--accent); color: var(--accent); background: var(--accentSoft); }
+.cp .pzs { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
+.cp .pz { font-size: 12px; border-radius: 6px; padding: 3px 8px; background: var(--raised); color: var(--muted); } .cp .pz b { color: var(--text); }
+.cp .pz.h { box-shadow: inset 3px 0 0 var(--coral); } .cp .pz.x { box-shadow: inset 3px 0 0 #e8b04a; } .cp .pz.c { box-shadow: inset 3px 0 0 var(--accent); } .cp .pz.t { box-shadow: inset 3px 0 0 #7aa7ff; }
+.cp .escalera td:first-child { white-space: nowrap; }
 .cp .prueba { display: block; margin-bottom: 12px; max-width: 320px; }
 .cp .prueba input { width: 100%; background: var(--raised); border: 1px solid var(--accent); border-radius: 7px; padding: 9px 10px; color: var(--text); font-size: 14px; }
 .cp .tablawrap { overflow-x: auto; }
@@ -92,7 +99,8 @@ const DEF = { saldoInicial: 1000, stopsMaxDia: 2, winrate: 82, riesgoPct: 4.5, r
 // when to add to it, and how risk climbs as the account grows. Starting values; he sets his own.
 const PLAN_DEF = { pctCapital: 30, pctExamenes: 20, pctTuyo: 30, pctImpuestos: 20, cambio: 0.92,
                    frecuencia: "mensual", pctRetiro: 30, objetivoRetiroPct: 10, esperaSiCae: 10, aporteCadaPct: 20,
-                   riesgoBase: 4.5, cadaPct: 25, subePuntos: 0.5, riesgoMax: 6, bajaSiCae: 10 };
+                   riesgoBase: 4.5, cadaPct: 25, subePuntos: 0.5, riesgoMax: 6, bajaSiCae: 10,
+                   repartoAuto: true, metaCapital: 10000, mesesExamenes: 2, otrosIngresos: 0, topeExamenes: 40, topeCapital: 50 };
 const S = { inputs: { ...DEF }, plan: { ...PLAN_DEF }, log: [], db: null, saveT: null, tocado: 0, op: { eur: null, res: "" } };
 const eur = (n) => { const v = Number(n || 0); return (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toLocaleString("es-ES", { maximumFractionDigits: 0 }) + " €"; };
 const pct = (n, d = 1) => `${Number(n || 0).toFixed(d)}%`;
@@ -102,13 +110,13 @@ const saldo = () => (S.log.length ? S.log[S.log.length - 1].balanceAfter : S.inp
 // ── plan de dinero ─────────────────────────────────────────────
 const isTrade = (e) => e.resultado === "win" || e.resultado === "loss";
 const iso = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-function reparto(usd) {
+function repartoFijo(usd) {
   const P = S.plan, x = Math.abs(Number(usd) || 0), part = (p) => Math.round(x * p) / 100;
   return { usd: x, capitalUsd: part(P.pctCapital), capitalEur: Math.round(part(P.pctCapital) * P.cambio * 100) / 100, examenes: part(P.pctExamenes), tuyo: part(P.pctTuyo),
            impuestos: part(P.pctImpuestos), suma: P.pctCapital + P.pctExamenes + P.pctTuyo + P.pctImpuestos };
 }
-function textoReparto(usd) {
-  const r = reparto(usd), $ = (n) => n.toLocaleString("es-ES", { maximumFractionDigits: 2 }) + " $";
+function textoRepartoFijo(usd) {
+  const r = repartoFijo(usd), $ = (n) => n.toLocaleString("es-ES", { maximumFractionDigits: 2 }) + " $";
   return "Según su plan de dinero, de esos " + $(r.usd) + ": " + $(r.capitalUsd) + " a capital propio (unos " + Math.round(r.capitalEur) + " €), " + $(r.examenes) +
     " para más exámenes, " + $(r.tuyo) + " para usted y " + $(r.impuestos) + " apartados para Hacienda.";
 }
@@ -127,17 +135,111 @@ const euros = (n) => Math.round(Math.abs(n)).toLocaleString("es-ES", { useGroupi
 const tpTxt = (n) => (!Number.isFinite(n) ? "—" : n <= 1 ? "1 TP" : "unos " + n + " TP");
 function tpsHasta(meta) {
   const s = saldo(), g = 1 + (S.inputs.riesgoPct / 100) * S.inputs.ratioTpSl;
-  return meta <= s ? 0 : g > 1 ? Math.ceil(Math.log(meta / s) / Math.log(g)) : Infinity;
+  return meta <= s ? 0 : g > 1 ? Math.ceil(Math.log(meta / s) / Math.log(g) - 1e-9) : Infinity;
 }
 // A withdrawal from own capital is shared out like a payout, minus the part that would go straight back into it.
-function repartoRetiro(eurosRetiro) {
+function repartoRetiroFijo(eurosRetiro) {
   const P = S.plan, resto = P.pctExamenes + P.pctTuyo + P.pctImpuestos || 1, x = Math.abs(eurosRetiro);
   const part = (p) => Math.round((x * p) / resto * 100) / 100;
   return { total: x, examenes: part(P.pctExamenes), tuyo: part(P.pctTuyo), impuestos: part(P.pctImpuestos) };
 }
-function textoRepartoRetiro(eurosRetiro) {
-  const r = repartoRetiro(eurosRetiro);
-  return "Repártalo así: " + euros(r.examenes) + " para más exámenes, " + euros(r.tuyo) + " para usted y " + euros(r.impuestos) + " para Hacienda.";
+function textoRepartoRetiro(eurosRetiro, id) {
+  const r = repartoRetiro(eurosRetiro, id);
+  return "Repártalo así: " + euros(r.impuestos) + " para Hacienda, " + euros(r.examenes) + " para más exámenes y " + euros(r.tuyo) + " para usted.";
+}
+// ── Jarvis manages the split. Every payout and own-capital withdrawal, in date order, is shared out by four rules:
+// 1. Hacienda: what that money adds to this year's IRPF (general scale for payouts, minus exam costs, which are expenses;
+//    savings scale for own-capital gains). An estimate to set aside, not a tax return.
+// 2. Exams: whatever refills the exams fund to "mesesExamenes" months of his real exam spending (last 90 days), at most topeExamenes % of what's left.
+// 3. Own capital (payouts only): towards "metaCapital", at most topeCapital % of what's left after exams.
+// 4. The rest is his.
+const TRAMOS_GENERAL = [[12450, 19], [20200, 24], [35200, 30], [60000, 37], [300000, 45], [Infinity, 47]];
+const TRAMOS_AHORRO = [[6000, 19], [50000, 21], [200000, 23], [300000, 27], [Infinity, 28]];
+function cuota(base, tramos) { let t = 0, ant = 0; for (const [hasta, p] of tramos) { if (base <= ant) break; t += (Math.min(base, hasta) - ant) * p / 100; ant = hasta; } return t; }
+const tramoDe = (base, tramos) => (tramos.find(([hasta]) => base < hasta) || tramos[tramos.length - 1])[1];
+const menos90 = (f) => { const d = new Date((f || today()) + "T12:00:00"); d.setDate(d.getDate() - 90); return iso(d); };
+function gestion(extraUsd) {
+  const P = S.plan, F = window.FUNDING || {}, cambio = P.cambio || 1, r2 = (n) => Math.round(n * 100) / 100, suma = (l) => l.reduce((a, m) => a + m.importe, 0);
+  const pagos = (F.payouts ? F.payouts() : []).map((m) => ({ ...m, clase: "payout" }));
+  if (extraUsd) pagos.push({ id: "nuevo", fecha: today(), empresa: "", importe: Math.abs(extraUsd), clase: "payout" });
+  const costes = F.costes ? F.costes() : [], aportes = S.log.filter((e) => e.resultado === "aporte");
+  const retiros = S.log.filter((e) => e.resultado === "retiro").map((e) => ({ id: e.id, fecha: e.date, importe: e.importe, clase: "retiro" }));
+  const eventos = [...pagos, ...retiros].sort((a, b) => (a.fecha || "").localeCompare(b.fecha || ""));
+  // the exams fund in $ runs on its own: payouts fill it, exam costs empty it, and it never goes below zero
+  // (exams paid before there was any fund came out of his pocket, they aren't owed back to it)
+  const filas = new Map(); let hucha = 0, desdeF = "", capAsignado = 0;
+  const gastar = (hastaF) => { hucha = Math.max(0, hucha - suma(costes.filter((c) => c.fecha > desdeF && c.fecha <= hastaF))); desdeF = hastaF; };
+  for (const ev of eventos) {
+    const anio = (ev.fecha || "").slice(0, 4), hasta = (l) => l.filter((m) => (m.fecha || "") <= ev.fecha);
+    const gastoMes = suma(costes.filter((c) => c.fecha <= ev.fecha && c.fecha > menos90(ev.fecha))) / 3;
+    gastar(ev.fecha || ""); const objetivo = gastoMes * P.mesesExamenes;
+    const total = ev.clase === "payout" ? ev.importe * cambio : ev.importe, porque = [];
+    let hac;
+    if (ev.clase === "payout") {
+      const antes = suma([...filas.values()].filter((x) => x.clase === "payout" && x.fecha.slice(0, 4) === anio).map((x) => ({ importe: x.eur })));
+      const gastosAnio = suma(hasta(costes).filter((c) => c.fecha.slice(0, 4) === anio)) * cambio;
+      const base = (P.otrosIngresos || 0) + antes - gastosAnio;
+      hac = cuota(Math.max(0, base + total), TRAMOS_GENERAL) - cuota(Math.max(0, base), TRAMOS_GENERAL);
+      porque.push("Hacienda: lo que este payout suma a tu IRPF del " + anio + " (llevas " + euros(Math.max(0, base)) + " de base, tramo del " + tramoDe(Math.max(0, base + total), TRAMOS_GENERAL) + " %).");
+    } else {
+      const antes = suma([...filas.values()].filter((x) => x.clase === "retiro" && x.fecha.slice(0, 4) === anio).map((x) => ({ importe: x.eur })));
+      hac = cuota(antes + total, TRAMOS_AHORRO) - cuota(antes, TRAMOS_AHORRO);
+      porque.push("Hacienda: ganancia de capital propio, escala del ahorro (" + tramoDe(antes + total, TRAMOS_AHORRO) + " %).");
+    }
+    const resto = total - hac;
+    let ex;
+    if (gastoMes > 0) {
+      ex = Math.min(Math.max(0, objetivo - hucha) * cambio, resto * P.topeExamenes / 100);
+      porque.push(ex > 0 ? "Exámenes: rellena la hucha hasta " + P.mesesExamenes + " meses de tu gasto real (" + Math.round(gastoMes) + " $ al mes); tenías " + Math.round(Math.max(0, hucha)) + " $."
+        : "Exámenes: nada, la hucha ya cubre " + P.mesesExamenes + " meses de exámenes.");
+    } else {
+      ex = resto * Math.min(P.pctExamenes, P.topeExamenes) / 100;
+      porque.push("Exámenes: aún no hay costes de examen apuntados en el Funding Manager, así que aparta el " + Math.min(P.pctExamenes, P.topeExamenes) + " %.");
+    }
+    hucha += ex / cambio;
+    let cap = 0;
+    if (ev.clase === "payout") {
+      const metido = S.inputs.saldoInicial + suma(hasta(aportes.map((e) => ({ fecha: e.date, importe: e.importe }))));
+      const tiene = metido + Math.max(0, capAsignado - suma(hasta(aportes.map((e) => ({ fecha: e.date, importe: e.importe })))));
+      cap = Math.min(Math.max(0, P.metaCapital - tiene), (resto - ex) * P.topeCapital / 100);
+      capAsignado += cap;
+      porque.push(cap > 0 ? "Capital propio: hacia tu meta de " + euros(P.metaCapital) + " (llevas " + euros(tiene) + ")." : "Capital propio: nada, ya llegas a tu meta de " + euros(P.metaCapital) + ".");
+    }
+    const tuyo = resto - ex - cap;
+    porque.push("Para ti: lo que queda.");
+    filas.set(ev.clase + ":" + ev.id, { clase: ev.clase, id: ev.id, fecha: ev.fecha || "", empresa: ev.empresa || "", usd: ev.clase === "payout" ? ev.importe : null, eur: r2(total),
+      hacienda: r2(hac), examenes: r2(ex), capital: r2(cap), tuyo: r2(tuyo), porque });
+  }
+  gastar("9999-12-31");
+  const gastoMes = suma(costes.filter((c) => c.fecha <= today() && c.fecha > menos90(today()))) / 3;
+  const anio = today().slice(0, 4), cobrado = [...filas.values()].filter((x) => x.clase === "payout" && x.fecha.slice(0, 4) === anio);
+  const base = (P.otrosIngresos || 0) + cobrado.reduce((a, x) => a + x.eur, 0) - suma(costes.filter((c) => c.fecha.slice(0, 4) === anio)) * cambio;
+  return { filas, huchaExamenes: r2(hucha), objetivoExamenes: r2(gastoMes * P.mesesExamenes), gastoExamenesMes: r2(gastoMes),
+           pendienteCapital: r2(Math.max(0, capAsignado - suma(aportes))), apartadoCapital: r2(capAsignado), baseIrpf: r2(Math.max(0, base)), tramoIrpf: tramoDe(Math.max(0, base), TRAMOS_GENERAL),
+           apartadoHacienda: r2([...filas.values()].filter((x) => x.fecha.slice(0, 4) === anio).reduce((a, x) => a + x.hacienda, 0)) };
+}
+function reparto(usd) {
+  if (!S.plan.repartoAuto) return repartoFijo(usd);
+  const g = gestion(usd).filas.get("payout:nuevo"), c = S.plan.cambio || 1;
+  return { usd: Math.abs(usd), capitalUsd: g.capital / c, capitalEur: g.capital, examenes: g.examenes / c, tuyo: g.tuyo / c, impuestos: g.hacienda / c, suma: 100, eur: g };
+}
+function textoReparto(usd) {
+  if (!S.plan.repartoAuto) return textoRepartoFijo(usd);
+  const x = Math.abs(Number(usd) || 0), hoy = [...gestion().filas.values()].reverse().find((f) => f.clase === "payout" && f.fecha === today() && Math.abs(f.usd - x) < 0.01);
+  const g = hoy || gestion(x).filas.get("payout:nuevo");
+  return "Jarvis le reparte esos " + x.toLocaleString("es-ES") + " dólares, unos " + euros(g.eur) + ": " + euros(g.hacienda) + " para Hacienda, " + euros(g.examenes) + " para exámenes, " +
+    euros(g.capital) + " a capital propio y " + euros(g.tuyo) + " para usted.";
+}
+function repartoRetiro(eurosRetiro, id) {
+  if (!S.plan.repartoAuto) return repartoRetiroFijo(eurosRetiro);
+  const x = Math.abs(eurosRetiro), P = S.plan, g = gestion(), anio = today().slice(0, 4), ya = id && g.filas.get("retiro:" + id);
+  if (ya) return { total: ya.eur, impuestos: ya.hacienda, examenes: ya.examenes, tuyo: ya.tuyo };
+  // a withdrawal not yet registered: share it as if it were the next one
+  const antes = [...g.filas.values()].filter((f) => f.clase === "retiro" && f.fecha.slice(0, 4) === anio).reduce((a, f) => a + f.eur, 0);
+  const hac = cuota(antes + x, TRAMOS_AHORRO) - cuota(antes, TRAMOS_AHORRO), resto = x - hac;
+  const ex = g.gastoExamenesMes > 0 ? Math.min(Math.max(0, g.objetivoExamenes - g.huchaExamenes) * (P.cambio || 1), resto * P.topeExamenes / 100) : resto * Math.min(P.pctExamenes, P.topeExamenes) / 100;
+  const r2 = (n) => Math.round(n * 100) / 100;
+  return { total: x, impuestos: r2(hac), examenes: r2(ex), tuyo: r2(resto - ex) };
 }
 function dinero() {
   const P = S.plan, I = S.inputs, s = saldo(), per = periodo(), hoy = today(), r = rOp();
@@ -191,9 +293,10 @@ function comoVoy() {
     : d.yaRetirado ? "Retiro: ya has retirado lo de " + d.periodo.nombre + " (" + euros(d.retirado) + "). El siguiente, " + (P.frecuencia === "semanal" ? "la semana que viene." : "el mes que viene.")
     : d.beneficio < 0 ? "Retiro: " + d.periodo.nombre + " vas en " + euros(d.beneficio).replace(/^/, "−") + "; primero toca recuperar."
     : "Retiro: te faltan " + euros(d.faltaRetiro) + " de beneficio " + d.periodo.nombre + " (" + tpTxt(d.tpsRetiro) + ") para llegar al " + P.objetivoRetiroPct + " % y poder retirar.");
-  L.push(d.puedeAportar ? "✅ Ya puedes meter más capital: la cuenta ha crecido un " + P.aporteCadaPct + " % desde tu último aporte."
+  const apartado = apartadoCapital();
+  L.push(d.puedeAportar ? "✅ Ya puedes meter más capital: la cuenta ha crecido un " + P.aporteCadaPct + " % desde tu último aporte." + (apartado > 0 ? " Mete " + euros(apartado) + ", lo apartado de tus payouts." : " Aún no tienes nada apartado de payouts.")
     : d.caida >= P.esperaSiCae ? "Aporte: espera, estás un " + pct(d.caida) + " por debajo de tu máximo."
-    : "Aporte: te faltan " + euros(d.faltaAporte) + " (" + tpTxt(d.tpsAporte) + ") para poder meter más capital.");
+    : "Aporte: te faltan " + euros(d.faltaAporte) + " (" + tpTxt(d.tpsAporte) + ") para poder meter más capital" + (apartado > 0 ? " (tienes " + euros(apartado) + " apartados para meter)." : "."));
   L.push(Math.abs(d.recomendado - I.riesgoPct) > 0.001 ? "Riesgo: tu plan dice usar el " + pct(d.recomendado, 2) + " (ahora usas " + pct(I.riesgoPct, 2) + ")."
     : d.riesgoSiguiente > d.recomendado + 0.001 ? "Riesgo: te faltan " + euros(Math.max(0, d.siguiente - saldo())) + " (" + tpTxt(d.tpsRiesgo) + ") para subir al " + pct(d.riesgoSiguiente, 2) + "."
     : "Riesgo: estás en el máximo de tu plan (" + pct(d.recomendado, 2) + ").");
@@ -216,7 +319,7 @@ function recomendar(o = {}) {
   const stops = Math.max(1, Math.min(4, Math.floor(Math.log(1 - maxP / 3) / Math.log(1 - riesgo / 100))));
   const maxRiesgo = esperanza > 0 ? Math.max(riesgo, abajo(Math.min(porKelly, (1 - Math.pow(1 - maxP, 1 / Math.max(1, I.rachaMaxima * I.margenSeguridad))) * 100), 0.25)) : riesgo;
   const plan = { riesgoBase: riesgo, cadaPct: 25, subePuntos: Math.max(0.1, r2(abajo(riesgo * 0.1, 0.05))), riesgoMax: r2(maxRiesgo), bajaSiCae: Math.round(maxP * 100 / 3),
-                 frecuencia: "mensual", pctRetiro: 25, esperaSiCae: Math.round(maxP * 100 / 3) };
+                 frecuencia: "mensual", pctRetiro: 25, esperaSiCae: Math.round(maxP * 100 / 3), aporteCadaPct: I.maxPerdidaAceptada };
   const gananciaDia = I.saldoInicial * (riesgo / 100) * esperanza * I.opsPorDia;
   return { inputs: I, esperanza: r2(esperanza), kelly: r2(kelly * 100), porKelly: r2(porKelly), rachaEstadistica: r2(rachaEstadistica), racha, porRacha: r2(porRacha),
            riesgo, stops, plan, gananciaDia: r2(gananciaDia), sinVentaja: esperanza <= 0,
@@ -257,23 +360,76 @@ function explicaEscalones() {
     " %, con " + eu(a * (1 + 2 * c / 100)) + " al " + n(Math.min(P.riesgoMax, b + 2 * x)) + " %… hasta el " + n(P.riesgoMax) + " %. Si la cuenta cae un " + P.bajaSiCae + " % desde su mejor saldo, vuelve un escalón atrás. " +
     "Lo que metes no cuenta como crecimiento, y los escalones no pasan del riesgo que aguanta tu racha (" + n(calc().riesgoQueDiceTuRacha) + " %), salvo que tu base ya sea mayor.";
 }
+function repartoFijoHtml(fecha, usd, r, ok, pagos, retiros) {
+  return `<div class="two"><div class="card"><div class="fields">${pnum("pctCapital", "A capital propio (%)")}${pnum("pctExamenes", "A más exámenes (%)")}${pnum("pctTuyo", "Para ti (%)")}${pnum("pctImpuestos", "Apartado para Hacienda (%)")}
+      ${pnum("cambio", "Cambio: 1 $ = … €", 0.01)}</div>
+      <div style="font-size:11.5px;color:${ok ? "var(--faint)" : "var(--coral)"};margin-top:10px">${ok ? "Suman 100 %." : "Ojo: suman " + r.suma + " %, tienen que sumar 100 %."} Con porcentajes fijos, cada payout se reparte siempre igual, con los porcentajes que pones tú. Un retiro de capital propio se reparte igual, sin la parte de capital propio. Lo de Hacienda depende de tu caso: confírmalo con un asesor.</div></div>
+    <div class="card"><div class="lab" style="color:var(--faint)">PAYOUTS DE FONDEO (FUNDING MANAGER)</div>
+      ${pagos.length ? pagos.map((m) => { const x = repartoFijo(m.importe); return `<div class="row"><span>${fecha(m.fecha)} · ${m.empresa} · <b style="color:var(--text)">${usd(m.importe)}</b><br><small>capital ${usd(x.capitalUsd)} (≈${Math.round(x.capitalEur)} €) · exámenes ${usd(x.examenes)} · tú ${usd(x.tuyo)} · Hacienda ${usd(x.impuestos)}</small></span></div>`; }).join("")
+        : '<div class="empty">Aún no hay payouts. Díctaselos a Jarvis («apunta el payout de 500 de TS-2») o apúntalos en el Funding Manager: aquí verás cómo repartir cada uno.</div>'}
+      <div class="lab" style="color:var(--faint);margin-top:14px">RETIROS DE CAPITAL PROPIO</div>
+      ${retiros.length ? retiros.map((e) => { const x = repartoRetiroFijo(e.importe); return `<div class="row l"><span>${fecha(e.date)} · <b style="color:var(--text)">${eur(e.importe).replace(/^\+/, "")}</b><br><small>exámenes ${eur(x.examenes).replace(/^\+/, "")} · tú ${eur(x.tuyo).replace(/^\+/, "")} · Hacienda ${eur(x.impuestos).replace(/^\+/, "")}</small></span></div>`; }).join("")
+        : '<div class="empty">Aún no has retirado de capital propio.</div>'}</div></div>`;
+}
+// Jarvis's own split: the four rules with his numbers, what each fund holds, and every payout and withdrawal with its why.
+function repartoAutoHtml(fecha) {
+  const P = S.plan, g = gestion(), e0 = (n) => Math.round(n).toLocaleString("es-ES", { useGrouping: "always" }) + " €", d0 = (n) => Math.round(n).toLocaleString("es-ES", { useGrouping: "always" }) + " $";
+  const filas = [...g.filas.values()].reverse().slice(0, 10), parte = (c, l, v) => `<span class="pz ${c}">${l} <b>${e0(v)}</b></span>`;
+  return `<div class="two"><div class="card"><div class="lab" style="color:var(--accent)">CÓMO REPARTE JARVIS CADA PAYOUT</div>
+      <div class="item"><i>1</i><span><b>Hacienda primero.</b> Calcula lo que ese dinero suma a tu IRPF del año con la escala de la renta (19 % hasta 12.450 €, 24 %, 30 %, 37 %, 45 %…). Los costes de examen restan, porque son gastos. Llevas ${e0(g.baseIrpf)} este año: estás en el tramo del ${g.tramoIrpf} %.</span></div>
+      <div class="item"><i>2</i><span><b>Hucha de exámenes.</b> La rellena hasta ${P.mesesExamenes} meses de lo que gastas de verdad en exámenes (${g.gastoExamenesMes ? d0(g.gastoExamenesMes) + " al mes, de tus últimos 90 días" : "aún no hay costes apuntados: aparta el " + Math.min(P.pctExamenes, P.topeExamenes) + " %"}). Nunca más del ${P.topeExamenes} % de lo que queda.</span></div>
+      <div class="item"><i>3</i><span><b>Capital propio.</b> Hasta llegar a tu meta de ${e0(P.metaCapital)}, como mucho el ${P.topeCapital} % de lo que queda. Al llegar, deja de apartar y todo eso pasa a ti.</span></div>
+      <div class="item"><i>4</i><span><b>Para ti, el resto.</b></span></div>
+      <div class="fields" style="margin-top:12px">${pnum("metaCapital", "Meta de capital propio (€)", 100)}${pnum("mesesExamenes", "Meses de exámenes en la hucha")}
+        ${pnum("otrosIngresos", "Otros ingresos al año (€) · sueldo, etc.", 100)}${pnum("cambio", "Cambio: 1 $ = … €", 0.01)}</div>
+      <div style="font-size:11.5px;color:var(--faint);margin-top:10px">Lo de Hacienda es una estimación para apartar de sobra (escala general aproximada, sin cuota de autónomos ni deducciones de tu comunidad). Confírmalo con tu gestor.</div></div>
+    <div class="outs">
+      <div class="card fondos"><div class="lab" style="color:var(--faint)">TUS HUCHAS AHORA</div>
+        <div class="row"><span>🏛️ Apartado para Hacienda este año</span><b>${e0(g.apartadoHacienda)}</b></div>
+        <div class="row"><span>🎯 Hucha de exámenes${g.objetivoExamenes ? " (objetivo " + d0(g.objetivoExamenes) + ")" : ""}</span><b>${d0(g.huchaExamenes)}</b></div>
+        <div class="row"><span>💶 Apartado para capital propio, sin meter aún</span><b>${e0(g.pendienteCapital)}</b></div></div>
+      <div class="card"><div class="lab" style="color:var(--faint)">CADA PAYOUT Y CADA RETIRO, REPARTIDO</div>
+      ${filas.length ? filas.map((f) => `<div class="row${f.clase === "retiro" ? " l" : ""}"><span>${fecha(f.fecha)} · ${f.clase === "payout" ? (f.empresa || "payout") + " · <b style=\"color:var(--text)\">" + d0(f.usd) + "</b> (≈" + e0(f.eur) + ")" : "retiro de capital propio · <b style=\"color:var(--text)\">" + e0(f.eur) + "</b>"}
+          <div class="pzs">${parte("h", "Hacienda", f.hacienda)}${parte("x", "Exámenes", f.examenes)}${f.clase === "payout" ? parte("c", "Capital", f.capital) : ""}${parte("t", "Tú", f.tuyo)}</div>
+          <small>${f.porque.join(" ")}</small></span></div>`).join("")
+        : '<div class="empty">Aún no hay payouts. Díctaselos a Jarvis («apunta el payout de 500 de TS-2») o apúntalos en el Funding Manager: aquí verás cómo te los reparte.</div>'}</div></div></div>`;
+}
+// What's set aside for own capital and not yet put in: Jarvis's fund, or the fixed share of each payout.
+function apartadoCapital() {
+  if (S.plan.repartoAuto) return gestion().pendienteCapital;
+  const pagos = window.FUNDING && window.FUNDING.payouts ? window.FUNDING.payouts() : [];
+  const aportes = S.log.filter((e) => e.resultado === "aporte").reduce((a, e) => a + e.importe, 0);
+  return Math.max(0, Math.round((pagos.reduce((a, m) => a + repartoFijo(m.importe).capitalEur, 0) - aportes) * 100) / 100);
+}
+// The top-up rule with his numbers: why every X %, how much goes in, and the next levels.
+function aportesHtml(d) {
+  const P = S.plan, I = S.inputs, s = saldo(), apartado = apartadoCapital(), p = P.aporteCadaPct, e0 = (n) => Math.round(n).toLocaleString("es-ES", { useGrouping: "always" }) + " €";
+  const base = d.metaAporte / (1 + p / 100), niveles = [1, 2, 3, 4].map((n) => base * Math.pow(1 + p / 100, n));
+  const igual = Math.abs(p - I.maxPerdidaAceptada) < 0.001;
+  return `<div class="two"><div class="card"><div class="fields">${pnum("aporteCadaPct", "Metes más cada vez que la cuenta crece un … %")}${pnum("esperaSiCae", "Pero espera si estás más de … % por debajo de tu máximo")}</div>
+      <div class="lab" style="color:var(--accent);margin-top:14px">¿POR QUÉ CADA ${p} %?</div>
+      <div style="font-size:12.5px;color:var(--muted);line-height:1.5">Solo metes dinero nuevo cuando la cuenta ya ha ganado un colchón. Jarvis usa el mismo número que tu pérdida máxima (${I.maxPerdidaAceptada} %): si justo después llega tu peor racha y pierdes ese ${I.maxPerdidaAceptada} %, lo que pierdes es beneficio, no el dinero nuevo que acabas de meter. ${igual ? "Ahora mismo lo tienes así." : "Ahora tienes " + p + " %."}
+        Con tu riesgo del ${pct(I.riesgoPct)} y ratio ${I.ratioTpSl}, cada ${p} % es ${tpTxt(Math.ceil(Math.log(1 + p / 100) / Math.log(1 + I.riesgoPct / 100 * I.ratioTpSl) - 1e-9))} de ganancia neta.</div>
+      ${igual ? "" : `<div class="btns" style="margin-top:10px"><button class="win" type="button" data-act="aporte-como-perdida">Usar ${I.maxPerdidaAceptada} % (tu pérdida máxima)</button></div>`}
+      <div style="font-size:11.5px;color:var(--faint);margin-top:10px">Cuánto meter: lo que Jarvis te ha apartado para capital propio de tus payouts. Después de meterlo, el crecimiento se vuelve a contar desde el nuevo saldo.</div></div>
+    <div class="outs"><div class="shield${d.puedeAportar ? "" : " bad"}"><span style="font-size:20px">${d.puedeAportar ? "✅" : "⏸️"}</span><div><b>${d.puedeAportar ? (apartado > 0 ? "Ya puedes meter " + e0(apartado) : "Ya toca meter capital, pero no tienes nada apartado") : "Aún no toca meter capital"}</b>
+        <small>${d.puedeAportar ? "Has crecido un " + p + " % desde tu último aporte y no estás en caída." + (apartado > 0 ? " Es lo apartado de tus payouts para capital propio." : " Cuando cobres un payout, Jarvis te apartará una parte.") : d.caida >= P.esperaSiCae ? "Estás un " + pct(d.caida) + " por debajo de tu máximo: espera a recuperarte." : "Te faltan " + e0(d.faltaAporte) + " (" + tpTxt(d.tpsAporte) + ") para llegar a " + e0(d.metaAporte) + ". Entonces podrás meter lo que tengas apartado: ahora " + e0(apartado) + "."}</small></div></div>
+      <div class="card"><div class="lab" style="color:var(--faint)">TUS PRÓXIMOS NIVELES PARA METER CAPITAL</div><div class="tablawrap"><table class="tabla escalera"><thead><tr><th>CUANDO LLEGUES A</th><th>CRECIMIENTO</th><th>TE FALTAN</th><th>TP NETOS</th></tr></thead><tbody>
+        ${niveles.map((m, i) => `<tr class="${i === 0 ? "tu" : ""}"><td>${e0(m)}</td><td>+${Math.round((Math.pow(1 + p / 100, i + 1) - 1) * 100)} %</td><td>${m <= s ? "ya" : e0(m - s)}</td><td>${m <= s ? "—" : tpsHasta(m)}</td></tr>`).join("")}</tbody></table></div>
+        <div style="font-size:11.5px;color:var(--faint);margin-top:8px">Si no metes nada por el camino. Cada vez que metas, los niveles se recalculan desde tu nuevo saldo.</div></div>
+      <div class="btns"><input id="cp-apo" type="number" inputmode="decimal" placeholder="€" value="${d.puedeAportar && apartado > 0 ? Math.round(apartado) : ""}" style="width:110px;background:var(--raised);border:1px solid var(--borderLight);border-radius:10px;padding:10px;color:var(--text)">
+        <button class="win" type="button" data-act="aporte">Registrar aporte</button></div></div></div>`;
+}
 function renderPlan() {
-  const P = S.plan, d = dinero(), r = reparto(1000), ok = r.suma === 100, fecha = (x) => (x || "").split("-").reverse().join("/");
+  const P = S.plan, d = dinero(), r = repartoFijo(1000), ok = r.suma === 100, fecha = (x) => (x || "").split("-").reverse().join("/");
   const usd = (n) => n.toLocaleString("es-ES", { maximumFractionDigits: 2, useGrouping: "always" }) + " $";
   const pagos = (window.FUNDING && window.FUNDING.payouts ? window.FUNDING.payouts() : []).slice(0, 8);
   const retiros = S.log.filter((e) => e.resultado === "retiro").slice(-8).reverse();
   const field = "width:100%;background:var(--raised);border:1px solid var(--borderLight);border-radius:7px;padding:9px 10px;color:var(--text);font-size:14px";
   return `
   <div class="sec"><b>05</b><span>Plan de dinero · reparto de cada payout de fondeo y de cada retiro</span></div>
-  <div class="two"><div class="card"><div class="fields">${pnum("pctCapital", "A capital propio (%)")}${pnum("pctExamenes", "A más exámenes (%)")}${pnum("pctTuyo", "Para ti (%)")}${pnum("pctImpuestos", "Apartado para Hacienda (%)")}
-      ${pnum("cambio", "Cambio: 1 $ = … €", 0.01)}</div>
-      <div style="font-size:11.5px;color:${ok ? "var(--faint)" : "var(--coral)"};margin-top:10px">${ok ? "Suman 100 %." : "Ojo: suman " + r.suma + " %, tienen que sumar 100 %."} Un retiro de capital propio se reparte igual, sin la parte de capital propio. Lo de Hacienda depende de tu caso: confírmalo con un asesor.</div></div>
-    <div class="card"><div class="lab" style="color:var(--faint)">PAYOUTS DE FONDEO (FUNDING MANAGER)</div>
-      ${pagos.length ? pagos.map((m) => { const x = reparto(m.importe); return `<div class="row"><span>${fecha(m.fecha)} · ${m.empresa} · <b style="color:var(--text)">${usd(m.importe)}</b><br><small>capital ${usd(x.capitalUsd)} (≈${Math.round(x.capitalEur)} €) · exámenes ${usd(x.examenes)} · tú ${usd(x.tuyo)} · Hacienda ${usd(x.impuestos)}</small></span></div>`; }).join("")
-        : '<div class="empty">Aún no hay payouts. Díctaselos a Jarvis («apunta el payout de 500 de TS-2») o apúntalos en el Funding Manager: aquí verás cómo repartir cada uno.</div>'}
-      <div class="lab" style="color:var(--faint);margin-top:14px">RETIROS DE CAPITAL PROPIO</div>
-      ${retiros.length ? retiros.map((e) => { const x = repartoRetiro(e.importe); return `<div class="row l"><span>${fecha(e.date)} · <b style="color:var(--text)">${eur(e.importe).replace(/^\+/, "")}</b><br><small>exámenes ${eur(x.examenes).replace(/^\+/, "")} · tú ${eur(x.tuyo).replace(/^\+/, "")} · Hacienda ${eur(x.impuestos).replace(/^\+/, "")}</small></span></div>`; }).join("")
-        : '<div class="empty">Aún no has retirado de capital propio.</div>'}</div></div>
+  <div class="modo"><button type="button" data-act="modo-auto" class="${P.repartoAuto ? "on" : ""}">🤖 Jarvis lo gestiona</button><button type="button" data-act="modo-fijo" class="${P.repartoAuto ? "" : "on"}">✋ Porcentajes fijos</button></div>
+  ${P.repartoAuto ? repartoAutoHtml(fecha) : repartoFijoHtml(fecha, usd, r, ok, pagos, retiros)}
 
   <div class="sec"><b>06</b><span>Retiros de capital propio</span></div>
   <div class="two"><div class="card"><div class="fields">
@@ -287,13 +443,8 @@ function renderPlan() {
       <div class="btns"><input id="cp-ret" type="number" inputmode="decimal" placeholder="€" value="${d.puedeRetirar ? Math.round(d.sugerido) : ""}" style="width:110px;background:var(--raised);border:1px solid var(--borderLight);border-radius:10px;padding:10px;color:var(--text)">
         <button class="loss" type="button" data-act="retiro">Registrar retiro</button></div></div></div>
 
-  <div class="sec"><b>07</b><span>Cuándo meter más capital</span></div>
-  <div class="two"><div class="card"><div class="fields">${pnum("aporteCadaPct", "Metes más cada vez que la cuenta crece un … %")}${pnum("esperaSiCae", "Pero espera si estás más de … % por debajo de tu máximo")}</div>
-      <div style="font-size:11.5px;color:var(--faint);margin-top:10px">Lo que metes sale de tu reparto de payouts (${P.pctCapital} %). El crecimiento se cuenta desde tu último aporte.</div></div>
-    <div class="outs"><div class="shield${d.puedeAportar ? "" : " bad"}"><span style="font-size:20px">${d.puedeAportar ? "✅" : "⏸️"}</span><div><b>${d.puedeAportar ? "Ya puedes meter más capital" : "Aún no toca meter capital"}</b>
-        <small>${d.puedeAportar ? "Has crecido un " + P.aporteCadaPct + " % desde tu último aporte y no estás en caída." : d.caida >= P.esperaSiCae ? "Estás un " + pct(d.caida) + " por debajo de tu máximo: espera a recuperarte." : "Te faltan " + eur(d.faltaAporte).replace(/^\+/, "") + " (" + tpTxt(d.tpsAporte) + ") para llegar a " + eur(d.metaAporte).replace(/^\+/, "") + "."}</small></div></div>
-      <div class="btns"><input id="cp-apo" type="number" inputmode="decimal" placeholder="€" style="width:110px;background:var(--raised);border:1px solid var(--borderLight);border-radius:10px;padding:10px;color:var(--text)">
-        <button class="win" type="button" data-act="aporte">Registrar aporte</button></div></div></div>
+  <div class="sec"><b>07</b><span>Cuándo meter más capital, y cuánto</span></div>
+  ${aportesHtml(d)}
 
   <div class="sec"><b>08</b><span>Subir el riesgo cuando la cuenta crece</span></div>
   <div class="two"><div class="card"><div class="fields">${pnum("riesgoBase", "Riesgo base (%)", 0.1)}${pnum("cadaPct", "Sube cada +… % de crecimiento")}${pnum("subePuntos", "Cuánto sube (puntos %)", 0.1)}
@@ -475,10 +626,12 @@ function hacer(b) {
     const before = saldo(); if (a === "retiro" && v > before) return toast("No puedes retirar más de lo que hay.");
     S.log.push({ id: Date.now().toString(), date: today(), resultado: a, importe: v, riesgoPct: S.inputs.riesgoPct, balanceBefore: before, balanceAfter: a === "aporte" ? before + v : before - v });
     save(); render(); toast(a === "aporte" ? "Aporte registrado." : "Retiro registrado.");
-    return avisoTrasRegistro(a === "aporte" ? "Aporte de " + euros(v) + " registrado, Joel." : "Retiro de " + euros(v) + " registrado, Joel. " + textoRepartoRetiro(v));
+    return avisoTrasRegistro(a === "aporte" ? "Aporte de " + euros(v) + " registrado, Joel." : "Retiro de " + euros(v) + " registrado, Joel. " + textoRepartoRetiro(v, S.log[S.log.length - 1].id));
   }
   if (a === "aplicar-propuesta") { if (!dosToques(b, "¿Aplicar? Toca otra vez")) return; aplicarPropuesta(recomendar()); return toast("Propuesta aplicada."); }
   if (a === "aplicar-riesgo") { S.inputs.riesgoPct = dinero().recomendado; render(); save(); return toast("Riesgo actualizado."); }
+  if (a === "aporte-como-perdida") { S.plan.aporteCadaPct = S.inputs.maxPerdidaAceptada; render(); save(); return toast("Ahora metes capital cada " + S.plan.aporteCadaPct + " %."); }
+  if (a === "modo-auto" || a === "modo-fijo") { S.plan.repartoAuto = a === "modo-auto"; render(); save(); return toast(a === "modo-auto" ? "Jarvis gestiona el reparto." : "Reparto con tus porcentajes fijos."); }
   if (a === "undo") { S.log.pop(); render(); save(); return; }
   if (a === "reset") { if (!dosToques(b, "¿Borrar todo? Toca otra vez")) return; S.inputs = { ...DEF }; S.log = []; render(); save(); }
 }
@@ -512,14 +665,20 @@ function contexto() {
 }
 function planDeDinero() {
   const P = S.plan, d = dinero(), r2 = (n) => Math.round(n * 100) / 100, ej = reparto(1000);
-  return { repartoDeCadaPayout: { aCapitalPropio: P.pctCapital + "%", aMasExamenes: P.pctExamenes + "%", paraJoel: P.pctTuyo + "%", paraHacienda: P.pctImpuestos + "%", cambioUsdEur: P.cambio,
+  const g = gestion(), ap = apartadoCapital();
+  return { modoDeReparto: P.repartoAuto ? "Jarvis lo gestiona (reglas: 1 Hacienda = lo que suma al IRPF del año con la escala general, menos costes de examen; 2 hucha de exámenes hasta " + P.mesesExamenes + " meses de su gasto real, máx " + P.topeExamenes + "% del resto; 3 capital propio hasta su meta de " + P.metaCapital + " €, máx " + P.topeCapital + "% del resto; 4 el resto para Joel)" : "porcentajes fijos",
+    gestionJarvis: P.repartoAuto ? { huchaExamenesUsd: g.huchaExamenes, objetivoHuchaUsd: g.objetivoExamenes, gastoExamenesAlMesUsd: g.gastoExamenesMes, apartadoCapitalSinMeterEur: g.pendienteCapital,
+      metaCapitalEur: P.metaCapital, baseIrpfEsteAnioEur: g.baseIrpf, tramoIrpf: g.tramoIrpf + "%", apartadoHaciendaEsteAnioEur: g.apartadoHacienda,
+      ultimosRepartos: [...g.filas.values()].slice(-6).map(({ clase, fecha, empresa, usd, eur, hacienda, examenes, capital, tuyo, porque }) => ({ clase, fecha, empresa, usd, eur, hacienda, examenes, capital, tuyo, porque })) } : null,
+    cuantoMeterAlAportar: ap, porQueCadaPorcentaje: "Mete capital cada vez que la cuenta crece su pérdida máxima aceptada (" + S.inputs.maxPerdidaAceptada + "%): si luego llega la peor racha, se pierde beneficio y no el dinero nuevo. Ahora usa " + P.aporteCadaPct + "%.",
+    repartoDeCadaPayout: { aCapitalPropio: P.pctCapital + "%", aMasExamenes: P.pctExamenes + "%", paraJoel: P.pctTuyo + "%", paraHacienda: P.pctImpuestos + "%", cambioUsdEur: P.cambio,
              ejemploPayout1000: { capitalPropioUsd: ej.capitalUsd, capitalPropioEur: ej.capitalEur, examenes: ej.examenes, paraJoel: ej.tuyo, hacienda: ej.impuestos } },
     retiros: { frecuencia: P.frecuencia, retiraCuandoGanaEnElPeriodo: P.objetivoRetiroPct + "%", porcentajeDelBeneficio: P.pctRetiro + "%",
                beneficioDelPeriodo: r2(d.beneficio), yaRetirado: r2(d.retirado), puedeRetirarYa: d.puedeRetirar, retiroQueToca: r2(d.sugerido), faltaDeBeneficioParaRetirar: r2(d.faltaRetiro),
                tpsParaRetirar: Number.isFinite(d.tpsRetiro) ? d.tpsRetiro : null, nuncaPorDebajoDe: r2(d.aportado), repartoDelRetiro: repartoRetiro(d.sugerido) },
     aportes: { puedeAportarYa: d.puedeAportar, aportaCadaVezQueCrece: P.aporteCadaPct + "%", faltaParaPoderAportar: r2(d.faltaAporte), tpsParaPoderAportar: Number.isFinite(d.tpsAporte) ? d.tpsAporte : null,
                caidaDesdeMaximo: r2(d.caida) + "%", esperaSiCaeMasDe: P.esperaSiCae + "%", saleDe: P.pctCapital + "% de cada payout" },
-    payoutsDeFondeo: (window.FUNDING && window.FUNDING.payouts ? window.FUNDING.payouts() : []).slice(0, 6).map((m) => ({ fecha: m.fecha, empresa: m.empresa, usd: m.importe, reparto: reparto(m.importe) })),
+    payoutsDeFondeo: (window.FUNDING && window.FUNDING.payouts ? window.FUNDING.payouts() : []).slice(0, 6).map((m) => ({ fecha: m.fecha, empresa: m.empresa, usd: m.importe, reparto: S.plan.repartoAuto ? (gestion().filas.get("payout:" + m.id) || null) : repartoFijo(m.importe) })),
     riesgo: { actual: S.inputs.riesgoPct + "%", queToca: d.recomendado + "%", siguienteRiesgo: d.riesgoSiguiente + "%", faltaParaSubir: r2(Math.max(0, d.siguiente - saldo())), tpsParaSubir: Number.isFinite(d.tpsRiesgo) ? d.tpsRiesgo : null, escalon: d.escalon, crecimientoSobreLoAportado: r2(d.crec) + "%", siguienteEscalonConSaldo: r2(d.siguiente),
               reglas: "base " + P.riesgoBase + "%, +" + P.subePuntos + " puntos cada +" + P.cadaPct + "% de crecimiento, máximo " + P.riesgoMax + "% (y nunca más que el riesgo que aguanta su racha, " + r2(d.tope) + "%), baja un escalón si cae un " + P.bajaSiCae + "% desde el máximo" } };
 }

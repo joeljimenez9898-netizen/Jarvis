@@ -302,7 +302,9 @@ function contexto() {
 }
 // The funded payouts, for the money plan in Capital propio.
 const payouts = () => all().filter((m) => m.tipo === "retirada").map((m) => ({ id: m.id, fecha: m.fecha, empresa: m.empresa, importe: Math.abs(Number(m.importe) || 0), notas: m.notas || "" }));
-window.FUNDING = { contexto, render, payouts, open: (tab) => { if (tab === "resumen" || tab === "empresas") S.tab = tab; render(); } };
+// The exam costs, so Jarvis can keep the exams fund topped up.
+const costes = () => all().filter((m) => m.tipo === "coste").map((m) => ({ id: m.id, fecha: m.fecha, empresa: m.empresa, importe: Math.abs(Number(m.importe) || 0) }));
+window.FUNDING = { contexto, render, payouts, costes, open: (tab) => { if (tab === "resumen" || tab === "empresas") S.tab = tab; render(); } };
 
 (async () => {
   render();
