@@ -466,17 +466,30 @@ function recomendarRetiro() {
         (frecuencia === "mensual" ? "Por eso mensual: un mes junta más operaciones, el resultado es más fiable y no retiras de una semana buena que la siguiente se come." : "Tus semanas son muy fiables, así que puedes retirar cada semana."),
       "Se retira al cerrar el periodo (el último día laborable del mes, o el viernes), con su resultado entero, y solo si ha dado al menos un " + objetivoRetiroPct + " % (la mitad de tu pérdida máxima, " + I.maxPerdidaAceptada + " %): un periodo flojo no se convierte en retiro." ] };
 }
+// His own withdrawal plan as buttons; a typed value that isn't one of them gets its own button.
+const opciones = (lista, v) => [...new Set([...lista, Number(v)])].filter((x) => Number.isFinite(x) && x > 0).sort((a, b) => a - b);
+function miPlanHtml() {
+  const P = S.plan, rec = recomendarRetiro();
+  const chip = (act, v, txt, on, jar) => `<button type="button" class="${on ? "on" : ""}" data-act="${act}" data-v="${v}">${txt}${jar ? " ★" : ""}</button>`;
+  return `<div class="lab" style="color:var(--accent)">✋ TU PLAN DE RETIRO · LO ELIGES TÚ</div>
+      <div class="big" style="font-size:30px;margin:4px 0 2px">${P.pctRetiro} % ${P.frecuencia}</div>
+      <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">retirando cuando el periodo gana al menos un ${P.objetivoRetiroPct} %. Toca para cambiarlo (★ = lo que recomienda Jarvis).</div>
+      <div class="sub">Qué parte del beneficio retiras</div><div class="modo">${opciones([10, 20, 25, 30, 40, 50, 60, 75], P.pctRetiro).map((x) => chip("pct-retiro", x, x + " %", Number(P.pctRetiro) === x, rec.pctRetiro === x)).join("")}</div>
+      <div class="sub">Cada cuánto</div><div class="modo">${chip("frec-retiro", "mensual", "Mensual", P.frecuencia === "mensual", rec.frecuencia === "mensual")}${chip("frec-retiro", "semanal", "Semanal", P.frecuencia === "semanal", rec.frecuencia === "semanal")}</div>
+      <div class="sub">Retiras si el periodo gana al menos</div><div class="modo">${opciones([5, 10, 15, 20, 25, 30, 40, 50], P.objetivoRetiroPct).map((x) => chip("obj-retiro", x, x + " %", Number(P.objetivoRetiroPct) === x, rec.objetivoRetiroPct === x)).join("")}</div>
+      <div style="font-size:11.5px;color:var(--faint)">¿Otro número? Escríbelo en las casillas de arriba («Retiras cuando ganas un … %» o «% del beneficio que retiras») y se aplica al momento.</div>`;
+}
+function retiroEstado(d) {
+  const P = S.plan;
+  return d.enCamino && !d.yaRetirado ? out("RETIRO EN CAMINO", eur(d.sugerido).replace(/^\+/, ""), "si acabas " + d.periodo.fin + " así, " + d.periodo.cuando,
+        "Llevas " + eur(d.beneficio) + " " + d.periodo.nombre + " y ya pasas del " + P.objetivoRetiroPct + " %. Se retira al cerrar " + d.periodo.fin + ", con su resultado entero: lo de hoy aún puede cambiar.") : d.yaRetirado ? out("RETIRO DE " + d.periodo.nombre.toUpperCase() + " HECHO", eur(d.retirado).replace(/^\+/, ""), "ya retirado de lo ganado " + d.periodo.nombre + " (" + eur(d.beneficio) + ")", "El siguiente, " + (P.frecuencia === "semanal" ? "la semana que viene." : "el mes que viene.")) : out(d.puedeRetirar ? "✅ YA PUEDES RETIRAR" : "AÚN NO TOCA RETIRAR", eur(d.puedeRetirar ? d.sugerido : d.faltaRetiro).replace(/^\+/, ""),
+        d.puedeRetirar ? "el " + P.pctRetiro + " % de lo ganado " + d.periodoRetiro.nombre + " (" + eur(d.beneficioRetiro) + ")" : "te faltan de beneficio " + d.periodo.nombre + " para el " + P.objetivoRetiroPct + " % (" + tpTxt(d.tpsRetiro) + ")",
+        d.puedeRetirar ? textoRepartoRetiro(d.sugerido).replace("Repártalo así", "Luego repártelo") : "Se retira " + d.periodo.cuando + ", al cerrar " + d.periodo.fin + ". Llevas " + eur(d.beneficio) + " " + d.periodo.nombre + (d.retirado ? " · ya retirado " + eur(d.retirado).replace(/^\+/, "") : "") + ".", !d.puedeRetirar && d.beneficio < 0);
+}
 function retiroHtml(d) {
   const P = S.plan, rec = recomendarRetiro(), igual = P.pctRetiro === rec.pctRetiro && P.frecuencia === rec.frecuencia && P.objetivoRetiroPct === rec.objetivoRetiroPct;
   const gan = S.rsim && S.rsim.gan != null && S.rsim.gan !== "" ? S.rsim.gan : Math.round(d.beneficio > 0 ? d.beneficio : saldo() * 0.2);
-  const chip = (act, v, txt, on, jar) => `<button type="button" class="${on ? "on" : ""}" data-act="${act}" data-v="${v}">${txt}${jar ? " ★" : ""}</button>`;
-  return `<div style="margin-top:14px"><div class="card" style="margin-bottom:14px"><div class="lab" style="color:var(--accent)">✋ TU PLAN DE RETIRO · LO ELIGES TÚ</div>
-      <div class="big" style="font-size:30px;margin:4px 0 2px">${P.pctRetiro} % ${P.frecuencia}</div>
-      <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">retirando cuando el periodo gana al menos un ${P.objetivoRetiroPct} %. Toca para cambiarlo (★ = lo que recomienda Jarvis).</div>
-      <div class="sub">Qué parte del beneficio retiras</div><div class="modo">${[10, 20, 25, 30, 40, 50, 60, 75].map((x) => chip("pct-retiro", x, x + " %", Number(P.pctRetiro) === x, rec.pctRetiro === x)).join("")}</div>
-      <div class="sub">Cada cuánto</div><div class="modo">${chip("frec-retiro", "mensual", "Mensual", P.frecuencia === "mensual", rec.frecuencia === "mensual")}${chip("frec-retiro", "semanal", "Semanal", P.frecuencia === "semanal", rec.frecuencia === "semanal")}</div>
-      <div class="sub">Retiras si el periodo gana al menos</div><div class="modo">${[5, 10, 15, 20].map((x) => chip("obj-retiro", x, x + " %", Number(P.objetivoRetiroPct) === x, rec.objetivoRetiroPct === x)).join("")}</div>
-      <div style="font-size:11.5px;color:var(--faint)">También puedes escribir otro número en las casillas de arriba.</div></div>
+  return `<div style="margin-top:14px"><div class="card" style="margin-bottom:14px" id="cp-miplan">${miPlanHtml()}</div>
     <div class="card" style="margin-bottom:14px"><div class="lab" style="color:var(--accent)">🤖 LO QUE TE RECOMIENDA JARVIS</div>
       <div class="big" style="font-size:30px;margin:4px 0 2px">${rec.pctRetiro} % ${rec.frecuencia}</div>
       <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">retirando cuando el periodo gana al menos un ${rec.objetivoRetiroPct} %</div>
@@ -518,10 +531,7 @@ function renderPlan() {
         <option value="semanal" ${P.frecuencia === "semanal" ? "selected" : ""}>Semanal</option><option value="mensual" ${P.frecuencia === "mensual" ? "selected" : ""}>Mensual</option></select></label>
       ${pnum("objetivoRetiroPct", "Retiras cuando ganas un … % en el periodo")}${pnum("pctRetiro", "% del beneficio que retiras")}</div>
       <div style="font-size:11.5px;color:var(--faint);margin-top:10px">Solo se retira beneficio: nunca por debajo de lo que has metido (${eur(d.aportado).replace(/^\+/, "")}).</div></div>
-    <div class="outs">${d.enCamino && !d.yaRetirado ? out("RETIRO EN CAMINO", eur(d.sugerido).replace(/^\+/, ""), "si acabas " + d.periodo.fin + " así, " + d.periodo.cuando,
-        "Llevas " + eur(d.beneficio) + " " + d.periodo.nombre + " y ya pasas del " + P.objetivoRetiroPct + " %. Se retira al cerrar " + d.periodo.fin + ", con su resultado entero: lo de hoy aún puede cambiar.") : d.yaRetirado ? out("RETIRO DE " + d.periodo.nombre.toUpperCase() + " HECHO", eur(d.retirado).replace(/^\+/, ""), "ya retirado de lo ganado " + d.periodo.nombre + " (" + eur(d.beneficio) + ")", "El siguiente, " + (P.frecuencia === "semanal" ? "la semana que viene." : "el mes que viene.")) : out(d.puedeRetirar ? "✅ YA PUEDES RETIRAR" : "AÚN NO TOCA RETIRAR", eur(d.puedeRetirar ? d.sugerido : d.faltaRetiro).replace(/^\+/, ""),
-        d.puedeRetirar ? "el " + P.pctRetiro + " % de lo ganado " + d.periodoRetiro.nombre + " (" + eur(d.beneficioRetiro) + ")" : "te faltan de beneficio " + d.periodo.nombre + " para el " + P.objetivoRetiroPct + " % (" + tpTxt(d.tpsRetiro) + ")",
-        d.puedeRetirar ? textoRepartoRetiro(d.sugerido).replace("Repártalo así", "Luego repártelo") : "Se retira " + d.periodo.cuando + ", al cerrar " + d.periodo.fin + ". Llevas " + eur(d.beneficio) + " " + d.periodo.nombre + (d.retirado ? " · ya retirado " + eur(d.retirado).replace(/^\+/, "") : "") + ".", !d.puedeRetirar && d.beneficio < 0)}
+    <div class="outs"><div id="cp-ret-estado">${retiroEstado(d)}</div>
       <div class="btns"><input id="cp-ret" type="number" inputmode="decimal" placeholder="€" value="${d.puedeRetirar ? Math.round(d.sugerido) : ""}" style="width:110px;background:var(--raised);border:1px solid var(--borderLight);border-radius:10px;padding:10px;color:var(--text)">
         <button class="loss" type="button" data-act="retiro">Registrar retiro</button></div></div></div>
   ${retiroHtml(d)}
@@ -734,7 +744,9 @@ $("#cp").addEventListener("input", (e) => {
   if (e.target.dataset && e.target.dataset.sim) { S.sim = e.target.value; return vivo(); }
   if (e.target.dataset && e.target.dataset.p && e.target.dataset.p !== "frecuencia") {
     const v = Number(String(e.target.value).replace(",", ".")); if (!Number.isFinite(v) || e.target.value === "") return;
-    S.plan[e.target.dataset.p] = v; save(); vivo(); const el = $("#cp-rtabla"); if (el) el.innerHTML = retiroTabla(dinero()); return;
+    S.plan[e.target.dataset.p] = v; save(); vivo();
+    const dn = dinero(), set = (id, h) => { const el = $(id); if (el) el.innerHTML = h; };
+    set("#cp-rtabla", retiroTabla(dn)); set("#cp-miplan", miPlanHtml()); set("#cp-ret-estado", retiroEstado(dn)); return;
   }
   if (e.target.dataset && e.target.dataset.rsim) { S.rsim = { ...(S.rsim || {}), [e.target.dataset.rsim]: e.target.value }; const el = $("#cp-rtabla"); if (el) el.innerHTML = retiroTabla(dinero()); return; }
   const k = e.target.dataset && e.target.dataset.op; if (!k) return;
