@@ -222,9 +222,17 @@ $("#fr-form").addEventListener("submit", async (e) => {
   if (S.edit) await col.doc(S.edit).set({ ...S.movs.get(S.edit), ...d }); else await col.doc().set({ ...d, creado: new Date().toISOString() });
   $("#fr-modal").hidden = true; toast("Movimiento guardado.");
 });
-async function borrar(ids) {
+// confirm() is blocked inside Claude's frame, so a second tap within 4 s confirms instead.
+function dosToques(btn, aviso) {
+  if (!btn) return true;
+  if (btn.dataset.armado === "1") { btn.dataset.armado = ""; btn.textContent = btn.dataset.txt; return true; }
+  btn.dataset.txt = btn.textContent; btn.dataset.armado = "1"; btn.textContent = aviso || "¿Seguro? Toca otra vez";
+  setTimeout(() => { if (btn.dataset.armado === "1") { btn.dataset.armado = ""; btn.textContent = btn.dataset.txt; } }, 4000);
+  return false;
+}
+async function borrar(ids, btn) {
   if (!S.db || !ids.length) return;
-  if (!confirm(ids.length > 1 ? `¿Borrar ${ids.length} movimientos?` : "¿Borrar este movimiento?")) return;
+  if (!dosToques(btn, btn && btn.classList.contains("ico") ? "¿?" : "¿Borrar? Toca otra vez")) return;
   for (const id of ids) { await S.db.doc("fm/retiradas").collection("movs").doc(id).delete(); S.sel.delete(id); }
   $("#fr-modal").hidden = true; toast(ids.length > 1 ? "Movimientos borrados." : "Movimiento borrado.");
 }
@@ -236,13 +244,13 @@ $("#fr").addEventListener("click", (e) => {
   if (t.dataset.emp != null && t.tagName === "BUTTON") { S.empresa = t.dataset.emp; S.page = 0; return render(); }
   if (t.dataset.page) { S.page = Math.max(0, S.page + Number(t.dataset.page)); return render(); }
   if (t.dataset.edit) return openForm(t.dataset.edit);
-  if (t.dataset.del) return borrar([t.dataset.del]);
+  if (t.dataset.del) return borrar([t.dataset.del], t);
   if (t.dataset.sel) { t.checked ? S.sel.add(t.dataset.sel) : S.sel.delete(t.dataset.sel); return render(); }
   const a = t.dataset.act;
   if (a === "new") return openForm(null);
   if (a === "cancel") { $("#fr-modal").hidden = true; return; }
-  if (a === "delform") return borrar([S.edit]);
-  if (a === "delsel") return borrar([...S.sel]);
+  if (a === "delform") return borrar([S.edit], t);
+  if (a === "delsel") return borrar([...S.sel], t);
   if (a === "selall") { const ids = [...ROOT.querySelectorAll("#fr-view [data-sel]")].map((x) => x.dataset.sel); ids.forEach((id) => (t.checked ? S.sel.add(id) : S.sel.delete(id))); return render(); }
 });
 $("#fr").addEventListener("input", (e) => { const k = e.target.dataset.f; if (k) { S.f[k] = e.target.value; S.page = 0; render(); } });
@@ -280,7 +288,6 @@ $("#fr-file").addEventListener("change", async () => {
   const list = leerExport(data);
   if (!list.length) return toast("No he encontrado movimientos en ese archivo.");
   if (!S.db) return toast("Abre el Funding Manager dentro de Claude para importar.");
-  if (!confirm(`¿Importar ${list.length} movimientos?`)) return;
   const col = S.db.doc("fm/retiradas").collection("movs");
   for (const { id, ...d } of list) await (id ? col.doc(id.replace(/[^A-Za-z0-9_\-.~:@+]/g, "_")) : col.doc()).set({ ...d, creado: new Date().toISOString() });
   toast(`Importados ${list.length} movimientos.`);
@@ -293,7 +300,9 @@ function contexto() {
     porEmpresa: [...porEmpresa(l)].map(([e, x]) => { const s = totales(x); return { empresa: e, retiradas: r2(s.retiradas), costes: r2(s.costes), beneficio: r2(s.beneficio) }; }),
     ultimosMovimientos: l.slice(0, 12).map((m) => ({ fecha: m.fecha, empresa: m.empresa, tipo: m.tipo === "retirada" ? "retirada" : "coste de examen", subtipo: m.subtipo, importe: r2(signo(m)), notas: m.notas || undefined })) };
 }
-window.FUNDING = { contexto, render, open: (tab) => { if (tab === "resumen" || tab === "empresas") S.tab = tab; render(); } };
+// The funded payouts, for the money plan in Capital propio.
+const payouts = () => all().filter((m) => m.tipo === "retirada").map((m) => ({ id: m.id, fecha: m.fecha, empresa: m.empresa, importe: Math.abs(Number(m.importe) || 0), notas: m.notas || "" }));
+window.FUNDING = { contexto, render, payouts, open: (tab) => { if (tab === "resumen" || tab === "empresas") S.tab = tab; render(); } };
 
 (async () => {
   render();

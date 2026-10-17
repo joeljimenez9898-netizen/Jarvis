@@ -517,9 +517,17 @@ async function saveForm(e) {
   try { await S.db.doc("fm/plan").collection(F.col).doc(id).set(doc); $("#pf-modal").hidden = true; toast("Guardado."); }
   catch (err) { toast("No se ha guardado: " + (err.message || "error")); }
 }
-async function delForm() {
+// confirm() is blocked inside Claude's frame, so a second tap within 4 s confirms instead.
+function dosToques(btn, aviso) {
+  if (!btn) return true;
+  if (btn.dataset.armado === "1") { btn.dataset.armado = ""; btn.textContent = btn.dataset.txt; return true; }
+  btn.dataset.txt = btn.textContent; btn.dataset.armado = "1"; btn.textContent = aviso || "¿Seguro? Toca otra vez";
+  setTimeout(() => { if (btn.dataset.armado === "1") { btn.dataset.armado = ""; btn.textContent = btn.dataset.txt; } }, 4000);
+  return false;
+}
+async function delForm(btn) {
   const f = $("#pf-form"), kind = f.dataset.kind, id = f.dataset.id;
-  if (!id || !confirm("¿Eliminar definitivamente?")) return;
+  if (!id || !dosToques(btn, "¿Eliminar? Toca otra vez")) return;
   try { await S.db.doc("fm/plan").collection(FORMS[kind].col).doc(id).delete(); $("#pf-modal").hidden = true; toast("Eliminado."); } catch (err) { toast("No se ha eliminado."); }
 }
 function toast(t) { const el = $("#pf-toast"); el.textContent = t; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => (el.hidden = true), 2600); }
@@ -538,7 +546,7 @@ root.addEventListener("click", async (e) => {
   if (d.new) return openForm(d.new);
   if (d.edit) return openForm(d.edit, d.id);
   if (d.cancel != null) { $("#pf-modal").hidden = true; return; }
-  if (d.del != null) return delForm();
+  if (d.del != null) return delForm(t);
   if (d.page) { const [k, n] = d.page.split(":"); S.page[k] = Math.max(0, S.page[k] + Number(n)); render(); return; }
   if (d.tog) { const [id, k] = d.tog.split("."); const r = riskOf(S.cuentas.get(id) ? { id, ...S.cuentas.get(id) } : {}); S.risk[id] = { ...(S.risk[id] || {}), [k]: !r[k] }; render(); return; }
   if (d.cal) {
@@ -593,7 +601,6 @@ $("#pf-file").addEventListener("change", async () => {
   const f = $("#pf-file").files[0]; $("#pf-file").value = ""; if (!f) return;
   let data; try { data = JSON.parse(await f.text()); } catch { return toast("Ese archivo no es una copia del plan."); }
   if (!S.db) return toast("Abre el Plan dentro de Claude para importar.");
-  if (!confirm("¿Importar este archivo? Se añadirán o reemplazarán los datos con el mismo ID.")) return;
   let n = 0;
   for (const [key, col] of [["grupos", "grupos"], ["cuentas", "cuentas"], ["operaciones", "operaciones"], ["semanas", "semanas"], ["revisiones", "revisiones"]])
     for (const { id, ...rest } of data[key] || []) { if (!id) continue; await S.db.doc("fm/plan").collection(col).doc(String(id)).set(rest); n++; }

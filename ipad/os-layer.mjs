@@ -302,8 +302,10 @@ export const SCRIPT = `
         let heard = []; try { heard = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch {}
         const d = C.dinero(), frases = [], keys = [];
         const riesgo = (window.CAPITAL.contexto().riesgoPorOperacion || "").replace("%", "");
-        if (d.hoyToca && d.sugerido >= 1 && !heard.includes("retiro:" + d.periodo.dia)) {
-          frases.push("Hoy toca retiro de capital propio: según su plan, " + Math.round(d.sugerido) + " euros, el beneficio que le corresponde de " + d.periodo.nombre + "."); keys.push("retiro:" + d.periodo.dia); }
+        if (d.puedeRetirar && !heard.includes("retiro:" + d.periodo.desde)) {
+          frases.push("Ya puede retirar de capital propio: según su plan, " + Math.round(d.sugerido) + " euros de lo ganado " + d.periodo.nombre + ". " + C.textoRepartoRetiro(d.sugerido)); keys.push("retiro:" + d.periodo.desde); }
+        if (d.puedeAportar && !heard.includes("aporte:" + Math.round(d.metaAporte))) {
+          frases.push("Su cuenta de capital propio ha crecido lo que pide su plan: ya puede meter más capital."); keys.push("aporte:" + Math.round(d.metaAporte)); }
         const kr = "riesgo:" + d.recomendado;
         if (Math.abs(d.recomendado - Number(riesgo)) > 0.001 && !heard.includes(kr)) {
           frases.push((d.recomendado > Number(riesgo) ? "Su cuenta de capital propio ha crecido: su plan dice subir el riesgo al " : "Su cuenta de capital propio ha caído: su plan dice bajar el riesgo al ") +
