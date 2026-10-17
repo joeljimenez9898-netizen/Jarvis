@@ -66,6 +66,9 @@
 .cp .tabla tr.sim td { color: var(--text); font-weight: 700; background: var(--raised); box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
 .cp .modo { display: flex; gap: 8px; margin: 0 0 14px; flex-wrap: wrap; }
 .cp .modo button { background: var(--raised); border: 1px solid var(--borderLight); color: var(--muted); border-radius: 999px; padding: 9px 14px; font-size: 13px; font-weight: 600; }
+.cp .sl { display: block; margin: 0 0 12px; font-size: 12.5px; color: var(--muted); } .cp .sl span { display: flex; justify-content: space-between; } .cp .sl b { color: var(--text); }
+.cp .sl input { width: 100%; margin-top: 6px; }
+.cp .barra { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--raised); margin: 12px 0 10px; } .cp .barra span { display: block; height: 100%; }
 .cp .sub { font-size: 11.5px; color: var(--faint); margin: 4px 0 6px; }
 .cp .modo button.on { border-color: var(--accent); color: var(--accent); background: var(--accentSoft); }
 .cp .pzs { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
@@ -201,7 +204,7 @@ function gestion(extraUsd) {
     } else {
       const antes = suma([...filas.values()].filter((x) => x.clase === "retiro" && x.fecha.slice(0, 4) === anio).map((x) => ({ importe: x.eur })));
       hac = cuota(antes + total, TRAMOS_AHORRO) - cuota(antes, TRAMOS_AHORRO);
-      porque.push("Hacienda: ganancia de capital propio, escala del ahorro (" + tramoDe(antes + total, TRAMOS_AHORRO) + " %).");
+      porque.push("Hacienda: las ganancias de capital propio tributan por la escala del ahorro; con lo retirado este año estás en el " + tramoDe(antes + total, TRAMOS_AHORRO) + " %, y el " + tramoDe(antes + total, TRAMOS_AHORRO) + " % de " + euros(total) + " son " + euros(hac) + ".");
     }
     const resto = total - hac;
     let ex;
@@ -211,7 +214,7 @@ function gestion(extraUsd) {
         : "Exámenes: nada, la hucha ya cubre " + P.mesesExamenes + " meses de exámenes.");
     } else {
       ex = resto * Math.min(P.pctExamenes, P.topeExamenes) / 100;
-      porque.push("Exámenes: aún no hay costes de examen apuntados en el Funding Manager, así que aparta el " + Math.min(P.pctExamenes, P.topeExamenes) + " %.");
+      porque.push("Exámenes: aún no hay costes de examen apuntados en el Funding Manager, así que aparta el " + Math.min(P.pctExamenes, P.topeExamenes) + " % de lo que queda tras Hacienda (" + euros(resto) + "): " + euros(ex) + ". Cuando apuntes lo que pagas por exámenes, Jarvis aparta según tu gasto real.");
     }
     hucha += ex / cambio;
     let cap = 0;
@@ -223,7 +226,7 @@ function gestion(extraUsd) {
       porque.push(cap > 0 ? "Capital propio: hacia tu meta de " + euros(P.metaCapital) + " (llevas " + euros(tiene) + ")." : "Capital propio: nada, ya llegas a tu meta de " + euros(P.metaCapital) + ".");
     }
     const tuyo = resto - ex - cap;
-    porque.push("Para ti: lo que queda.");
+    porque.push("Para ti: lo que queda, " + euros(resto - ex - cap) + ".");
     filas.set(ev.clase + ":" + ev.id, { clase: ev.clase, id: ev.id, fecha: ev.fecha || "", empresa: ev.empresa || "", usd: ev.clase === "payout" ? ev.importe : null, eur: r2(total),
       hacienda: r2(hac), examenes: r2(ex), capital: r2(cap), tuyo: r2(tuyo), porque });
   }
@@ -378,16 +381,28 @@ function explicaEscalones() {
     " %, con " + eu(a * (1 + 2 * c / 100)) + " al " + n(Math.min(P.riesgoMax, b + 2 * x)) + " %… hasta el " + n(P.riesgoMax) + " %. Si la cuenta cae un " + P.bajaSiCae + " % desde su mejor saldo, vuelve un escalón atrás. " +
     "Lo que metes no cuenta como crecimiento, y los escalones no pasan del riesgo que aguanta tu racha (" + n(calc().riesgoQueDiceTuRacha) + " %), salvo que tu base ya sea mayor.";
 }
-function repartoFijoHtml(fecha, usd, r, ok, pagos, retiros) {
-  return `<div class="two"><div class="card"><div class="fields">${pnum("pctCapital", "A capital propio (%)")}${pnum("pctExamenes", "A más exámenes (%)")}${pnum("pctTuyo", "Para ti (%)")}${pnum("pctImpuestos", "Apartado para Hacienda (%)")}
-      ${pnum("cambio", "Cambio: 1 $ = … €", 0.01)}</div>
-      <div style="font-size:11.5px;color:${ok ? "var(--faint)" : "var(--coral)"};margin-top:10px">${ok ? "Suman 100 %." : "Ojo: suman " + r.suma + " %, tienen que sumar 100 %."} Con porcentajes fijos, cada payout se reparte siempre igual, con los porcentajes que pones tú. Un retiro de capital propio se reparte igual, sin la parte de capital propio. Lo de Hacienda depende de tu caso: confírmalo con un asesor.</div></div>
-    <div class="card"><div class="lab" style="color:var(--faint)">PAYOUTS DE FONDEO (FUNDING MANAGER)</div>
-      ${pagos.length ? pagos.map((m) => { const x = repartoFijo(m.importe); return `<div class="row"><span>${fecha(m.fecha)} · ${m.empresa} · <b style="color:var(--text)">${usd(m.importe)}</b><br><small>capital ${usd(x.capitalUsd)} (≈${Math.round(x.capitalEur)} €) · exámenes ${usd(x.examenes)} · tú ${usd(x.tuyo)} · Hacienda ${usd(x.impuestos)}</small></span></div>`; }).join("")
-        : '<div class="empty">Aún no hay payouts. Díctaselos a Jarvis («apunta el payout de 500 de TS-2») o apúntalos en el Funding Manager: aquí verás cómo repartir cada uno.</div>'}
-      <div class="lab" style="color:var(--faint);margin-top:14px">RETIROS DE CAPITAL PROPIO</div>
-      ${retiros.length ? retiros.map((e) => { const x = repartoRetiroFijo(e.importe); return `<div class="row l"><span>${fecha(e.date)} · <b style="color:var(--text)">${eur(e.importe).replace(/^\+/, "")}</b><br><small>exámenes ${eur(x.examenes).replace(/^\+/, "")} · tú ${eur(x.tuyo).replace(/^\+/, "")} · Hacienda ${eur(x.impuestos).replace(/^\+/, "")}</small></span></div>`; }).join("")
-        : '<div class="empty">Aún no has retirado de capital propio.</div>'}</div></div>`;
+// Fixed percentages: a slider per share, and next to them what each share is in money, live while he moves them.
+function repartoFijoHtml() {
+  const P = S.plan, sl = (k, label, c) => `<label class="sl"><span>${label} <b data-pv="${k}">${P[k]} %</b></span><input type="range" min="0" max="100" step="1" data-p="${k}" value="${P[k]}" style="accent-color:${c}"></label>`;
+  return `<div class="two"><div class="card"><div class="lab" style="color:var(--accent)">TÚ ELIGES LOS PORCENTAJES</div>
+      ${sl("pctImpuestos", "🏛️ Apartado para Hacienda", "#ff7b6b")}${sl("pctExamenes", "🎯 A más exámenes", "#e8b04a")}${sl("pctCapital", "💶 A capital propio", "#3ddc97")}${sl("pctTuyo", "🙋 Para ti", "#7aa7ff")}
+      <div class="fields" style="margin-top:8px">${pnum("cambio", "Cambio: 1 $ = … €", 0.01)}</div>
+      <div style="font-size:11.5px;color:var(--faint);margin-top:10px">Mueve las barras y mira a la derecha cómo cambia el dinero de cada apartado. Con porcentajes fijos, cada payout se reparte siempre igual. Un retiro de capital propio se reparte igual, sin la parte de capital propio. Lo de Hacienda depende de tu caso: confírmalo con un asesor.</div></div>
+    <div class="card"><label class="f"><span>Prueba con un payout de ($)</span><input type="number" inputmode="decimal" step="50" data-fsim="1" value="${S.fsim || 1000}"></label>
+      <div id="cp-fijo-vista">${fijoVista()}</div></div></div>`;
+}
+function fijoVista() {
+  const P = S.plan, x = repartoFijo(Math.abs(Number(String(S.fsim || 1000).replace(",", "."))) || 0), c = P.cambio || 1, ok = x.suma === 100, fecha = (f) => (f || "").split("-").reverse().join("/");
+  const e0 = (n) => Math.round(n).toLocaleString("es-ES", { useGrouping: "always" }) + " €", d0 = (n) => Math.round(n).toLocaleString("es-ES", { useGrouping: "always" }) + " $";
+  const partes = [["Hacienda", "pctImpuestos", x.impuestos, "#ff7b6b"], ["Exámenes", "pctExamenes", x.examenes, "#e8b04a"], ["Capital propio", "pctCapital", x.capitalUsd, "#3ddc97"], ["Para ti", "pctTuyo", x.tuyo, "#7aa7ff"]];
+  const pagos = (window.FUNDING && window.FUNDING.payouts ? window.FUNDING.payouts() : []).slice(0, 6), retiros = S.log.filter((e) => e.resultado === "retiro").slice(-6).reverse();
+  return `<div class="barra">${partes.map(([l, k, v, col]) => `<span style="width:${Math.max(0, P[k]) / Math.max(100, x.suma) * 100}%;background:${col}" title="${l}"></span>`).join("")}</div>
+    ${partes.map(([l, k, v, col]) => `<div class="row"><span><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${col};margin-right:7px"></i>${l} · ${P[k]} %</span><b>${d0(v)} <small style="color:var(--faint);font-weight:400">≈ ${e0(v * c)}</small></b></div>`).join("")}
+    <div style="font-size:12px;margin-top:6px;color:${ok ? "var(--accent)" : "var(--coral)"}">${ok ? "Suman 100 %." : "Ojo: suman " + x.suma + " %, tienen que sumar 100 %. " + (x.suma > 100 ? "Te pasas en " + (x.suma - 100) + " %." : "Te falta repartir un " + (100 - x.suma) + " %.")}</div>
+    <div class="lab" style="color:var(--faint);margin-top:14px">TUS PAYOUTS CON ESTOS PORCENTAJES</div>
+    ${pagos.length ? pagos.map((m) => { const y = repartoFijo(m.importe); return `<div class="row"><span>${fecha(m.fecha)} · ${m.empresa} · <b style="color:var(--text)">${d0(m.importe)}</b><br><small>Hacienda ${d0(y.impuestos)} · exámenes ${d0(y.examenes)} · capital ${d0(y.capitalUsd)} (≈${e0(y.capitalEur)}) · tú ${d0(y.tuyo)}</small></span></div>`; }).join("")
+      : '<div class="empty">Aún no hay payouts: cuando cobres, aquí verás cada uno repartido.</div>'}
+    ${retiros.length ? '<div class="lab" style="color:var(--faint);margin-top:14px">RETIROS DE CAPITAL PROPIO</div>' + retiros.map((e) => { const y = repartoRetiroFijo(e.importe); return `<div class="row l"><span>${fecha(e.date)} · <b style="color:var(--text)">${e0(e.importe)}</b><br><small>Hacienda ${e0(y.impuestos)} · exámenes ${e0(y.examenes)} · tú ${e0(y.tuyo)}</small></span></div>`; }).join("") : ""}`;
 }
 // Jarvis's own split: the four rules with his numbers, what each fund holds, and every payout and withdrawal with its why.
 function repartoAutoHtml(fecha) {
@@ -401,7 +416,12 @@ function repartoAutoHtml(fecha) {
       <div class="fields" style="margin-top:12px">${pnum("metaCapital", "Meta de capital propio (€)", 100)}${pnum("mesesExamenes", "Meses de exámenes en la hucha")}
         ${pnum("otrosIngresos", "Otros ingresos al año (€) · sueldo, etc.", 100)}${pnum("cambio", "Cambio: 1 $ = … €", 0.01)}</div>
       <div style="font-size:11.5px;color:var(--faint);margin-top:10px">Lo de Hacienda es una estimación para apartar de sobra (escala general aproximada, sin cuota de autónomos ni deducciones de tu comunidad). Confírmalo con tu gestor.</div></div>
-    <div class="outs">
+    <div class="outs" id="cp-auto-vista">${autoVista()}</div></div>`;
+}
+function autoVista() {
+  const g = gestion(), fecha = (f) => (f || "").split("-").reverse().join("/"), e0 = (n) => Math.round(n).toLocaleString("es-ES", { useGrouping: "always" }) + " €", d0 = (n) => Math.round(n).toLocaleString("es-ES", { useGrouping: "always" }) + " $";
+  const filas = [...g.filas.values()].reverse().slice(0, 10), parte = (c, l, v) => `<span class="pz ${c}">${l} <b>${e0(v)}</b></span>`;
+  return `
       <div class="card fondos"><div class="lab" style="color:var(--faint)">TUS HUCHAS AHORA</div>
         <div class="row"><span>🏛️ Apartado para Hacienda este año</span><b>${e0(g.apartadoHacienda)}</b></div>
         <div class="row"><span>🎯 Hucha de exámenes${g.objetivoExamenes ? " (objetivo " + d0(g.objetivoExamenes) + ")" : ""}</span><b>${d0(g.huchaExamenes)}</b></div>
@@ -410,7 +430,7 @@ function repartoAutoHtml(fecha) {
       ${filas.length ? filas.map((f) => `<div class="row${f.clase === "retiro" ? " l" : ""}"><span>${fecha(f.fecha)} · ${f.clase === "payout" ? (f.empresa || "payout") + " · <b style=\"color:var(--text)\">" + d0(f.usd) + "</b> (≈" + e0(f.eur) + ")" : "retiro de capital propio · <b style=\"color:var(--text)\">" + e0(f.eur) + "</b>"}
           <div class="pzs">${parte("h", "Hacienda", f.hacienda)}${parte("x", "Exámenes", f.examenes)}${f.clase === "payout" ? parte("c", "Capital", f.capital) : ""}${parte("t", "Tú", f.tuyo)}</div>
           <small>${f.porque.join(" ")}</small></span></div>`).join("")
-        : '<div class="empty">Aún no hay payouts. Díctaselos a Jarvis («apunta el payout de 500 de TS-2») o apúntalos en el Funding Manager: aquí verás cómo te los reparte.</div>'}</div></div></div>`;
+        : '<div class="empty">Aún no hay payouts. Díctaselos a Jarvis («apunta el payout de 500 de TS-2») o apúntalos en el Funding Manager: aquí verás cómo te los reparte.</div>'}</div>`;
 }
 // What's set aside for own capital and not yet put in: Jarvis's fund, or the fixed share of each payout.
 function apartadoCapital() {
@@ -523,7 +543,7 @@ function renderPlan() {
   return `
   <div class="sec"><b>05</b><span>Plan de dinero · reparto de cada payout de fondeo y de cada retiro</span></div>
   <div class="modo"><button type="button" data-act="modo-auto" class="${P.repartoAuto ? "on" : ""}">🤖 Jarvis lo gestiona</button><button type="button" data-act="modo-fijo" class="${P.repartoAuto ? "" : "on"}">✋ Porcentajes fijos</button></div>
-  ${P.repartoAuto ? repartoAutoHtml(fecha) : repartoFijoHtml(fecha, usd, r, ok, pagos, retiros)}
+  ${P.repartoAuto ? repartoAutoHtml(fecha) : repartoFijoHtml()}
 
   <div class="sec"><b>06</b><span>Retiros de capital propio</span></div>
   <div class="two"><div class="card"><div class="fields">
@@ -746,7 +766,11 @@ $("#cp").addEventListener("input", (e) => {
     const v = Number(String(e.target.value).replace(",", ".")); if (!Number.isFinite(v) || e.target.value === "") return;
     S.plan[e.target.dataset.p] = v; save(); vivo();
     const dn = dinero(), set = (id, h) => { const el = $(id); if (el) el.innerHTML = h; };
-    set("#cp-rtabla", retiroTabla(dn)); set("#cp-miplan", miPlanHtml()); set("#cp-ret-estado", retiroEstado(dn)); return;
+    set("#cp-rtabla", retiroTabla(dn)); set("#cp-miplan", miPlanHtml()); set("#cp-ret-estado", retiroEstado(dn));
+    set("#cp-fijo-vista", fijoVista()); set("#cp-auto-vista", autoVista());
+    const lab = ROOT.querySelector('[data-pv="' + e.target.dataset.p + '"]'); if (lab) lab.textContent = v + " %"; return;
+  }
+  if (e.target.dataset && e.target.dataset.fsim) { S.fsim = e.target.value; const el = $("#cp-fijo-vista"); if (el) el.innerHTML = fijoVista(); return;
   }
   if (e.target.dataset && e.target.dataset.rsim) { S.rsim = { ...(S.rsim || {}), [e.target.dataset.rsim]: e.target.value }; const el = $("#cp-rtabla"); if (el) el.innerHTML = retiroTabla(dinero()); return; }
   const k = e.target.dataset && e.target.dataset.op; if (!k) return;
@@ -806,7 +830,7 @@ window.CAPITAL = { contexto, render, textoReparto, textoRepartoRetiro, dinero, c
     if (!snap.exists) return;
     if (Date.now() - S.tocado < 4000) return;          // our own change is on its way: don't let an older copy undo it
     const d = snap.data();
-    const focused = ROOT.activeElement && ROOT.activeElement.dataset && (ROOT.activeElement.dataset.k || ROOT.activeElement.dataset.p || ROOT.activeElement.dataset.op || ROOT.activeElement.dataset.sim || ROOT.activeElement.dataset.rsim);
+    const focused = ROOT.activeElement && ROOT.activeElement.dataset && (ROOT.activeElement.dataset.k || ROOT.activeElement.dataset.p || ROOT.activeElement.dataset.op || ROOT.activeElement.dataset.sim || ROOT.activeElement.dataset.rsim || ROOT.activeElement.dataset.fsim);
     S.inputs = { ...DEF, ...(d.inputs || {}) }; S.plan = { ...PLAN_DEF, ...(d.plan || {}) }; S.log = Array.isArray(d.log) ? d.log.map((e) => ({ ...e })) : [];   // the database hands back frozen data: work on a copy
     if (!focused) render();
   }, () => {});
