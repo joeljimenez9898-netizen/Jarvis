@@ -302,8 +302,8 @@ export const SCRIPT = `
         let heard = []; try { heard = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch {}
         const d = C.dinero(), frases = [], keys = [];
         const riesgo = (window.CAPITAL.contexto().riesgoPorOperacion || "").replace("%", "");
-        if (d.puedeRetirar && !heard.includes("retiro:" + d.periodo.desde)) {
-          frases.push("Ya puede retirar de capital propio: según su plan, " + Math.round(d.sugerido) + " euros de lo ganado " + d.periodo.nombre + ". " + C.textoRepartoRetiro(d.sugerido)); keys.push("retiro:" + d.periodo.desde); }
+        if (d.puedeRetirar && !heard.includes("retiro:" + d.periodoRetiro.desde)) {
+          frases.push("Ya puede retirar de capital propio: según su plan, " + Math.round(d.sugerido) + " euros de lo ganado " + d.periodoRetiro.nombre + ". " + C.textoRepartoRetiro(d.sugerido)); keys.push("retiro:" + d.periodoRetiro.desde); }
         if (d.puedeAportar && !heard.includes("aporte:" + Math.round(d.metaAporte))) {
           frases.push("Su cuenta de capital propio ha crecido lo que pide su plan: ya puede meter más capital."); keys.push("aporte:" + Math.round(d.metaAporte)); }
         const kr = "riesgo:" + d.recomendado;

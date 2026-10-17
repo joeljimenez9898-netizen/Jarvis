@@ -120,15 +120,31 @@ function textoRepartoFijo(usd) {
   return "Según su plan de dinero, de esos " + $(r.usd) + ": " + $(r.capitalUsd) + " a capital propio (unos " + Math.round(r.capitalEur) + " €), " + $(r.examenes) +
     " para más exámenes, " + $(r.tuyo) + " para usted y " + $(r.impuestos) + " apartados para Hacienda.";
 }
-function periodo() {
-  const now = new Date(), P = S.plan;
+// The withdrawal period that holds "ref": a week (Monday to Sunday) or a month. Withdrawals happen at its close,
+// on "dia" (Friday, or the month's last weekday), on the whole period's result, never in the middle of it.
+const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+function periodo(ref = new Date(), pasado = false) {
+  const now = new Date(ref), P = S.plan, cuando = (d) => "el " + DIAS[d.getDay()] + " " + d.getDate();
   if (P.frecuencia === "semanal") {
     const lunes = new Date(now); lunes.setDate(now.getDate() - ((now.getDay() + 6) % 7));
     const viernes = new Date(lunes); viernes.setDate(lunes.getDate() + 4);
-    return { desde: iso(lunes), dia: iso(viernes), nombre: "esta semana", cuando: "el viernes" };
+    const domingo = new Date(lunes); domingo.setDate(lunes.getDate() + 6);
+    return { desde: iso(lunes), hasta: iso(domingo), dia: iso(viernes), nombre: pasado ? "la semana pasada" : "esta semana", fin: "la semana", cuando: cuando(viernes), gracia: 2 };
   }
-  const fin = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  return { desde: iso(new Date(now.getFullYear(), now.getMonth(), 1)), dia: iso(fin), nombre: "este mes", cuando: "el último día del mes" };
+  const fin = new Date(now.getFullYear(), now.getMonth() + 1, 0), ult = new Date(fin);
+  while (ult.getDay() === 0 || ult.getDay() === 6) ult.setDate(ult.getDate() - 1);
+  return { desde: iso(new Date(now.getFullYear(), now.getMonth(), 1)), hasta: iso(fin), dia: iso(ult), nombre: pasado ? "el mes pasado" : "este mes", fin: "el mes", cuando: cuando(ult), gracia: 7 };
+}
+// One period's result: profit from trades inside it, and what has already been withdrawn for it.
+function cierre(per, s, aportado) {
+  const P = S.plan, dentro = (e) => e.date >= per.desde && e.date <= per.hasta;
+  const antes = S.log.filter((e) => e.date < per.desde).pop(), en = S.log.filter(dentro);
+  const inicio = antes ? antes.balanceAfter : en.length ? en[0].balanceBefore : s;
+  const beneficio = en.filter(isTrade).reduce((a, e) => a + (e.balanceAfter - e.balanceBefore), 0);
+  const retirado = S.log.filter((e) => e.resultado === "retiro" && (e.periodo ? e.periodo === per.desde : dentro(e))).reduce((a, e) => a + e.importe, 0);
+  const objetivo = inicio * P.objetivoRetiroPct / 100;
+  const sugerido = Math.max(0, Math.min(beneficio * P.pctRetiro / 100 - retirado, s - aportado));
+  return { per, inicio, beneficio, retirado, objetivo, sugerido, alcanza: beneficio >= objetivo && beneficio > 0 };
 }
 // Euros as Jarvis says them aloud, and how many take-profits in a row reach a balance.
 const euros = (n) => Math.round(Math.abs(n)).toLocaleString("es-ES", { useGrouping: "always" }) + " euros";
@@ -245,17 +261,17 @@ function dinero() {
   const P = S.plan, I = S.inputs, s = saldo(), per = periodo(), hoy = today(), r = rOp();
   const aportes = S.log.filter((e) => e.resultado === "aporte").reduce((a, e) => a + e.importe, 0);
   const aportado = I.saldoInicial + aportes;
-  const enPeriodo = S.log.filter((e) => e.date >= per.desde);
-  const antes = S.log.filter((e) => e.date < per.desde).pop();
-  const inicioPeriodo = antes ? antes.balanceAfter : enPeriodo.length ? enPeriodo[0].balanceBefore : s;
-  const beneficio = enPeriodo.filter(isTrade).reduce((a, e) => a + (e.balanceAfter - e.balanceBefore), 0);
-  const retirado = enPeriodo.filter((e) => e.resultado === "retiro").reduce((a, e) => a + e.importe, 0);
-  // withdrawal: once the period's profit reaches the target, a share of it, never below what was put in
-  const objetivoRetiro = inicioPeriodo * P.objetivoRetiroPct / 100;
-  const sugerido = Math.max(0, Math.min(beneficio * P.pctRetiro / 100 - retirado, s - aportado));
-  const puedeRetirar = beneficio >= objetivoRetiro && sugerido >= 1;
+  // withdrawal: at the period's close (or in the first days of the next one, for the one just closed), if the whole
+  // period reached the target: a share of its profit, never below what was put in. Before the close it's only "on the way".
+  const cur = cierre(per, s, aportado), d0 = new Date(per.desde + "T12:00:00"); d0.setDate(d0.getDate() - 1);
+  const prevPer = periodo(d0, true), prev = cierre(prevPer, s, aportado), gr = new Date(per.desde + "T12:00:00"); gr.setDate(gr.getDate() + per.gracia - 1);
+  const ventana = hoy >= per.dia, deAntes = !(ventana && cur.alcanza && cur.sugerido >= 1) && hoy <= iso(gr) && prev.alcanza && prev.sugerido >= 1;
+  const fuente = deAntes ? prev : cur;
+  const puedeRetirar = (ventana || deAntes) && fuente.alcanza && fuente.sugerido >= 1;
+  const enCamino = !ventana && !deAntes && cur.alcanza && cur.sugerido >= 1;
+  const { inicio: inicioPeriodo, beneficio, retirado, objetivo: objetivoRetiro } = cur, sugerido = fuente.sugerido;
   const faltaRetiro = Math.max(0, objetivoRetiro - beneficio);
-  const yaRetirado = beneficio >= objetivoRetiro && beneficio > 0 && !puedeRetirar;          // this period's share is already out
+  const yaRetirado = !puedeRetirar && cur.alcanza && cur.sugerido < 1;          // this period's share is already out
   // the peak since the last time money went in or out
   let desde = 0; S.log.forEach((e, i) => { if (!isTrade(e)) desde = i; });
   const pico = Math.max(I.saldoInicial, ...S.log.slice(desde).map((e) => e.balanceAfter));
@@ -276,7 +292,7 @@ function dinero() {
   // the next trade, and how many stops in a row reach the most he accepts to lose (counted on what he put in)
   const tp = s * r * I.ratioTpSl, sl = s * r, suelo = aportado * (1 - I.maxPerdidaAceptada / 100);
   const quema = s <= suelo ? 0 : r > 0 ? Math.ceil(Math.log(suelo / s) / Math.log(1 - r)) : Infinity;
-  return { periodo: per, inicioPeriodo, beneficio, retirado, sugerido, puedeRetirar, yaRetirado, objetivoRetiro, faltaRetiro, tpsRetiro: tpsHasta(s + faltaRetiro),
+  return { periodo: per, periodoRetiro: fuente.per, beneficioRetiro: fuente.beneficio, enCamino, inicioPeriodo, beneficio, retirado, sugerido, puedeRetirar, yaRetirado, objetivoRetiro, faltaRetiro, tpsRetiro: tpsHasta(s + faltaRetiro),
            hoyToca: hoy === per.dia, aportado, pico, caida, crec, escalon, recomendado, tope, siguiente, riesgoSiguiente, tpsRiesgo: tpsHasta(siguiente),
            puedeAportar, metaAporte, faltaAporte: Math.max(0, metaAporte - s), tpsAporte: tpsHasta(metaAporte),
            tp, sl, saldoTp: s + tp, saldoSl: s - sl, saldoDosSl: s * (1 - r) * (1 - r), suelo, quema };
@@ -289,7 +305,8 @@ function comoVoy() {
   L.push("Si es stop: −" + euros(d.sl) + " (" + euros(d.saldoSl) + "). Dos stops seguidos te dejan en " + euros(d.saldoDosSl) + " (" + pct(-(1 - d.saldoDosSl / saldo()) * 100) + ").");
   L.push(d.quema === 0 ? "⚠️ Ya estás por debajo de tu pérdida máxima (" + euros(d.suelo) + "): según tu plan, cuenta quemada. Para y revisa."
     : (d.quema <= 2 ? "⚠️ " : "") + "Con " + d.quema + " stop" + (d.quema === 1 ? "" : "s") + " seguido" + (d.quema === 1 ? "" : "s") + " llegas a tu pérdida máxima (−" + I.maxPerdidaAceptada + " % de lo que has metido, " + euros(d.suelo) + ")" + (d.quema <= 2 ? ": cuenta quemada según tu plan." : "."));
-  L.push(d.puedeRetirar ? "✅ Ya puedes retirar " + euros(d.sugerido) + " (" + P.pctRetiro + " % de lo ganado " + d.periodo.nombre + ")."
+  L.push(d.puedeRetirar ? "✅ Ya puedes retirar " + euros(d.sugerido) + " (" + P.pctRetiro + " % de lo ganado " + d.periodoRetiro.nombre + ", " + euros(d.beneficioRetiro) + ")."
+    : d.enCamino ? "Retiro: llevas " + euros(d.beneficio) + " ganados " + d.periodo.nombre + " (ya pasas del " + P.objetivoRetiroPct + " %). Si acabas " + d.periodo.fin + " así, " + d.periodo.cuando + " podrás retirar " + euros(d.sugerido) + ". Antes no, porque " + d.periodo.fin + " aún puede girarse."
     : d.yaRetirado ? "Retiro: ya has retirado lo de " + d.periodo.nombre + " (" + euros(d.retirado) + "). El siguiente, " + (P.frecuencia === "semanal" ? "la semana que viene." : "el mes que viene.")
     : d.beneficio < 0 ? "Retiro: " + d.periodo.nombre + " vas en " + euros(d.beneficio).replace(/^/, "−") + "; primero toca recuperar."
     : "Retiro: te faltan " + euros(d.faltaRetiro) + " de beneficio " + d.periodo.nombre + " (" + tpTxt(d.tpsRetiro) + ") para llegar al " + P.objetivoRetiroPct + " % y poder retirar.");
@@ -443,7 +460,7 @@ function recomendarRetiro() {
         : "Ya has llegado a tu meta de " + euros(meta) + ": puedes retirar el " + pctRetiro + " % de lo ganado y dejar la otra mitad para que la cuenta siga creciendo."),
       "Con tu winrate del " + I.winrate + " %, " + ops + " operaciones al día y riesgo del " + String(I.riesgoPct).replace(".", ",") + " %, una semana acaba en pérdidas el " + p0(pSem) + " % de las veces y un mes el " + p0(pMes) + " %. " +
         (frecuencia === "mensual" ? "Por eso mensual: un mes junta más operaciones, el resultado es más fiable y no retiras de una semana buena que la siguiente se come." : "Tus semanas son muy fiables, así que puedes retirar cada semana."),
-      "Retira solo cuando el periodo haya dado al menos un " + objetivoRetiroPct + " % (la mitad de tu pérdida máxima, " + I.maxPerdidaAceptada + " %): un periodo flojo no se convierte en retiro." ] };
+      "Se retira al cerrar el periodo (el último día laborable del mes, o el viernes), con su resultado entero, y solo si ha dado al menos un " + objetivoRetiroPct + " % (la mitad de tu pérdida máxima, " + I.maxPerdidaAceptada + " %): un periodo flojo no se convierte en retiro." ] };
 }
 function retiroHtml(d) {
   const P = S.plan, rec = recomendarRetiro(), igual = P.pctRetiro === rec.pctRetiro && P.frecuencia === rec.frecuencia && P.objetivoRetiroPct === rec.objetivoRetiroPct;
@@ -489,9 +506,10 @@ function renderPlan() {
         <option value="semanal" ${P.frecuencia === "semanal" ? "selected" : ""}>Semanal</option><option value="mensual" ${P.frecuencia === "mensual" ? "selected" : ""}>Mensual</option></select></label>
       ${pnum("objetivoRetiroPct", "Retiras cuando ganas un … % en el periodo")}${pnum("pctRetiro", "% del beneficio que retiras")}</div>
       <div style="font-size:11.5px;color:var(--faint);margin-top:10px">Solo se retira beneficio: nunca por debajo de lo que has metido (${eur(d.aportado).replace(/^\+/, "")}).</div></div>
-    <div class="outs">${d.yaRetirado ? out("RETIRO DE " + d.periodo.nombre.toUpperCase() + " HECHO", eur(d.retirado).replace(/^\+/, ""), "ya retirado de lo ganado " + d.periodo.nombre + " (" + eur(d.beneficio) + ")", "El siguiente, " + (P.frecuencia === "semanal" ? "la semana que viene." : "el mes que viene.")) : out(d.puedeRetirar ? "✅ YA PUEDES RETIRAR" : "AÚN NO TOCA RETIRAR", eur(d.puedeRetirar ? d.sugerido : d.faltaRetiro).replace(/^\+/, ""),
-        d.puedeRetirar ? "el " + P.pctRetiro + " % de lo ganado " + d.periodo.nombre + " (" + eur(d.beneficio) + ")" : "te faltan de beneficio " + d.periodo.nombre + " para el " + P.objetivoRetiroPct + " % (" + tpTxt(d.tpsRetiro) + ")",
-        d.puedeRetirar ? textoRepartoRetiro(d.sugerido).replace("Repártalo así", "Luego repártelo") : "Llevas " + eur(d.beneficio) + " " + d.periodo.nombre + (d.retirado ? " · ya retirado " + eur(d.retirado).replace(/^\+/, "") : "") + ".", !d.puedeRetirar && d.beneficio < 0)}
+    <div class="outs">${d.enCamino && !d.yaRetirado ? out("RETIRO EN CAMINO", eur(d.sugerido).replace(/^\+/, ""), "si acabas " + d.periodo.fin + " así, " + d.periodo.cuando,
+        "Llevas " + eur(d.beneficio) + " " + d.periodo.nombre + " y ya pasas del " + P.objetivoRetiroPct + " %. Se retira al cerrar " + d.periodo.fin + ", con su resultado entero: lo de hoy aún puede cambiar.") : d.yaRetirado ? out("RETIRO DE " + d.periodo.nombre.toUpperCase() + " HECHO", eur(d.retirado).replace(/^\+/, ""), "ya retirado de lo ganado " + d.periodo.nombre + " (" + eur(d.beneficio) + ")", "El siguiente, " + (P.frecuencia === "semanal" ? "la semana que viene." : "el mes que viene.")) : out(d.puedeRetirar ? "✅ YA PUEDES RETIRAR" : "AÚN NO TOCA RETIRAR", eur(d.puedeRetirar ? d.sugerido : d.faltaRetiro).replace(/^\+/, ""),
+        d.puedeRetirar ? "el " + P.pctRetiro + " % de lo ganado " + d.periodoRetiro.nombre + " (" + eur(d.beneficioRetiro) + ")" : "te faltan de beneficio " + d.periodo.nombre + " para el " + P.objetivoRetiroPct + " % (" + tpTxt(d.tpsRetiro) + ")",
+        d.puedeRetirar ? textoRepartoRetiro(d.sugerido).replace("Repártalo así", "Luego repártelo") : "Se retira " + d.periodo.cuando + ", al cerrar " + d.periodo.fin + ". Llevas " + eur(d.beneficio) + " " + d.periodo.nombre + (d.retirado ? " · ya retirado " + eur(d.retirado).replace(/^\+/, "") : "") + ".", !d.puedeRetirar && d.beneficio < 0)}
       <div class="btns"><input id="cp-ret" type="number" inputmode="decimal" placeholder="€" value="${d.puedeRetirar ? Math.round(d.sugerido) : ""}" style="width:110px;background:var(--raised);border:1px solid var(--borderLight);border-radius:10px;padding:10px;color:var(--text)">
         <button class="loss" type="button" data-act="retiro">Registrar retiro</button></div></div></div>
   ${retiroHtml(d)}
@@ -677,7 +695,9 @@ function hacer(b) {
     const box = $(a === "aporte" ? "#cp-apo" : "#cp-ret"), v = Math.abs(Number(String(box.value).replace(",", ".")) || 0);
     if (!v) { box.focus(); return toast("Escribe primero el importe en euros, en la casilla de al lado."); }
     const before = saldo(); if (a === "retiro" && v > before) return toast("No puedes retirar más de lo que hay.");
-    S.log.push({ id: Date.now().toString(), date: today(), resultado: a, importe: v, riesgoPct: S.inputs.riesgoPct, balanceBefore: before, balanceAfter: a === "aporte" ? before + v : before - v });
+    const dn = dinero();
+    S.log.push({ id: Date.now().toString(), date: today(), resultado: a, importe: v, riesgoPct: S.inputs.riesgoPct, balanceBefore: before, balanceAfter: a === "aporte" ? before + v : before - v,
+                 ...(a === "retiro" ? { periodo: (dn.puedeRetirar ? dn.periodoRetiro : dn.periodo).desde } : {}) });
     save(); render(); toast(a === "aporte" ? "Aporte registrado." : "Retiro registrado.");
     return avisoTrasRegistro(a === "aporte" ? "Aporte de " + euros(v) + " registrado, Joel." : "Retiro de " + euros(v) + " registrado, Joel. " + textoRepartoRetiro(v, S.log[S.log.length - 1].id));
   }
@@ -730,7 +750,7 @@ function planDeDinero() {
     repartoDeCadaPayout: { aCapitalPropio: P.pctCapital + "%", aMasExamenes: P.pctExamenes + "%", paraJoel: P.pctTuyo + "%", paraHacienda: P.pctImpuestos + "%", cambioUsdEur: P.cambio,
              ejemploPayout1000: { capitalPropioUsd: ej.capitalUsd, capitalPropioEur: ej.capitalEur, examenes: ej.examenes, paraJoel: ej.tuyo, hacienda: ej.impuestos } },
     retiros: { frecuencia: P.frecuencia, retiraCuandoGanaEnElPeriodo: P.objetivoRetiroPct + "%", porcentajeDelBeneficio: P.pctRetiro + "%",
-               beneficioDelPeriodo: r2(d.beneficio), yaRetirado: r2(d.retirado), puedeRetirarYa: d.puedeRetirar, retiroQueToca: r2(d.sugerido), faltaDeBeneficioParaRetirar: r2(d.faltaRetiro),
+               beneficioDelPeriodo: r2(d.beneficio), yaRetirado: r2(d.retirado), puedeRetirarYa: d.puedeRetirar, retiroDe: d.periodoRetiro.nombre, retiroEnCamino: d.enCamino, diaDeRetiro: d.periodo.cuando, retiroQueToca: r2(d.sugerido), faltaDeBeneficioParaRetirar: r2(d.faltaRetiro),
                tpsParaRetirar: Number.isFinite(d.tpsRetiro) ? d.tpsRetiro : null, nuncaPorDebajoDe: r2(d.aportado), repartoDelRetiro: repartoRetiro(d.sugerido),
                recomendacionJarvis: (({ porque, frecuencia, pctRetiro, objetivoRetiroPct }) => ({ frecuencia, pctRetiro: pctRetiro + "%", retirarCuandoElPeriodoGane: objetivoRetiroPct + "%", porque }))(recomendarRetiro()) },
     aportes: { puedeAportarYa: d.puedeAportar, aportaCadaVezQueCrece: P.aporteCadaPct + "%", faltaParaPoderAportar: r2(d.faltaAporte), tpsParaPoderAportar: Number.isFinite(d.tpsAporte) ? d.tpsAporte : null,
