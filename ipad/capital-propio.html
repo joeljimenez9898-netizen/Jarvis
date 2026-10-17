@@ -63,6 +63,9 @@
 .cp .tabla td { text-align: right; padding: 10px 6px; border-bottom: 1px solid var(--border); color: var(--muted); font-variant-numeric: tabular-nums; }
 .cp .tabla tr.tu td { color: var(--text); font-weight: 700; background: var(--accentSoft); }
 .cp .tabla td.mal { color: var(--coral); }
+.cp .tabla tr.sim td { color: var(--text); font-weight: 700; background: var(--raised); outline: 1px solid var(--accent); }
+.cp .prueba { display: block; margin-bottom: 12px; max-width: 320px; }
+.cp .prueba input { width: 100%; background: var(--raised); border: 1px solid var(--accent); border-radius: 7px; padding: 9px 10px; color: var(--text); font-size: 14px; }
 .cp .tablawrap { overflow-x: auto; }
 .cp .opera { margin: -14px 0 28px; }
 .cp .opera .fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -137,7 +140,7 @@ function textoRepartoRetiro(eurosRetiro) {
   return "Repártalo así: " + euros(r.examenes) + " para más exámenes, " + euros(r.tuyo) + " para usted y " + euros(r.impuestos) + " para Hacienda.";
 }
 function dinero() {
-  const P = S.plan, I = S.inputs, s = saldo(), per = periodo(), hoy = today(), r = I.riesgoPct / 100;
+  const P = S.plan, I = S.inputs, s = saldo(), per = periodo(), hoy = today(), r = rOp();
   const aportes = S.log.filter((e) => e.resultado === "aporte").reduce((a, e) => a + e.importe, 0);
   const aportado = I.saldoInicial + aportes;
   const enPeriodo = S.log.filter((e) => e.date >= per.desde);
@@ -178,7 +181,8 @@ function dinero() {
 }
 // "Cómo vas": what the next trade does, how far the withdrawal, the top-up and the next risk step are.
 function comoVoy() {
-  const d = dinero(), I = S.inputs, P = S.plan, L = [];
+  const d = dinero(), I = S.inputs, P = S.plan, L = [], rp = Math.round(rOp() * 10000) / 100;
+  if (Math.abs(rp - I.riesgoPct) > 0.001) L.push("En esta operación arriesgas " + euros(d.sl) + " (" + pct(rp, 2) + "); tu plan dice " + pct(I.riesgoPct, 2) + ".");
   L.push("Si la siguiente es TP: +" + euros(d.tp) + " y te quedas en " + euros(d.saldoTp) + ".");
   L.push("Si es stop: −" + euros(d.sl) + " (" + euros(d.saldoSl) + "). Dos stops seguidos te dejan en " + euros(d.saldoDosSl) + " (" + pct(-(1 - d.saldoDosSl / saldo()) * 100) + ").");
   L.push(d.quema === 0 ? "⚠️ Ya estás por debajo de tu pérdida máxima (" + euros(d.suelo) + "): según tu plan, cuenta quemada. Para y revisa."
@@ -226,7 +230,7 @@ function aplicarPropuesta(rec) {
   S.inputs.riesgoPct = rec.riesgo; S.inputs.stopsMaxDia = rec.stops; S.plan = { ...S.plan, ...rec.plan }; render(); save();
 }
 function calc() {
-  const I = S.inputs, s = saldo(), r = I.riesgoPct / 100;
+  const I = S.inputs, s = saldo(), r = rOp();
   const arriesgasHoy = s * r, objetivoGanancia = arriesgasHoy * I.ratioTpSl;
   const drawdownDiario = 1 - Math.pow(1 - r, I.stopsMaxDia), dineroDrawdownDiario = s * drawdownDiario;
   const maxP = I.maxPerdidaAceptada / 100, margenSeguro = I.rachaMaxima * I.margenSeguridad;
@@ -301,20 +305,28 @@ function renderPlan() {
 }
 // Risk per trade against what a stop costs, on today's balance (the row he uses is lit).
 function tablaRiesgo() {
-  const s = saldo(), I = S.inputs, suelo = (I.saldoInicial + S.log.filter((e) => e.resultado === "aporte").reduce((a, e) => a + e.importe, 0)) * (1 - I.maxPerdidaAceptada / 100);
-  const niveles = [...new Set([0.5, 1, 2, 3, 5, 10, 15, 20, Number(I.riesgoPct)])].filter((x) => x > 0).sort((a, b) => a - b);
-  const e0 = (n) => Math.round(n).toLocaleString("es-ES", { useGrouping: "always" }) + " €";
-  const quema = (r) => (s <= suelo ? 0 : Math.ceil(Math.log(suelo / s) / Math.log(1 - r / 100)));
   return `
   <div class="sec"><b>02b</b><span>Riesgo por operación y pérdida si salta el stop</span></div>
-  <div class="card"><div class="tablawrap"><table class="tabla"><thead><tr><th>RIESGO</th><th>PIERDES SI SALTA EL STOP</th><th>TE QUEDAS EN</th><th>2 STOPS SEGUIDOS</th><th>STOPS HASTA TU PÉRDIDA MÁX.</th></tr></thead><tbody>
-    ${niveles.map((r) => { const q = quema(r), dos = s * Math.pow(1 - r / 100, 2); return `<tr class="${r === Number(I.riesgoPct) ? "tu" : ""}"><td>${String(r).replace(".", ",")} %${r === Number(I.riesgoPct) ? " ← tú" : ""}</td>
+  <div class="card"><label class="f prueba"><span>Prueba un riesgo (%) y mira qué pasa</span><input type="number" inputmode="decimal" step="0.1" data-sim="1" placeholder="ej. 7,5" value="${S.sim || ""}"></label>
+  <div id="cp-tabla">${tablaCuerpo()}</div></div>`;
+}
+function tablaCuerpo() {
+  const s = saldo(), I = S.inputs, suelo = (I.saldoInicial + S.log.filter((e) => e.resultado === "aporte").reduce((a, e) => a + e.importe, 0)) * (1 - I.maxPerdidaAceptada / 100);
+  const op = Math.round(rOp() * 10000) / 100, sim = Math.round(Number(String(S.sim || "").replace(",", ".")) * 100) / 100;
+  const niveles = [...new Set([0.5, 1, 2, 3, 5, 10, 15, 20, Number(I.riesgoPct), op, sim])].filter((x) => x > 0 && x < 100).sort((a, b) => a - b);
+  const marca = (r) => [r === sim ? "← prueba" : "", r === op && op !== Number(I.riesgoPct) ? "← esta operación" : "", r === Number(I.riesgoPct) ? "← tu plan" : ""].filter(Boolean).join(" ");
+  const e0 = (n) => Math.round(n).toLocaleString("es-ES", { useGrouping: "always" }) + " €";
+  const quema = (r) => (s <= suelo ? 0 : Math.ceil(Math.log(suelo / s) / Math.log(1 - r / 100)));
+  return `<div class="tablawrap"><table class="tabla"><thead><tr><th>RIESGO</th><th>PIERDES SI SALTA EL STOP</th><th>TE QUEDAS EN</th><th>2 STOPS SEGUIDOS</th><th>STOPS HASTA TU PÉRDIDA MÁX.</th></tr></thead><tbody>
+    ${niveles.map((r) => { const q = quema(r), dos = s * Math.pow(1 - r / 100, 2); return `<tr class="${r === sim ? "sim" : r === op ? "tu" : ""}"><td>${String(r).replace(".", ",")} % ${marca(r)}</td>
       <td class="mal">−${e0(s * r / 100)}</td><td>${e0(s * (1 - r / 100))}</td><td>${e0(dos)} (−${Math.round((1 - dos / s) * 100)} %)</td><td class="${q <= 2 ? "mal" : ""}">${q === 0 ? "ya estás" : q}</td></tr>`; }).join("")}
   </tbody></table></div>
-  <div style="font-size:11.5px;color:var(--faint);margin-top:10px">Con tu saldo de hoy, ${e0(s)}. Tu pérdida máxima es el −${I.maxPerdidaAceptada} % de lo que has metido (no bajar de ${e0(suelo)}). Son importes si la pérdida se queda en el stop: los deslizamientos y los huecos de precio pueden hacerla mayor.</div></div>`;
+  <div style="font-size:11.5px;color:var(--faint);margin-top:10px">Con tu saldo de hoy, ${e0(s)}. Tu pérdida máxima es el −${I.maxPerdidaAceptada} % de lo que has metido (no bajar de ${e0(suelo)}). Son importes si la pérdida se queda en el stop: los deslizamientos y los huecos de precio pueden hacerla mayor.</div>`;
 }
 // This trade: what he risks (in % or in euros, each fills the other) and, if he wants, the real result.
 // With no result typed, a win is the risk × his TP:SL ratio and a loss is the risk.
+// This trade's risk as a fraction of today's balance: what "Cómo vas", "Tu número de hoy" and the table follow.
+function rOp() { const s = saldo(); return s > 0 ? Math.min(0.99, riesgoOp() / s) : S.inputs.riesgoPct / 100; }
 function riesgoOp() { const s = saldo(); return S.op.eur != null && S.op.eur > 0 ? S.op.eur : s * S.inputs.riesgoPct / 100; }
 function importeOp(resultado) {
   const res = Math.abs(Number(String(S.op.res || "").replace(",", ".")) || 0), r = riesgoOp();
@@ -346,6 +358,17 @@ function renderPropuesta() {
     <button class="win" type="button" data-act="aplicar-propuesta" style="margin-top:12px">Aplicar la propuesta</button>
     <div style="font-size:11.5px;color:var(--faint);margin-top:8px">El reparto de los payouts no se toca: eso lo decides tú.</div></div>`;
 }
+// The parts that follow "Esta operación" while he types (no re-render, so the box keeps the keyboard).
+function htmlComo() { return `<div class="lab" style="color:var(--accent)">🧭 CÓMO VAS · JARVIS</div>${comoVoy().map((t) => `<div class="item"><i>→</i>${t}</div>`).join("")}`; }
+function htmlHoy() {
+  const I = S.inputs, c = calc(), rp = Math.round(rOp() * 10000) / 100, distinto = Math.abs(rp - I.riesgoPct) > 0.001;
+  return `${out("ARRIESGAS HOY", eur(c.arriesgasHoy).replace(/^\+/, ""), `objetivo ${eur(c.objetivoGanancia).replace(/^\+/, "")} · ratio x${I.ratioTpSl}`, `Arriesgas ${pct(rp)} de lo que tienes hoy${distinto ? ` (esta operación; tu plan dice ${pct(I.riesgoPct)})` : ""}`)}
+      ${out("SI PIERDES TODOS TUS STOPS HOY", "-" + eur(c.dineroDrawdownDiario).replace(/^\+/, ""), pct(-c.drawdownDiario * 100), `${I.stopsMaxDia} pérdidas seguidas al ${pct(rp)}, compuesto dentro del día`, true)}`;
+}
+function vivo() {
+  const set = (id, h) => { const el = $(id); if (el) el.innerHTML = h; };
+  set("#cp-prev", textoPrevio()); set("#cp-como", htmlComo()); set("#cp-hoy", htmlHoy()); set("#cp-tabla", tablaCuerpo());
+}
 function render() {
   const I = S.inputs, s = saldo(), c = calc(), up = s >= I.saldoInicial;
   $("#cp-view").innerHTML = `
@@ -356,7 +379,7 @@ function render() {
       <div style="font-size:13px;margin-top:4px;color:${up ? "var(--accent)" : "var(--coral)"}">${up ? "+" : ""}${pct((s / I.saldoInicial - 1) * 100)} desde tu inicio de ${eur(I.saldoInicial).replace(/^\+/, "")}</div></div>
     <div class="btns"><button class="win" type="button" data-act="win">↗ Registrar Win</button><button class="loss" type="button" data-act="loss">↘ Registrar Loss</button></div></div>
   ${renderOperacion()}
-  <div class="card" style="margin:0 0 28px"><div class="lab" style="color:var(--accent)">🧭 CÓMO VAS · JARVIS</div>${comoVoy().map((t) => `<div class="item"><i>→</i>${t}</div>`).join("")}</div>
+  <div class="card" style="margin:0 0 28px" id="cp-como">${htmlComo()}</div>
 
   <div class="sec"><b>01</b><span>Esto ya no es una fondeada</span></div>
   <div class="cmp">
@@ -369,8 +392,7 @@ function render() {
   <div class="two"><div class="card"><div class="lab" style="color:var(--faint)">TUS DATOS</div><div class="fields">
       ${num("stopsMaxDia", "Stops máx. por día")}${num("winrate", "Winrate (%)")}${num("riesgoPct", "Riesgo por operación (%)", { step: 0.1, hi: true })}
       ${num("ratioTpSl", "Ratio TP:SL", { step: 0.01 })}${num("opsPorDia", "Operaciones por día")}${num("saldoInicial", "Saldo inicial (€)")}</div></div>
-    <div class="outs">${out("ARRIESGAS HOY", eur(c.arriesgasHoy).replace(/^\+/, ""), `objetivo ${eur(c.objetivoGanancia).replace(/^\+/, "")} · ratio x${I.ratioTpSl}`, `Arriesgas ${pct(I.riesgoPct)} de lo que tienes hoy`)}
-      ${out("SI PIERDES TODOS TUS STOPS HOY", "-" + eur(c.dineroDrawdownDiario).replace(/^\+/, ""), pct(-c.drawdownDiario * 100), `${I.stopsMaxDia} pérdidas seguidas al ${pct(I.riesgoPct)}, compuesto dentro del día`, true)}</div></div>
+    <div class="outs" id="cp-hoy">${htmlHoy()}</div></div>
 
   ${tablaRiesgo()}
   <div class="sec"><b>03</b><span>¿Aguanta tu riesgo tu peor racha?</span></div>
@@ -461,12 +483,13 @@ function hacer(b) {
   if (a === "reset") { if (!dosToques(b, "¿Borrar todo? Toca otra vez")) return; S.inputs = { ...DEF }; S.log = []; render(); save(); }
 }
 $("#cp").addEventListener("input", (e) => {
+  if (e.target.dataset && e.target.dataset.sim) { S.sim = e.target.value; return vivo(); }
   const k = e.target.dataset && e.target.dataset.op; if (!k) return;
   const v = Number(String(e.target.value).replace(",", ".")), s = saldo();
   if (k === "pct") { S.op.eur = Number.isFinite(v) && v > 0 ? s * v / 100 : null; const o = ROOT.querySelector('[data-op="eur"]'); if (o) o.value = Math.round(riesgoOp() * 100) / 100; }
   if (k === "eur") { S.op.eur = Number.isFinite(v) && v > 0 ? v : null; const o = ROOT.querySelector('[data-op="pct"]'); if (o) o.value = Math.round(riesgoOp() / s * 10000) / 100; }
   if (k === "res") S.op.res = e.target.value;
-  const p = $("#cp-prev"); if (p) p.innerHTML = textoPrevio();
+  vivo();
 });
 $("#cp").addEventListener("change", (e) => {
   const p = e.target.dataset.p;
@@ -511,7 +534,7 @@ window.CAPITAL = { contexto, render, textoReparto, textoRepartoRetiro, dinero, c
     if (!snap.exists) return;
     if (Date.now() - S.tocado < 4000) return;          // our own change is on its way: don't let an older copy undo it
     const d = snap.data();
-    const focused = ROOT.activeElement && ROOT.activeElement.dataset && (ROOT.activeElement.dataset.k || ROOT.activeElement.dataset.p || ROOT.activeElement.dataset.op);
+    const focused = ROOT.activeElement && ROOT.activeElement.dataset && (ROOT.activeElement.dataset.k || ROOT.activeElement.dataset.p || ROOT.activeElement.dataset.op || ROOT.activeElement.dataset.sim);
     S.inputs = { ...DEF, ...(d.inputs || {}) }; S.plan = { ...PLAN_DEF, ...(d.plan || {}) }; S.log = Array.isArray(d.log) ? d.log.map((e) => ({ ...e })) : [];   // the database hands back frozen data: work on a copy
     if (!focused) render();
   }, () => {});
