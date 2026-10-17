@@ -474,7 +474,7 @@ window.CAPITAL = { contexto, render, textoReparto, textoRepartoRetiro, dinero, c
     if (Date.now() - S.tocado < 4000) return;          // our own change is on its way: don't let an older copy undo it
     const d = snap.data();
     const focused = ROOT.activeElement && ROOT.activeElement.dataset && (ROOT.activeElement.dataset.k || ROOT.activeElement.dataset.p);
-    S.inputs = { ...DEF, ...(d.inputs || {}) }; S.plan = { ...PLAN_DEF, ...(d.plan || {}) }; S.log = Array.isArray(d.log) ? d.log : [];
+    S.inputs = { ...DEF, ...(d.inputs || {}) }; S.plan = { ...PLAN_DEF, ...(d.plan || {}) }; S.log = Array.isArray(d.log) ? d.log.map((e) => ({ ...e })) : [];   // the database hands back frozen data: work on a copy
     if (!focused) render();
   }, () => {});
 })();
