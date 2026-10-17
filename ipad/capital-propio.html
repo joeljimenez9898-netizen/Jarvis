@@ -63,7 +63,7 @@
 .cp .tabla td { text-align: right; padding: 10px 6px; border-bottom: 1px solid var(--border); color: var(--muted); font-variant-numeric: tabular-nums; }
 .cp .tabla tr.tu td { color: var(--text); font-weight: 700; background: var(--accentSoft); }
 .cp .tabla td.mal { color: var(--coral); }
-.cp .tabla tr.sim td { color: var(--text); font-weight: 700; background: var(--raised); outline: 1px solid var(--accent); }
+.cp .tabla tr.sim td { color: var(--text); font-weight: 700; background: var(--raised); box-shadow: inset 0 1px 0 var(--accent), inset 0 -1px 0 var(--accent); }
 .cp .modo { display: flex; gap: 8px; margin: 0 0 14px; flex-wrap: wrap; }
 .cp .modo button { background: var(--raised); border: 1px solid var(--borderLight); color: var(--muted); border-radius: 999px; padding: 9px 14px; font-size: 13px; font-weight: 600; }
 .cp .modo button.on { border-color: var(--accent); color: var(--accent); background: var(--accentSoft); }
@@ -319,7 +319,7 @@ function recomendar(o = {}) {
   const stops = Math.max(1, Math.min(4, Math.floor(Math.log(1 - maxP / 3) / Math.log(1 - riesgo / 100))));
   const maxRiesgo = esperanza > 0 ? Math.max(riesgo, abajo(Math.min(porKelly, (1 - Math.pow(1 - maxP, 1 / Math.max(1, I.rachaMaxima * I.margenSeguridad))) * 100), 0.25)) : riesgo;
   const plan = { riesgoBase: riesgo, cadaPct: 25, subePuntos: Math.max(0.1, r2(abajo(riesgo * 0.1, 0.05))), riesgoMax: r2(maxRiesgo), bajaSiCae: Math.round(maxP * 100 / 3),
-                 frecuencia: "mensual", pctRetiro: 25, esperaSiCae: Math.round(maxP * 100 / 3), aporteCadaPct: I.maxPerdidaAceptada };
+                 frecuencia: recomendarRetiro().frecuencia, pctRetiro: recomendarRetiro().pctRetiro, objetivoRetiroPct: recomendarRetiro().objetivoRetiroPct, esperaSiCae: Math.round(maxP * 100 / 3), aporteCadaPct: I.maxPerdidaAceptada };
   const gananciaDia = I.saldoInicial * (riesgo / 100) * esperanza * I.opsPorDia;
   return { inputs: I, esperanza: r2(esperanza), kelly: r2(kelly * 100), porKelly: r2(porKelly), rachaEstadistica: r2(rachaEstadistica), racha, porRacha: r2(porRacha),
            riesgo, stops, plan, gananciaDia: r2(gananciaDia), sinVentaja: esperanza <= 0,
@@ -420,6 +420,58 @@ function aportesHtml(d) {
       <div class="btns"><input id="cp-apo" type="number" inputmode="decimal" placeholder="€" value="${d.puedeAportar && apartado > 0 ? Math.round(apartado) : ""}" style="width:110px;background:var(--raised);border:1px solid var(--borderLight);border-radius:10px;padding:10px;color:var(--text)">
         <button class="win" type="button" data-act="aporte">Registrar aporte</button></div></div></div>`;
 }
+// ── how much and how often to withdraw: Jarvis's advice from his numbers, and a table to try percentages.
+// The chance that a week or a month of his trading ends below where it started (binomial on his winrate, with his
+// risk compounding on each trade, so 5 wins and 5 losses at 20 % is a loss).
+function probPeriodoNegativo(n) {
+  const I = S.inputs, w = I.winrate / 100, r = Math.min(0.99, I.riesgoPct / 100), R = I.ratioTpSl; let p = 0, c = 1;
+  for (let k = 0; k <= n; k++) {
+    if (k > 0) c = c * (n - k + 1) / k;
+    if (k * Math.log(1 + r * R) + (n - k) * Math.log(1 - r) <= 1e-12) p += c * Math.pow(w, k) * Math.pow(1 - w, n - k);
+  }
+  return p;
+}
+function recomendarRetiro() {
+  const I = S.inputs, P = S.plan, s = saldo(), ops = Math.max(1, I.opsPorDia), meta = P.metaCapital || 10000;
+  const pSem = probPeriodoNegativo(ops * 5), pMes = probPeriodoNegativo(ops * 21), construyendo = s < meta;
+  const frecuencia = !construyendo && pSem <= 0.05 ? "semanal" : "mensual";
+  const pctRetiro = construyendo ? 25 : 50, objetivoRetiroPct = Math.max(5, Math.round(I.maxPerdidaAceptada / 2));
+  const p0 = (x) => (x < 0.001 ? "menos del 0,1" : String(Math.round(x * 1000) / 10).replace(".", ","));
+  return { frecuencia, pctRetiro, objetivoRetiroPct, probSemanaNegativa: pSem, probMesNegativo: pMes, construyendo, meta,
+    porque: [
+      (construyendo ? "Estás construyendo la cuenta (" + euros(s) + " de tu meta de " + euros(meta) + "): retira el " + pctRetiro + " % de lo ganado y deja el " + (100 - pctRetiro) + " % componiendo, así tu riesgo en euros crece cada mes."
+        : "Ya has llegado a tu meta de " + euros(meta) + ": puedes retirar el " + pctRetiro + " % de lo ganado y dejar la otra mitad para que la cuenta siga creciendo."),
+      "Con tu winrate del " + I.winrate + " %, " + ops + " operaciones al día y riesgo del " + String(I.riesgoPct).replace(".", ",") + " %, una semana acaba en pérdidas el " + p0(pSem) + " % de las veces y un mes el " + p0(pMes) + " %. " +
+        (frecuencia === "mensual" ? "Por eso mensual: un mes junta más operaciones, el resultado es más fiable y no retiras de una semana buena que la siguiente se come." : "Tus semanas son muy fiables, así que puedes retirar cada semana."),
+      "Retira solo cuando el periodo haya dado al menos un " + objetivoRetiroPct + " % (la mitad de tu pérdida máxima, " + I.maxPerdidaAceptada + " %): un periodo flojo no se convierte en retiro." ] };
+}
+function retiroHtml(d) {
+  const P = S.plan, rec = recomendarRetiro(), igual = P.pctRetiro === rec.pctRetiro && P.frecuencia === rec.frecuencia && P.objetivoRetiroPct === rec.objetivoRetiroPct;
+  const gan = S.rsim && S.rsim.gan != null && S.rsim.gan !== "" ? S.rsim.gan : Math.round(d.beneficio > 0 ? d.beneficio : saldo() * 0.2);
+  return `<div style="margin-top:14px"><div class="card" style="margin-bottom:14px"><div class="lab" style="color:var(--accent)">🤖 LO QUE TE RECOMIENDA JARVIS</div>
+      <div class="big" style="font-size:30px;margin:4px 0 2px">${rec.pctRetiro} % ${rec.frecuencia}</div>
+      <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">retirando cuando el periodo gana al menos un ${rec.objetivoRetiroPct} %</div>
+      ${rec.porque.map((x) => `<div class="item"><i>→</i>${x}</div>`).join("")}
+      ${igual ? '<div style="font-size:11.5px;color:var(--accent);margin-top:6px">Ya lo tienes así.</div>' : `<div class="btns" style="margin-top:8px"><button class="win" type="button" data-act="usar-retiro">Usar lo que recomienda Jarvis</button></div>`}</div>
+    <div class="card"><div class="lab" style="color:var(--faint)">PRUEBA CUÁNTO RETIRAR</div><div class="fields">
+        <label class="f"><span>Si ganas en el periodo (€)</span><input type="number" inputmode="decimal" step="10" data-rsim="gan" value="${gan}"></label>
+        <label class="f"><span>Prueba un % de retiro</span><input type="number" inputmode="decimal" step="5" data-rsim="pct" placeholder="ej. 35" value="${(S.rsim && S.rsim.pct) || ""}"></label></div>
+      <div id="cp-rtabla">${retiroTabla(d)}</div></div></div>`;
+}
+function retiroTabla(d) {
+  const P = S.plan, I = S.inputs, rec = recomendarRetiro(), e0 = (n) => Math.round(n).toLocaleString("es-ES", { useGrouping: "always" }) + " €";
+  const num = (v) => Number(String(v == null ? "" : v).replace(",", "."));
+  const gan = Math.max(0, num(S.rsim && S.rsim.gan !== "" && S.rsim.gan != null ? S.rsim.gan : Math.round(d.beneficio > 0 ? d.beneficio : saldo() * 0.2)) || 0);
+  const prueba = Math.round(num(S.rsim && S.rsim.pct) * 100) / 100, b0 = d.inicioPeriodo || saldo(), g = b0 > 0 ? gan / b0 : 0;
+  const niveles = [...new Set([10, 20, 25, 30, 40, 50, 60, 75, Number(P.pctRetiro), rec.pctRetiro, prueba])].filter((x) => x > 0 && x <= 100).sort((a, b) => a - b);
+  const marca = (x) => [x === prueba ? "← prueba" : "", x === rec.pctRetiro ? "← Jarvis" : "", x === Number(P.pctRetiro) ? "← tu plan" : ""].filter(Boolean).join(" ");
+  const tres = (x) => { let b = b0, tot = 0; for (let k = 0; k < 3; k++) { const ga = b * g; tot += ga * x / 100; b += ga * (1 - x / 100); } return { tot, b }; };
+  return `<div class="tablawrap"><table class="tabla"><thead><tr><th>RETIRAS</th><th>TE LLEVAS</th><th>SE QUEDA COMPONIENDO</th><th>SALDO DESPUÉS</th><th>PRÓXIMA OPERACIÓN ARRIESGA</th><th>SI SE REPITE 3 ${P.frecuencia === "semanal" ? "SEMANAS" : "MESES"}: TE LLEVAS · SALDO</th></tr></thead><tbody>
+    ${niveles.map((x) => { const r = gan * x / 100, sal = b0 + gan - r, t3 = tres(x); return `<tr class="${x === prueba ? "sim" : x === Number(P.pctRetiro) ? "tu" : ""}"><td>${String(x).replace(".", ",")} % ${marca(x)}</td>
+      <td>${e0(r)}</td><td>${e0(gan - r)}</td><td>${e0(sal)}</td><td>${e0(sal * I.riesgoPct / 100)}</td><td>${e0(t3.tot)} · ${e0(t3.b)}</td></tr>`; }).join("")}
+  </tbody></table></div>
+  <div style="font-size:11.5px;color:var(--faint);margin-top:8px">Empiezas el periodo con ${e0(b0)} y ganas ${e0(gan)} (un ${Math.round(g * 100)} %). La última columna repite ese mismo % de ganancia 3 veces: es una cuenta para comparar, no una promesa. Retirar más te da más dinero hoy; retirar menos hace que la cuenta, y lo que arriesgas, crezca más rápido.</div>`;
+}
 function renderPlan() {
   const P = S.plan, d = dinero(), r = repartoFijo(1000), ok = r.suma === 100, fecha = (x) => (x || "").split("-").reverse().join("/");
   const usd = (n) => n.toLocaleString("es-ES", { maximumFractionDigits: 2, useGrouping: "always" }) + " $";
@@ -442,6 +494,7 @@ function renderPlan() {
         d.puedeRetirar ? textoRepartoRetiro(d.sugerido).replace("Repártalo así", "Luego repártelo") : "Llevas " + eur(d.beneficio) + " " + d.periodo.nombre + (d.retirado ? " · ya retirado " + eur(d.retirado).replace(/^\+/, "") : "") + ".", !d.puedeRetirar && d.beneficio < 0)}
       <div class="btns"><input id="cp-ret" type="number" inputmode="decimal" placeholder="€" value="${d.puedeRetirar ? Math.round(d.sugerido) : ""}" style="width:110px;background:var(--raised);border:1px solid var(--borderLight);border-radius:10px;padding:10px;color:var(--text)">
         <button class="loss" type="button" data-act="retiro">Registrar retiro</button></div></div></div>
+  ${retiroHtml(d)}
 
   <div class="sec"><b>07</b><span>Cuándo meter más capital, y cuánto</span></div>
   ${aportesHtml(d)}
@@ -630,6 +683,8 @@ function hacer(b) {
   }
   if (a === "aplicar-propuesta") { if (!dosToques(b, "¿Aplicar? Toca otra vez")) return; aplicarPropuesta(recomendar()); return toast("Propuesta aplicada."); }
   if (a === "aplicar-riesgo") { S.inputs.riesgoPct = dinero().recomendado; render(); save(); return toast("Riesgo actualizado."); }
+  if (a === "usar-retiro") { const r = recomendarRetiro(); S.plan.pctRetiro = r.pctRetiro; S.plan.frecuencia = r.frecuencia; S.plan.objetivoRetiroPct = r.objetivoRetiroPct; render(); save();
+    toast("Retiros: " + r.pctRetiro + " % " + r.frecuencia + "."); return decir("Hecho, Joel. Retirará el " + r.pctRetiro + " por ciento de lo ganado, " + (r.frecuencia === "mensual" ? "cada mes" : "cada semana") + ", cuando el periodo gane al menos un " + r.objetivoRetiroPct + " por ciento."); }
   if (a === "aporte-como-perdida") { S.plan.aporteCadaPct = S.inputs.maxPerdidaAceptada; render(); save(); return toast("Ahora metes capital cada " + S.plan.aporteCadaPct + " %."); }
   if (a === "modo-auto" || a === "modo-fijo") { S.plan.repartoAuto = a === "modo-auto"; render(); save(); return toast(a === "modo-auto" ? "Jarvis gestiona el reparto." : "Reparto con tus porcentajes fijos."); }
   if (a === "undo") { S.log.pop(); render(); save(); return; }
@@ -637,6 +692,7 @@ function hacer(b) {
 }
 $("#cp").addEventListener("input", (e) => {
   if (e.target.dataset && e.target.dataset.sim) { S.sim = e.target.value; return vivo(); }
+  if (e.target.dataset && e.target.dataset.rsim) { S.rsim = { ...(S.rsim || {}), [e.target.dataset.rsim]: e.target.value }; const el = $("#cp-rtabla"); if (el) el.innerHTML = retiroTabla(dinero()); return; }
   const k = e.target.dataset && e.target.dataset.op; if (!k) return;
   const v = Number(String(e.target.value).replace(",", ".")), s = saldo();
   if (k === "pct") { S.op.eur = Number.isFinite(v) && v > 0 ? s * v / 100 : null; const o = ROOT.querySelector('[data-op="eur"]'); if (o) o.value = Math.round(riesgoOp() * 100) / 100; }
@@ -675,7 +731,8 @@ function planDeDinero() {
              ejemploPayout1000: { capitalPropioUsd: ej.capitalUsd, capitalPropioEur: ej.capitalEur, examenes: ej.examenes, paraJoel: ej.tuyo, hacienda: ej.impuestos } },
     retiros: { frecuencia: P.frecuencia, retiraCuandoGanaEnElPeriodo: P.objetivoRetiroPct + "%", porcentajeDelBeneficio: P.pctRetiro + "%",
                beneficioDelPeriodo: r2(d.beneficio), yaRetirado: r2(d.retirado), puedeRetirarYa: d.puedeRetirar, retiroQueToca: r2(d.sugerido), faltaDeBeneficioParaRetirar: r2(d.faltaRetiro),
-               tpsParaRetirar: Number.isFinite(d.tpsRetiro) ? d.tpsRetiro : null, nuncaPorDebajoDe: r2(d.aportado), repartoDelRetiro: repartoRetiro(d.sugerido) },
+               tpsParaRetirar: Number.isFinite(d.tpsRetiro) ? d.tpsRetiro : null, nuncaPorDebajoDe: r2(d.aportado), repartoDelRetiro: repartoRetiro(d.sugerido),
+               recomendacionJarvis: (({ porque, frecuencia, pctRetiro, objetivoRetiroPct }) => ({ frecuencia, pctRetiro: pctRetiro + "%", retirarCuandoElPeriodoGane: objetivoRetiroPct + "%", porque }))(recomendarRetiro()) },
     aportes: { puedeAportarYa: d.puedeAportar, aportaCadaVezQueCrece: P.aporteCadaPct + "%", faltaParaPoderAportar: r2(d.faltaAporte), tpsParaPoderAportar: Number.isFinite(d.tpsAporte) ? d.tpsAporte : null,
                caidaDesdeMaximo: r2(d.caida) + "%", esperaSiCaeMasDe: P.esperaSiCae + "%", saleDe: P.pctCapital + "% de cada payout" },
     payoutsDeFondeo: (window.FUNDING && window.FUNDING.payouts ? window.FUNDING.payouts() : []).slice(0, 6).map((m) => ({ fecha: m.fecha, empresa: m.empresa, usd: m.importe, reparto: S.plan.repartoAuto ? (gestion().filas.get("payout:" + m.id) || null) : repartoFijo(m.importe) })),
@@ -693,7 +750,7 @@ window.CAPITAL = { contexto, render, textoReparto, textoRepartoRetiro, dinero, c
     if (!snap.exists) return;
     if (Date.now() - S.tocado < 4000) return;          // our own change is on its way: don't let an older copy undo it
     const d = snap.data();
-    const focused = ROOT.activeElement && ROOT.activeElement.dataset && (ROOT.activeElement.dataset.k || ROOT.activeElement.dataset.p || ROOT.activeElement.dataset.op || ROOT.activeElement.dataset.sim);
+    const focused = ROOT.activeElement && ROOT.activeElement.dataset && (ROOT.activeElement.dataset.k || ROOT.activeElement.dataset.p || ROOT.activeElement.dataset.op || ROOT.activeElement.dataset.sim || ROOT.activeElement.dataset.rsim);
     S.inputs = { ...DEF, ...(d.inputs || {}) }; S.plan = { ...PLAN_DEF, ...(d.plan || {}) }; S.log = Array.isArray(d.log) ? d.log.map((e) => ({ ...e })) : [];   // the database hands back frozen data: work on a copy
     if (!focused) render();
   }, () => {});
