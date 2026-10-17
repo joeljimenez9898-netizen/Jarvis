@@ -64,6 +64,12 @@
 .cp .tabla tr.tu td { color: var(--text); font-weight: 700; background: var(--accentSoft); }
 .cp .tabla td.mal { color: var(--coral); }
 .cp .tablawrap { overflow-x: auto; }
+.cp .opera { margin: -14px 0 28px; }
+.cp .opera .fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 640px) { .cp .opera .fields { grid-template-columns: 1fr 1fr; } }
+.cp .opera .prev { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; font-size: 13px; }
+.cp .opera .prev span { background: var(--raised); border-radius: 8px; padding: 8px 12px; color: var(--muted); }
+.cp .opera .prev b.w { color: var(--accent); } .cp .opera .prev b.l { color: var(--coral); }
 </style>
 <div class="cp" id="cp">
   <div class="wrap">
@@ -84,7 +90,7 @@ const DEF = { saldoInicial: 1000, stopsMaxDia: 2, winrate: 82, riesgoPct: 4.5, r
 const PLAN_DEF = { pctCapital: 30, pctExamenes: 20, pctTuyo: 30, pctImpuestos: 20, cambio: 0.92,
                    frecuencia: "mensual", pctRetiro: 30, objetivoRetiroPct: 10, esperaSiCae: 10, aporteCadaPct: 20,
                    riesgoBase: 4.5, cadaPct: 25, subePuntos: 0.5, riesgoMax: 6, bajaSiCae: 10 };
-const S = { inputs: { ...DEF }, plan: { ...PLAN_DEF }, log: [], db: null, saveT: null, tocado: 0 };
+const S = { inputs: { ...DEF }, plan: { ...PLAN_DEF }, log: [], db: null, saveT: null, tocado: 0, op: { eur: null, res: "" } };
 const eur = (n) => { const v = Number(n || 0); return (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toLocaleString("es-ES", { maximumFractionDigits: 0 }) + " €"; };
 const pct = (n, d = 1) => `${Number(n || 0).toFixed(d)}%`;
 const today = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
@@ -307,6 +313,26 @@ function tablaRiesgo() {
   </tbody></table></div>
   <div style="font-size:11.5px;color:var(--faint);margin-top:10px">Con tu saldo de hoy, ${e0(s)}. Tu pérdida máxima es el −${I.maxPerdidaAceptada} % de lo que has metido (no bajar de ${e0(suelo)}). Son importes si la pérdida se queda en el stop: los deslizamientos y los huecos de precio pueden hacerla mayor.</div></div>`;
 }
+// This trade: what he risks (in % or in euros, each fills the other) and, if he wants, the real result.
+// With no result typed, a win is the risk × his TP:SL ratio and a loss is the risk.
+function riesgoOp() { const s = saldo(); return S.op.eur != null && S.op.eur > 0 ? S.op.eur : s * S.inputs.riesgoPct / 100; }
+function importeOp(resultado) {
+  const res = Math.abs(Number(String(S.op.res || "").replace(",", ".")) || 0), r = riesgoOp();
+  return res > 0 ? res : resultado === "win" ? r * S.inputs.ratioTpSl : r;
+}
+function textoPrevio() {
+  const s = saldo(), w = importeOp("win"), l = importeOp("loss"), e0 = (n) => Math.round(n).toLocaleString("es-ES", { useGrouping: "always" }) + " €", manual = Number(String(S.op.res || "").replace(",", ".")) > 0;
+  return `<span>Si es Win: <b class="w">+${e0(w)}</b> → ${e0(s + w)}</span><span>Si es Loss: <b class="l">−${e0(l)}</b> → ${e0(s - l)}</span>${manual ? "<span>Usando tu resultado real</span>" : ""}`;
+}
+function renderOperacion() {
+  const s = saldo(), r = riesgoOp(), f = "width:100%;background:var(--raised);border:1px solid var(--borderLight);border-radius:7px;padding:9px 10px;color:var(--text);font-size:14px";
+  return `<div class="card opera"><div class="lab" style="color:var(--accent)">ESTA OPERACIÓN</div><div class="fields">
+    <label class="f"><span>Riesgo en esta operación (%)</span><input type="number" inputmode="decimal" step="0.1" data-op="pct" value="${Math.round(r / s * 10000) / 100}" style="${f}"></label>
+    <label class="f"><span>Riesgo en esta operación (€)</span><input type="number" inputmode="decimal" step="1" data-op="eur" value="${Math.round(r * 100) / 100}" style="${f}"></label>
+    <label class="f"><span>Resultado real (€) · opcional</span><input type="number" inputmode="decimal" step="1" data-op="res" placeholder="ej. 250" value="${S.op.res || ""}" style="${f}"></label></div>
+    <div class="prev" id="cp-prev">${textoPrevio()}</div>
+    <div style="font-size:11.5px;color:var(--faint);margin-top:8px">Pon lo que arriesgas hoy en % o en euros (uno rellena el otro). Si escribes el resultado real (lo que ganaste o perdiste), Win suma y Loss resta exactamente esa cantidad; si no, se calcula con tu ratio ${S.inputs.ratioTpSl}.</div></div>`;
+}
 function renderPropuesta() {
   const p = recomendar(), P = S.plan, I = S.inputs, row = (l, a, b) => `<div class="row${String(a) === String(b) ? "" : " l"}"><span>${l}</span><b>${a} → ${b}</b></div>`;
   return `
@@ -329,7 +355,8 @@ function render() {
   <div class="hero"><div><div class="lab">SALDO ACTUAL</div><div class="big">${eur(s).replace(/^\+/, "")}</div>
       <div style="font-size:13px;margin-top:4px;color:${up ? "var(--accent)" : "var(--coral)"}">${up ? "+" : ""}${pct((s / I.saldoInicial - 1) * 100)} desde tu inicio de ${eur(I.saldoInicial).replace(/^\+/, "")}</div></div>
     <div class="btns"><button class="win" type="button" data-act="win">↗ Registrar Win</button><button class="loss" type="button" data-act="loss">↘ Registrar Loss</button></div></div>
-  <div class="card" style="margin:-14px 0 28px"><div class="lab" style="color:var(--accent)">🧭 CÓMO VAS · JARVIS</div>${comoVoy().map((t) => `<div class="item"><i>→</i>${t}</div>`).join("")}</div>
+  ${renderOperacion()}
+  <div class="card" style="margin:0 0 28px"><div class="lab" style="color:var(--accent)">🧭 CÓMO VAS · JARVIS</div>${comoVoy().map((t) => `<div class="item"><i>→</i>${t}</div>`).join("")}</div>
 
   <div class="sec"><b>01</b><span>Esto ya no es una fondeada</span></div>
   <div class="cmp">
@@ -356,7 +383,7 @@ function render() {
         <small>Al ${pct(I.riesgoPct)}, llegarías a tu límite en ~${Number.isFinite(c.stopsHastaLimite) ? c.stopsHastaLimite.toFixed(1) : "∞"} stops seguidos${c.esSeguro ? " — por encima del margen exigido." : " — por debajo del margen exigido. Baja el riesgo."}</small></div></div></div></div>
 
   <div class="sec"><b>04</b><span>Registro de hoy y días anteriores</span></div>
-  <div class="card">${S.log.length ? [...S.log].reverse().map((e) => `<div class="row${e.resultado === "win" || e.resultado === "aporte" ? "" : " l"}"><span>${({ win: "✓", loss: "✗", aporte: "➕", retiro: "➖" })[e.resultado]}&nbsp; ${e.date} · ${isTrade(e) ? "riesgo " + pct(e.riesgoPct) : (e.resultado === "aporte" ? "aporte " : "retiro ") + eur(e.importe).replace(/^\+/, "")}</span><b>${eur(e.balanceAfter).replace(/^\+/, "")}</b></div>`).join("")
+  <div class="card">${S.log.length ? [...S.log].reverse().map((e) => `<div class="row${e.resultado === "win" || e.resultado === "aporte" ? "" : " l"}"><span>${({ win: "✓", loss: "✗", aporte: "➕", retiro: "➖" })[e.resultado]}&nbsp; ${e.date} · ${isTrade(e) ? (e.importe ? (e.resultado === "win" ? "+" : "−") + eur(e.importe).replace(/^[+−]/, "") + " · " : "") + "riesgo " + pct(e.riesgoPct) : (e.resultado === "aporte" ? "aporte " : "retiro ") + eur(e.importe).replace(/^\+/, "")}</span><b>${eur(e.balanceAfter).replace(/^\+/, "")}</b></div>`).join("")
     : '<div class="empty">Sin registros todavía — usa "Registrar Win" o "Registrar Loss" arriba para empezar a componer tu saldo.</div>'}
     ${S.log.length ? '<button class="ghost" type="button" data-act="undo">🗑 Deshacer último registro</button>' : ""}</div>
   ${renderPlan()}
@@ -385,11 +412,14 @@ function avisoTrasRegistro(cabeza) {
   decir(partes.join(" "));
 }
 function registrar(resultado) {
-  const r = S.inputs.riesgoPct / 100, before = saldo();
-  const after = resultado === "win" ? before * (1 + r * S.inputs.ratioTpSl) : before * (1 - r);
-  S.log.push({ id: Date.now().toString(), date: today(), resultado, riesgoPct: S.inputs.riesgoPct, balanceBefore: before, balanceAfter: after });
-  save(); render(); toast(resultado === "win" ? "Win registrado." : "Loss registrado.");
-  avisoTrasRegistro(resultado === "win" ? "Win registrado, Joel." : "Loss registrado, Joel.");
+  const before = saldo(), riesgo = riesgoOp(), importe = importeOp(resultado);
+  if (resultado === "loss" && importe > before) return toast("Esa pérdida es mayor que tu saldo: revisa el importe.");
+  const after = resultado === "win" ? before + importe : before - importe;
+  S.log.push({ id: Date.now().toString(), date: today(), resultado, riesgoPct: Math.round(riesgo / before * 10000) / 100, riesgoEur: Math.round(riesgo * 100) / 100,
+               importe: Math.round(importe * 100) / 100, manual: Number(String(S.op.res || "").replace(",", ".")) > 0, balanceBefore: before, balanceAfter: after });
+  S.op = { eur: null, res: "" };                    // the next trade starts again from the plan's risk
+  save(); render(); toast((resultado === "win" ? "Win de +" : "Loss de −") + euros(importe) + " registrado.");
+  avisoTrasRegistro((resultado === "win" ? "Win de " : "Loss de ") + euros(importe) + " registrado, Joel.");
 }
 // confirm() is blocked inside Claude's frame, so a second tap within 4 s confirms instead.
 function dosToques(btn, aviso) {
@@ -430,6 +460,14 @@ function hacer(b) {
   if (a === "undo") { S.log.pop(); render(); save(); return; }
   if (a === "reset") { if (!dosToques(b, "¿Borrar todo? Toca otra vez")) return; S.inputs = { ...DEF }; S.log = []; render(); save(); }
 }
+$("#cp").addEventListener("input", (e) => {
+  const k = e.target.dataset && e.target.dataset.op; if (!k) return;
+  const v = Number(String(e.target.value).replace(",", ".")), s = saldo();
+  if (k === "pct") { S.op.eur = Number.isFinite(v) && v > 0 ? s * v / 100 : null; const o = ROOT.querySelector('[data-op="eur"]'); if (o) o.value = Math.round(riesgoOp() * 100) / 100; }
+  if (k === "eur") { S.op.eur = Number.isFinite(v) && v > 0 ? v : null; const o = ROOT.querySelector('[data-op="pct"]'); if (o) o.value = Math.round(riesgoOp() / s * 10000) / 100; }
+  if (k === "res") S.op.res = e.target.value;
+  const p = $("#cp-prev"); if (p) p.innerHTML = textoPrevio();
+});
 $("#cp").addEventListener("change", (e) => {
   const p = e.target.dataset.p;
   if (p) { S.plan[p] = p === "frecuencia" ? e.target.value : Number(e.target.value); if (p !== "frecuencia" && !Number.isFinite(S.plan[p])) S.plan[p] = PLAN_DEF[p]; render(); save(); return; }
@@ -473,7 +511,7 @@ window.CAPITAL = { contexto, render, textoReparto, textoRepartoRetiro, dinero, c
     if (!snap.exists) return;
     if (Date.now() - S.tocado < 4000) return;          // our own change is on its way: don't let an older copy undo it
     const d = snap.data();
-    const focused = ROOT.activeElement && ROOT.activeElement.dataset && (ROOT.activeElement.dataset.k || ROOT.activeElement.dataset.p);
+    const focused = ROOT.activeElement && ROOT.activeElement.dataset && (ROOT.activeElement.dataset.k || ROOT.activeElement.dataset.p || ROOT.activeElement.dataset.op);
     S.inputs = { ...DEF, ...(d.inputs || {}) }; S.plan = { ...PLAN_DEF, ...(d.plan || {}) }; S.log = Array.isArray(d.log) ? d.log.map((e) => ({ ...e })) : [];   // the database hands back frozen data: work on a copy
     if (!focused) render();
   }, () => {});
