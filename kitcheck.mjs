@@ -193,6 +193,7 @@ async function checkIpadApps() {
     if (!page.includes('id="os-avisos"') || !page.includes("window.AVISOS =") || !page.includes("function avisosRoute(") || !page.includes("const avisos = avisosRoute(question)")) wrongSym.push("Jarvis: today's limit warnings must be kept in Jarvis (button and voice)");
     if (!page.includes('id="sq-host"') || !page.includes('id="os-sq"') || !page.includes('id="sq-open"') || !page.includes("window.__SQ_FEED")) wrongSym.push("Jarvis: the TopStep Squad panel (published from another conversation) must stay in the build");
     if (!page.includes("function guardarRiesgo(") || !page.includes("S.renderLuego")) wrongSym.push("Plan de Futuros: risk limits must save themselves when changed, without being lost to a re-render");
+    if (!page.includes("async function autoRegistro(") || !page.includes("function reparto()") || !page.includes('data-act="repartir"') || !page.includes("tsTipo")) wrongSym.push("Plan de Futuros: new Topstep accounts must register themselves and groups must be split like TopStep Squad");
     if (!page.includes('id="cap-host"') || !page.includes("capitalPropio: window.CAPITAL?.contexto") || !page.includes('db.doc("fm/capital")')) wrongSym.push("Capital propio is not wired into Jarvis");
     if (!page.includes("<avisos>") || !page.includes("hacia las 11:00")) wrongSym.push("Jarvis does not know the scheduled 11:00 summary");
     if (!page.includes('db.doc("fm/mercado")') || !page.includes("no es en directo")) wrongSym.push("the MNQ price star is missing or not marked as not live");

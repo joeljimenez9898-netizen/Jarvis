@@ -286,6 +286,7 @@ V.dashboard = () => {
 V.grupos = () => {
   const days = dayMap(), gs = grupos().filter((g) => S.f.chip === "todos" || g.id === S.f.chip);
   return `<div class="chips">${[["todos", "Todos"], ...grupos().map((g) => [g.id, g.nombre])].map(([k, n]) => `<button type="button" data-chip="${esc(k)}" aria-pressed="${S.f.chip === k}">${esc(n)}</button>`).join("")}</div>
+  ${repartoHtml()}
   <div class="card"><div class="cardhead"><div><h3>Grupos</h3><p class="hint">Máximo 2 grupos activos simultáneos.</p></div><button class="btn green" type="button" data-new="grupo">+ Nuevo grupo</button></div>
   <div class="tablewrap"><table><thead><tr><th>GRUPO</th><th>EMPRESA</th><th>CUENTAS ACT.</th><th>SUPLENTE</th><th>CUENTAS VERDES</th><th>CUENTAS ROJAS</th><th>P&amp;L SEMANA</th><th>P&amp;L TOTAL</th><th>% DRAWDOWN</th><th>ESTADO</th><th></th></tr></thead><tbody>
   ${gs.map((g) => { const s = grupoStats(g, days); return `<tr><td><b>${esc(g.nombre)}</b></td><td>${esc(g.empresa)}</td><td>${s.activas}</td><td class="dim">${esc(g.suplente ? cCode(g.suplente) : "—")}</td>
@@ -293,11 +294,25 @@ V.grupos = () => {
     <td>${GRUPO_ESTADOS[g.estado] || esc(g.estado)}</td><td><button class="ico" type="button" data-edit="grupo" data-id="${g.id}" title="Editar">✏️</button></td></tr>`; }).join("") || '<tr><td colspan="11" class="empty">Sin grupos todavía.</td></tr>'}
   </tbody></table></div></div>`;
 };
+function repartoHtml() {
+  const cambios = reparto(), gs = rotan();
+  return `<div class="card" style="margin-bottom:18px"><div class="cardhead"><div><h3>🔀 Grupos automáticos (como en TopStep Squad)</h3>
+    <p class="hint">Jarvis reparte las cuentas vivas entre los grupos que rotan (${esc(gs.map((g) => g.nombre).join(" y ") || "ninguno en ACTIVO")}): primero separa las fondeadas para que un mal día no pille a todas, y luego pone cada examen en el grupo con menos cuentas vivas, mezclando los avanzados con los más frágiles. MAESTRA y SUPLENTES no se tocan. Las cuentas nuevas de Topstep entran solas en el grupo que toca.</p></div>
+    ${cambios.length ? `<button class="btn green" type="button" data-act="repartir">Aplicar el reparto</button>` : ""}</div>
+    ${cambios.length ? cambios.map((x) => `<div class="rule"><b>${esc(cCode(x.id))}</b><span class="v">${esc(gName(x.de))} → ${esc(gName(x.a))}</span><span class="n">${esc(S.cuentas.get(x.id)?.tipo || "")} · ${esc(S.cuentas.get(x.id)?.estado || "")}</span></div>`).join("")
+      : '<p class="hint" style="margin:0">✅ Tus grupos ya están repartidos así. Cuando compres cuentas nuevas, Jarvis las coloca solo.</p>'}</div>`;
+}
+function pendientesHtml() {
+  const l = sinRegistrar().filter((a) => (S.autoreg?.conocidas || []).includes(a.id));
+  if (!l.length) return "";
+  return `<div class="card" style="margin-bottom:18px"><h3>Cuentas de Topstep sin registrar</h3><p class="hint">Estaban en tu Topstep antes de que Jarvis empezara a registrarlas solo. ¿Las añado al plan?</p>
+    ${l.map((a) => `<div class="rule"><b>${esc(a.nombre)}</b><span class="v">${money(a.balance)}</span><span class="n"><button class="btn small green" type="button" data-reg="${esc(a.id)}">Registrar</button> <button class="btn small" type="button" data-ign="${esc(a.id)}">Ignorar</button></span></div>`).join("")}</div>`;
+}
 V.cuentas = () => {
   const all = cuentas().filter((c) => (!S.f.cg || c.grupo === S.f.cg) && (!S.f.ct || c.tipo === S.f.ct) && (!S.f.ce || c.estado === S.f.ce));
   const pages = Math.max(1, Math.ceil(all.length / 8)); S.page.cuentas = Math.min(S.page.cuentas, pages - 1);
   const rows = all.slice(S.page.cuentas * 8, S.page.cuentas * 8 + 8);
-  return `<div class="card"><div class="cardhead"><div><h3>Cuentas</h3><p class="hint">Registro individual de todas las cuentas fondeadas, challenges y suplentes.</p></div><button class="btn green" type="button" data-new="cuenta">+ Nueva cuenta</button></div>
+  return pendientesHtml() + `<div class="card"><div class="cardhead"><div><h3>Cuentas</h3><p class="hint">Registro individual de todas las cuentas fondeadas, challenges y suplentes.</p></div><button class="btn green" type="button" data-new="cuenta">+ Nueva cuenta</button></div>
   <div class="filters"><select data-f="cg"><option value="">Todos los grupos</option>${grupos().map((g) => `<option value="${g.id}" ${S.f.cg === g.id ? "selected" : ""}>${esc(g.nombre)}</option>`).join("")}</select>
     <select data-f="ct"><option value="">Todos los tipos</option>${["Challenge", "Fondeada"].map((t) => `<option ${S.f.ct === t ? "selected" : ""}>${t}</option>`).join("")}</select>
     <select data-f="ce"><option value="">Todos los estados</option>${ESTADOS.map((t) => `<option ${S.f.ce === t ? "selected" : ""}>${t}</option>`).join("")}</select></div>
@@ -544,6 +559,70 @@ function guardarRiesgo(ms = 900) {
 }
 function toast(t) { const el = $("#pf-toast"); el.textContent = t; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => (el.hidden = true), 2600); }
 
+// ── groups chosen like the TopStep Squad, and Topstep accounts that register themselves ──
+// Squad's rule, on the groups that rotate (ACTIVO; MAESTRA and RESERVA keep theirs): funded accounts are spread so no group
+// holds them all, then each exam goes to the group with fewest live accounts, mixing advanced exams with fragile ones.
+const vivaC = (c) => c.estado === "ACTIVA" || c.estado === "EXAM";
+const progreso = (c) => { const tp = Number(c.tp) || 0; return c.tipo === "Fondeada" || !tp ? 0 : Math.max(0, pnl(c) / tp); };
+const colchon = (c) => { const sl = Math.abs(Number(c.sl) || 0); return sl ? (pnl(c) + sl) / sl : 1; };
+const rotan = () => grupos().filter((g) => g.estado === "ACTIVO");
+const menor = (ids, key) => ids.slice().sort((a, b) => { const A = key(a), B = key(b); for (let i = 0; i < A.length; i++) if (A[i] !== B[i]) return A[i] - B[i]; return 0; })[0];
+function grupoPara(c) {
+  const ids = rotan().map((g) => g.id); if (!ids.length) return "";
+  const vivas = cuentas().filter((x) => vivaC(x) && x.id !== c.id);
+  return menor(ids, (g) => { const cs = vivas.filter((x) => x.grupo === g); return [c.tipo === "Fondeada" ? cs.filter((x) => x.tipo === "Fondeada").length : 0, cs.length, cs.reduce((a, x) => a + progreso(x), 0)]; });
+}
+function reparto() {
+  const ids = rotan().map((g) => g.id); if (!ids.length) return [];
+  const mov = cuentas().filter((c) => vivaC(c) && ids.includes(c.grupo));
+  const cnt = {}, fond = {}, prog = {}, out = new Map(); ids.forEach((g) => { cnt[g] = fond[g] = prog[g] = 0; });
+  mov.filter((c) => c.tipo === "Fondeada").sort((x, y) => colchon(y) - colchon(x)).forEach((c) => { const g = menor(ids, (g) => [fond[g], cnt[g]]); out.set(c.id, g); fond[g]++; cnt[g]++; });
+  mov.filter((c) => c.tipo !== "Fondeada").sort((x, y) => progreso(y) - progreso(x)).forEach((c) => { const g = menor(ids, (g) => [cnt[g], prog[g]]); out.set(c.id, g); cnt[g]++; prog[g] += progreso(c); });
+  return [...out].filter(([id, g]) => S.cuentas.get(id)?.grupo !== g).map(([id, g]) => ({ id, de: S.cuentas.get(id)?.grupo, a: g }));
+}
+// Topstep: every active account the hourly read finds that isn't in the plan yet. Practice accounts never count.
+const tsTam = (n) => { const m = String(n || "").match(/^(\d+)K/i); return m ? Number(m[1]) * 1000 : 50000; };
+const tsTipo = (n) => (/^PRAC/i.test(n) ? null : /XFA|EXPRESS|FUNDED|LFA|LIVE/i.test(n) ? "Fondeada" : "Challenge");
+const REGLAS_TS = { 50000: { tp: 3000, sl: -2000 }, 100000: { tp: 6000, sl: -3000 }, 150000: { tp: 9000, sl: -4500 } };
+const multTxt = (g) => { const r = Number(String(g?.ratio || "1:1").split(":")[0]); return (Number.isFinite(r) && r > 0 ? r : 1) + "x"; };
+function sinRegistrar() {
+  const ligadas = new Set(cuentas().map((c) => String(c.topstepId || "")).filter(Boolean)), ign = S.autoreg?.ignoradas || [];
+  return Object.entries(S.topstep?.cuentas || {}).filter(([id, a]) => a && a.nombre && tsTipo(a.nombre) && !ligadas.has(String(id)) && !ign.includes(id)).map(([id, a]) => ({ id, ...a }));
+}
+async function registrarTs(lista) {
+  let n = Math.max(0, ...cuentas().map((c) => Number((String(c.codigo).match(/^TS-(\d+)$/i) || [])[1]) || 0));
+  const hechas = [];
+  for (const a of lista) {
+    const tam = tsTam(a.nombre), tipo = tsTipo(a.nombre), r = REGLAS_TS[tam] || { tp: tam * 0.06, sl: -tam * 0.04 };
+    const c = { codigo: "TS-" + ++n, empresa: "TopStep", tipo, estado: tipo === "Fondeada" ? "ACTIVA" : "EXAM", balanceIni: tam, pnl: 0, tp: r.tp, sl: r.sl,
+                topstepId: String(a.id), orden: 100 + n, origen: "Topstep (automática)", registrada: iso(new Date()) };
+    c.grupo = grupoPara(c);
+    // limits: the same as an account of its size already in that group (what Joel set there), else from the group's copy ratio
+    const par = cuentas().find((x) => x.grupo === c.grupo && Number(x.balanceIni) === tam && x.dll != null && vivaC(x));
+    const m = multTxt(S.grupos.get(c.grupo)), k = (parseFloat(m) || 1) * tam / 50000;
+    Object.assign(c, par ? { mult: par.mult || m, dllOn: par.dllOn !== false, dll: par.dll, dllAccion: par.dllAccion || "Liquidar", dptOn: par.dptOn !== false, dpt: par.dpt, dptAccion: par.dptAccion || "Liquidar" }
+                         : { mult: m, dllOn: true, dll: Math.round(1000 * k), dllAccion: "Liquidar", dptOn: true, dpt: Math.round(1500 * k), dptAccion: "Liquidar" });
+    await S.db.doc("fm/plan").collection("cuentas").doc("ts-auto-" + a.id).set(c);
+    S.cuentas.set("ts-auto-" + a.id, c); hechas.push(c);
+  }
+  return hechas;
+}
+// Accounts bought from now on register themselves; the ones that were already unlinked when this started wait in Cuentas for a tap.
+async function autoRegistro() {
+  if (!S.db || !S.ready || !S.topstep || !S.autoreg || S.autoregBusy) return;
+  const libres = sinRegistrar(), ref = S.db.doc("fm/plan").collection("config").doc("autoregistro");
+  S.autoregBusy = true;
+  try {
+    if (!S.autoreg.exists) { await ref.set({ conocidas: libres.map((a) => a.id), ignoradas: [], desde: new Date().toISOString() }); return; }
+    const nuevas = libres.filter((a) => !(S.autoreg.conocidas || []).includes(a.id));
+    if (!nuevas.length) return;
+    const hechas = await registrarTs(nuevas);
+    await ref.update({ conocidas: [...(S.autoreg.conocidas || []), ...nuevas.map((a) => a.id)] });
+    toast("Jarvis ha registrado " + hechas.map((c) => c.codigo + " en " + gName(c.grupo)).join(", ") + ".");
+  } catch (err) { toast("No he podido registrar las cuentas nuevas: " + (err.message || "error")); }
+  finally { S.autoregBusy = false; }
+}
+
 // ── render & events ────────────────────────────────────────────
 function render() {
   $("#pf-tabs").innerHTML = TABS.map(([k, n]) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${S.tab === k}">${n}</button>`).join("");
@@ -583,6 +662,14 @@ root.addEventListener("click", async (e) => {
     const r = revActual(); await S.db.doc("fm/plan").collection("revisiones").doc(r.id).set({ checks: r.checks, estados: r.estados, notas: r.notas, guardada: new Date().toISOString() });
     toast("Revisión guardada."); return;
   }
+  if (d.act === "repartir") {
+    if (!S.db) return toast("Abre el Plan dentro de Claude para guardar.");
+    if (!dosToques(t, "¿Aplicar? Toca otra vez")) return;
+    const cambios = reparto(); for (const x of cambios) await S.db.doc("fm/plan").collection("cuentas").doc(x.id).update({ grupo: x.a });
+    toast(cambios.length ? "Grupos repartidos: " + cambios.map((x) => cCode(x.id) + " → " + gName(x.a)).join(", ") + "." : "Ya estaban repartidos."); return;
+  }
+  if (d.reg) { if (!S.db) return; const a = sinRegistrar().find((x) => x.id === d.reg); if (!a) return; const [c] = await registrarTs([a]); toast("Registrada " + c.codigo + " en " + gName(c.grupo) + "."); return; }
+  if (d.ign) { if (!S.db) return; await S.db.doc("fm/plan").collection("config").doc("autoregistro").update({ ignoradas: [...(S.autoreg?.ignoradas || []), d.ign] }); toast("Ignorada."); return; }
   if (d.act === "nueva-rev") { S.rev = { id: domingoHoy(), checks: {}, estados: {}, notas: "" }; render(); return; }
 });
 root.addEventListener("change", (e) => {
@@ -637,6 +724,8 @@ function contexto() {
       return { semana: w.semana, inicio: w.inicio, grupo: gName(w.grupo), pnl: Math.round(st.pnl * 100) / 100, pctCapital: Math.round(st.pct * 100) / 100, operaciones: st.ops, automatica: !!w.auto }; }),
     vigilanciaHoy: vigil().map((x) => ({ cuenta: x.c.codigo, pnlHoy: x.hoy, limitePerdidaDiaria: x.dll, objetivoDiario: x.dpt, estado: x.nivel ? NIVEL[x.nivel] : "dentro de sus límites" })),
     fichaTopstepX: vigil().map((x) => ({ cuenta: x.c.codigo, idTopstep: x.c.topstepId, limitePerdidaDiaria: x.dll, accionLimite: x.r.dllAccion, objetivoGananciaDiaria: x.dpt, accionObjetivo: x.r.dptAccion, multiplicadorCopiador: x.r.mult })),
+    cuentasTopstepSinRegistrar: sinRegistrar().map((a) => a.nombre),
+    repartoAutomaticoPendiente: reparto().map((x) => cCode(x.id) + ": " + gName(x.de) + " → " + gName(x.a)),
     winRate: os.length ? Math.round((os.filter((o) => o.resultado === "TP").length / os.length) * 1000) / 10 + "%" : null,
     reglas: REGLAS.map(([t, rs]) => t + ": " + rs.map(([a, b]) => `${a} = ${b}`).join("; ")),
   };
@@ -652,12 +741,14 @@ window.PLAN = { contexto, render, open: (tab) => { if (typeof tab === "string" &
   if (!db) { S.ready = true; render(); return; }
   const plan = db.doc("fm/plan"), pend = new Set(["grupos", "cuentas", "operaciones", "semanas", "revisiones", "topstep"]);
   const editando = () => { const a = ROOT.activeElement; return a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName) && a.closest("#pf-view"); };
-  const done = (k) => { pend.delete(k); if (!pend.size && !S.ready) { S.ready = true; } if (editando()) { S.renderLuego = true; return; } render(); };
+  const done = (k) => { pend.delete(k); if (!pend.size && !S.ready) { S.ready = true; } if (k === "topstep" || k === "cuentas") setTimeout(autoRegistro, 500); if (editando()) { S.renderLuego = true; return; } render(); };
   root.addEventListener("focusout", () => setTimeout(() => { if (S.renderLuego && !editando()) { S.renderLuego = false; render(); } }, 50));
   const sub = (col, map) => plan.collection(col).onSnapshot((snap) => { map.clear(); for (const d of snap.docs) map.set(d.id, d.data()); if (col === "revisiones" && S.rev && !S.revisiones.has(S.rev.id)) {} done(col); }, () => done(col));
   sub("grupos", S.grupos); sub("cuentas", S.cuentas); sub("operaciones", S.ops); sub("semanas", S.semanas); sub("revisiones", S.revisiones);
   db.doc("fm/topstep").onSnapshot((snap) => { S.topstep = snap.exists ? snap.data() : null; done("topstep"); }, () => done("topstep"));
+  plan.collection("config").doc("autoregistro").onSnapshot((snap) => { S.autoreg = { exists: snap.exists, ...(snap.exists ? snap.data() : {}) }; autoRegistro(); render(); }, () => {});
   setTimeout(() => { if (!S.ready) { S.ready = true; render(); } }, 8000);
+  setInterval(autoRegistro, 15000);
 })();
 })();
 </script>
