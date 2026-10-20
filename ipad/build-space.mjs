@@ -456,8 +456,19 @@ window.GRAPH = { nodes: [], links: [] };
     history.push({ role: "user", content: "Pregunta: " + question }, { role: "assistant", content: answer }); history = history.slice(-12);
     return { answer, nodes: [], about_notes: false };
   }
+  // "¿Qué avisos tengo hoy?", "léeme los avisos": today's limit warnings, as kept in Jarvis (window.AVISOS, os-layer).
+  function avisosRoute(question) {
+    const q = String(question).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (!window.AVISOS || !/\bavisos?\b|\balertas?\b/.test(q) || /apunta|registra|crea|pon(me)? un/.test(q)) return null;
+    const answer = window.AVISOS.texto();
+    setTimeout(() => { const a = document.querySelector("#answer .a"); if (a) a.style.whiteSpace = "pre-line"; }, 50);
+    history.push({ role: "user", content: "Pregunta: " + question }, { role: "assistant", content: answer }); history = history.slice(-12);
+    return { answer, nodes: [], about_notes: false };
+  }
   async function chat(question) {
     document.getElementById("os-open-app")?.remove();
+    const avisos = avisosRoute(question);
+    if (avisos) return avisos;
     const panel = panelRoute(question);
     if (panel) return panel;
     const opened = openRoute(question);

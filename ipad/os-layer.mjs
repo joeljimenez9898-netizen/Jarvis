@@ -135,6 +135,7 @@ export const MARKUP = `
       <button class="os-toggle" id="os-fm">Plan de Futuros <span>abrir</span></button>
       <button class="os-toggle" id="os-cap">Capital propio <span>abrir</span></button>
       <button class="os-toggle" id="os-fr">Funding Manager <span>abrir</span></button>
+      <button class="os-toggle" id="os-avisos">⚠️ Avisos de hoy <span>—</span></button>
     </div>
   </div>
 </aside>
@@ -184,6 +185,38 @@ export const SCRIPT = `
     $("os-fm").addEventListener("click", () => window.FM && window.FM.open());
     $("os-cap").addEventListener("click", () => window.FM && window.FM.openCapital && window.FM.openCapital());
     $("os-fr").addEventListener("click", () => window.FM && window.FM.openFunding && window.FM.openFunding());
+    // Today's limit warnings, kept in Jarvis: what the hourly watch found (fm/topstep vigilancia), read again whenever he asks.
+    const AVISOS = window.AVISOS = (() => {
+      const dia = (t) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(new Date(t).getTime() + 7 * 3600 * 1000));
+      const usd = (n) => (n < 0 ? "−" : "") + Math.abs(n).toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: "always" }) + " $";
+      const hoy = () => { const v = window.BRAIN && window.BRAIN.docs && window.BRAIN.docs.topstep && window.BRAIN.docs.topstep.vigilancia;
+        return v && Array.isArray(v.cuentas) && v.fecha === dia(Date.now()) ? v : null; };
+      const frase = (f) => f.nivel === "dll100" ? "🛑 " + f.cuenta + " ha pasado su límite de pérdida diaria: lleva " + usd(f.hoy) + " hoy (límite " + usd(-f.limitePerdida) + "). Tu plan dice parar."
+        : f.nivel === "dll80" ? "⚠️ " + f.cuenta + " lleva " + usd(f.hoy) + " hoy: está al " + Math.round((-f.hoy / f.limitePerdida) * 100) + " % de su límite de pérdida diaria (" + usd(-f.limitePerdida) + ")."
+        : "🎯 " + f.cuenta + " ha llegado a su objetivo del día: lleva " + usd(f.hoy) + " (objetivo " + usd(f.objetivo) + "). Tu plan dice cerrar.";
+      const lista = () => { const v = hoy(); return v ? v.cuentas.filter((f) => f.nivel).map(frase) : []; };
+      const texto = () => {
+        const v = hoy();
+        if (!v) return "Hoy todavía no hay ninguna comprobación de tus cuentas, Joel. Jarvis las mira cada hora de 8:00 a 22:00, de lunes a viernes.";
+        const hora = new Date(v.at).toLocaleTimeString("es-ES", { timeZone: "Europe/Madrid", hour: "2-digit", minute: "2-digit" }), L = lista();
+        const resto = v.cuentas.filter((f) => !f.nivel).map((f) => f.cuenta + " " + usd(f.hoy)).join(", ");
+        return (L.length ? "Avisos de hoy, Joel:\\n" + L.join("\\n") : "Sin avisos hoy, Joel: todas tus cuentas están dentro de sus límites.") +
+          (resto ? "\\n" + (L.length ? "El resto, dentro de sus límites: " : "Hoy llevan: ") + resto + "." : "") + "\\nÚltima comprobación: " + hora + " (hora de España).";
+      };
+      const mostrar = () => {
+        const t = texto(), card = $("answer");
+        card.className = "glass show";
+        card.querySelector(".q").textContent = "Jarvis · avisos de hoy";
+        card.querySelector(".chips").replaceChildren();
+        const a = card.querySelector(".a"); a.style.whiteSpace = "pre-line"; a.textContent = t;
+        if (window.Voice) { Voice.stopSpeaking && Voice.stopSpeaking(); Voice.speak(t.replace(/[🛑⚠️🎯]/gu, "").replace(/\\$/g, "dólares")); }
+        return t;
+      };
+      setInterval(() => { const b = $("os-avisos"); if (!b) return; const n = lista().length; b.querySelector("span").textContent = hoy() ? (n ? n + (n === 1 ? " aviso" : " avisos") : "sin avisos") : "—";
+        b.style.borderColor = n ? "#ff7b6b" : ""; }, 4000);
+      return { lista, texto, mostrar };
+    })();
+    $("os-avisos").addEventListener("click", () => AVISOS.mostrar());
     // Inspector: a star with an address gets a button that opens it in its app.
     const panel = $("panel");
     const showLink = () => {
