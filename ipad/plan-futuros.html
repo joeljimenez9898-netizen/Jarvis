@@ -603,6 +603,10 @@ async function registrarTs(lista) {
     Object.assign(c, par ? { mult: par.mult || m, dllOn: par.dllOn !== false, dll: par.dll, dllAccion: par.dllAccion || "Liquidar", dptOn: par.dptOn !== false, dpt: par.dpt, dptAccion: par.dptAccion || "Liquidar" }
                          : { mult: m, dllOn: true, dll: Math.round(1000 * k), dllAccion: "Liquidar", dptOn: true, dpt: Math.round(1500 * k), dptAccion: "Liquidar" });
     await S.db.doc("fm/plan").collection("cuentas").doc("ts-auto-" + a.id).set(c);
+    // the same account in the list the morning summary and TopStep Squad read (fm/main/cuentas)
+    await S.db.doc("fm/main").collection("cuentas").doc("ts-auto-" + a.id).set({ alias: c.codigo, firma: "Topstep", plataforma: "TopstepX", tamano: tam, fase: tipo === "Fondeada" ? "fondeada" : "evaluacion",
+      estado: "activa", balanceInicial: tam, ddTipo: "eod", ddMax: Math.abs(r.sl), ddTope: "", perdidaDiaria: 0, objetivo: tipo === "Fondeada" ? 0 : r.tp, consistencia: 50,
+      topstepId: String(a.id), dias: [1, 2, 3, 4, 5], creado: new Date().toISOString(), origen: "Topstep (automática)" });
     S.cuentas.set("ts-auto-" + a.id, c); hechas.push(c);
   }
   return hechas;

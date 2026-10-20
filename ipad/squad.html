@@ -10,11 +10,13 @@ const ROOT = HOST.attachShadow({ mode: "open" });
 ROOT.innerHTML = '<style>*{box-sizing:border-box}.bar{position:sticky;top:0;z-index:5;background:#000;padding:10px 14px;border-bottom:1px solid #1C1D20}.bar button{background:transparent;border:1px solid #28292D;color:#EEF0F1;border-radius:999px;padding:7px 14px;font:600 13px -apple-system,system-ui,sans-serif;cursor:pointer}#sqmsg{padding:30px 20px;color:#8B9096;font:14px -apple-system,system-ui,sans-serif}</style><div class="bar"><button id="sq-back">\u2190 Jarvis</button></div><div id="sqroot"><div id="sqmsg">Cargando\u2026</div></div>';
 const SIZE = 50000;
 const S = { topstep: null, cuentas: null, cb: null };
+const resetListo = new Promise((r) => { S.resetListo = r; });
 const construir = () => {
   if (!S.topstep || !S.cuentas) return null;
   const out = [];
   S.cuentas.forEach((c) => {
     if (c.firma && c.firma !== "Topstep") return;
+    if (c.estado === "perdida" || c.estado === "retirada") return;          // burned or closed accounts leave the squad
     const a = S.topstep.cuentas && S.topstep.cuentas[c.topstepId];
     if (!a || typeof a !== "object") return;
     const dd = Number(c.ddMax) || 2000, dias = a.dias || {};
@@ -34,6 +36,8 @@ window.__SQ_FEED = (cb) => { S.cb = cb; push(); return () => { if (S.cb === cb) 
     if (!db) return;
     db.doc("fm/topstep").onSnapshot((snap) => { S.topstep = snap.exists ? snap.data() : null; push(); }, () => {});
     db.collection("fm/main/cuentas").onSnapshot((snap) => { S.cuentas = snap.docs.map((x) => x.data()); push(); }, () => {});
+    // "Empezar de cero" done in Jarvis (fm/plan/config/reset): the squad drops its saved accounts and rotation once.
+    db.doc("fm/plan").collection("config").doc("reset").onSnapshot((snap) => { window.__SQ_RESET_AT = snap.exists ? snap.data().en || null : null; S.resetListo && S.resetListo(); }, () => { S.resetListo && S.resetListo(); });
   } catch (e) {}
 })();
 let started = false;
@@ -245,12 +249,16 @@ function TopStepSquad() {
                     const d = JSON.parse(res.value);
                     if (d.cfg)
                         setCfg({ ...defaultConfig, ...d.cfg, ...(d.cfg.planVer === 2 ? {} : { agr: defaultConfig.agr, planVer: 2 }) });
+                    const reset = window.__SQ_RESET_AT && d.resetAt !== window.__SQ_RESET_AT;
+                    if (reset) { setAccounts([]); setCurrentGroup(0); setRotationLog([{ group: 0, reason: 'Empezamos de cero', trades: 0 }]); }
+                    else {
                     if (d.accounts)
                         setAccounts(d.accounts);
                     if (typeof d.currentGroup === 'number')
                         setCurrentGroup(d.currentGroup);
                     if (d.rotationLog)
                         setRotationLog(d.rotationLog);
+                    }
                 }
             }
             catch (e) { /* nada guardado aún */ }
@@ -262,7 +270,7 @@ function TopStepSquad() {
             return;
         (async () => {
             try {
-                await window.storage.set('topstep-squad-v2', JSON.stringify({ cfg, accounts, currentGroup, rotationLog }));
+                await window.storage.set('topstep-squad-v2', JSON.stringify({ cfg, accounts, currentGroup, rotationLog, resetAt: window.__SQ_RESET_AT || null }));
             }
             catch (e) {
                 console.error('storage error', e);
@@ -1056,7 +1064,7 @@ function PlanView({ plan, cfg, setCfg, onRol, currentGroup, setCurrentGroup }) {
     window.ReactDOM.createRoot(mount).render(window.React.createElement(App));
   } catch (e) { mount.innerHTML = '<div id="sqmsg">Error al iniciar: ' + String(e && e.message || e) + '</div>'; started = false; }
 };
-const openSquad = () => { HOST.hidden = false; start(); };
+const openSquad = async () => { HOST.hidden = false; await Promise.race([resetListo, new Promise((r) => setTimeout(r, 3000))]); start(); };
 ROOT.getElementById("sq-back").addEventListener("click", () => { HOST.hidden = true; });
 document.getElementById("sq-open").addEventListener("click", openSquad);
 const os = document.getElementById("os-sq"); if (os) os.addEventListener("click", openSquad);
