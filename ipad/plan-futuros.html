@@ -404,7 +404,7 @@ V.riesgo = () => {
   const cs = cuentas().filter((c) => (!S.f.rg || c.grupo === S.f.rg) && (!q || c.codigo.toLowerCase().includes(q)));
   const g2 = grupos().find((g) => g.ratio && g.ratio.startsWith("0.5"));
   return `<div class="cardhead"><div><span style="font-size:28px">⚙️</span><p class="hint">Administra las reglas de gestión de riesgo para todas tus cuentas</p></div>
-    <div style="margin-left:auto;display:flex;gap:10px"><button class="btn green" type="button" data-act="guardar-riesgo">💾 Guardar cambios</button><button class="btn" type="button" data-act="reset-riesgo">↺ Restablecer</button></div></div>
+    <div style="margin-left:auto;display:flex;gap:10px"><span class="hint" style="align-self:center">Se guarda solo al cambiarlo</span><button class="btn green" type="button" data-act="guardar-riesgo">💾 Guardar cambios</button><button class="btn" type="button" data-act="reset-riesgo">↺ Restablecer</button></div></div>
   <div class="riskinfo">⚠️ <b>Gestión de Riesgo por Plataforma:</b> Los límites de pérdida y ganancia se aplican directamente en Tradelio/NinjaTrader mediante la configuración del copiador. Usa estos valores como referencia exacta para introducirlos en la plataforma.${g2 ? `<br>Los límites del <b style="color:#fff">${esc(g2.nombre)}</b> aplican ratio <b>${esc(g2.ratio.split(":")[0])}x</b> — los valores ya están ajustados.` : ""}</div>
   ${ficha()}
   <div class="filters" style="margin-top:16px"><input data-f="rq" type="search" placeholder="🔍 Buscar cuenta..." value="${esc(S.f.rq)}">
@@ -530,6 +530,18 @@ async function delForm(btn) {
   if (!id || !dosToques(btn, "¿Eliminar? Toca otra vez")) return;
   try { await S.db.doc("fm/plan").collection(FORMS[kind].col).doc(id).delete(); $("#pf-modal").hidden = true; toast("Eliminado."); } catch (err) { toast("No se ha eliminado."); }
 }
+// Risk changes save themselves: no "Guardar cambios" needed. Each account's pending change is written, then cleared.
+function guardarRiesgo(ms = 900) {
+  clearTimeout(guardarRiesgo.t);
+  guardarRiesgo.t = setTimeout(async () => {
+    if (!S.db) return toast("Abre el Plan dentro de Claude para guardar.");
+    const cambios = Object.entries(S.risk); if (!cambios.length) return;
+    S.risk = {};
+    try { for (const [id, p] of cambios) await S.db.doc("fm/plan").collection("cuentas").doc(id).update(p);
+      toast("Guardado ✓ " + cambios.map(([id]) => cCode(id)).join(", ")); }
+    catch (err) { for (const [id, p] of cambios) S.risk[id] = { ...p, ...(S.risk[id] || {}) }; toast("No se ha guardado: " + (err.message || "error")); }
+  }, ms);
+}
 function toast(t) { const el = $("#pf-toast"); el.textContent = t; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => (el.hidden = true), 2600); }
 
 // ── render & events ────────────────────────────────────────────
@@ -548,7 +560,7 @@ root.addEventListener("click", async (e) => {
   if (d.cancel != null) { $("#pf-modal").hidden = true; return; }
   if (d.del != null) return delForm(t);
   if (d.page) { const [k, n] = d.page.split(":"); S.page[k] = Math.max(0, S.page[k] + Number(n)); render(); return; }
-  if (d.tog) { const [id, k] = d.tog.split("."); const r = riskOf(S.cuentas.get(id) ? { id, ...S.cuentas.get(id) } : {}); S.risk[id] = { ...(S.risk[id] || {}), [k]: !r[k] }; render(); return; }
+  if (d.tog) { const [id, k] = d.tog.split("."); const r = riskOf(S.cuentas.get(id) ? { id, ...S.cuentas.get(id) } : {}); S.risk[id] = { ...(S.risk[id] || {}), [k]: !r[k] }; render(); guardarRiesgo(); return; }
   if (d.cal) {
     const C = S.cal, [k, v] = d.cal.split(":");
     if (k === "modo") C.modo = v; else if (k === "anual") C.anual = !C.anual; else if (k === "mes") { C.m = Number(v); C.anual = false; }
@@ -564,7 +576,7 @@ root.addEventListener("click", async (e) => {
   if (d.act === "bulk") {
     const m = $("#b-mult").value, dll = $("#b-dll").value, dpt = $("#b-dpt").value;
     for (const id of S.sel) { const p = { ...(S.risk[id] || {}) }; if (m) p.mult = m; if (dll !== "") { p.dll = Number(dll); p.dllAccion = $("#b-dlla").value; } if (dpt !== "") { p.dpt = Number(dpt); p.dptAccion = $("#b-dpta").value; } S.risk[id] = p; }
-    render(); toast(`Aplicado a ${S.sel.size} cuenta(s). Pulsa Guardar cambios.`); return;
+    render(); guardarRiesgo(0); return;
   }
   if (d.act === "guardar-rev") {
     if (!S.db) return toast("Abre el Plan dentro de Claude para guardar.");
@@ -577,13 +589,15 @@ root.addEventListener("change", (e) => {
   const t = e.target, d = t.dataset;
   if (d.f) { S.f[d.f] = t.value; S.page.cuentas = S.page.ops = 0; render(); return; }
   if (d.calf) { S.cal[d.calf] = t.value; render(); return; }
-  if (d.r) { const [id, k] = d.r.split("."); S.risk[id] = { ...(S.risk[id] || {}), [k]: t.type === "number" ? Number(t.value) : t.value }; return; }
+  if (d.r) { const [id, k] = d.r.split("."); S.risk[id] = { ...(S.risk[id] || {}), [k]: t.type === "number" ? Number(t.value) : t.value }; guardarRiesgo(0); return; }
   if (d.sel) { t.checked ? S.sel.add(d.sel) : S.sel.delete(d.sel); render(); return; }
   if (d.selall != null) { const q = S.f.rq.trim().toLowerCase(); for (const c of cuentas().filter((c) => (!S.f.rg || c.grupo === S.f.rg) && (!q || c.codigo.toLowerCase().includes(q)))) t.checked ? S.sel.add(c.id) : S.sel.delete(c.id); render(); return; }
   if (d.check) { revActual().checks[d.check] = t.checked; return; }
   if (d.estado) { revActual().estados[d.estado] = t.value; return; }
   if (d.rev != null) { const r = S.revisiones.get(t.value); S.rev = { id: t.value, checks: { ...(r?.checks || {}) }, estados: { ...(r?.estados || {}) }, notas: r?.notas || "" }; render(); return; }
 });
+// A risk value typed in the table saves itself a moment later, even if the field is never left (iPad keeps the keyboard up).
+root.addEventListener("input", (e) => { const r = e.target.dataset.r; if (r && e.target.type === "number" && e.target.value !== "") { const [id, k] = r.split("."); S.risk[id] = { ...(S.risk[id] || {}), [k]: Number(e.target.value) }; guardarRiesgo(); } });
 root.addEventListener("input", (e) => { if (e.target.dataset.notas != null) revActual().notas = e.target.value; if (e.target.dataset.f === "oq" || e.target.dataset.f === "rq") { S.f[e.target.dataset.f] = e.target.value; const pos = e.target.selectionStart; render(); const el = $(`[data-f="${e.target.dataset.f}"]`); el.focus(); try { el.setSelectionRange(pos, pos); } catch {} } });
 $("#pf-form").addEventListener("submit", saveForm);
 $("#pf-modal").addEventListener("click", (e) => { if (e.target.id === "pf-modal") $("#pf-modal").hidden = true; });
@@ -637,7 +651,9 @@ window.PLAN = { contexto, render, open: (tab) => { if (typeof tab === "string" &
   S.db = db;
   if (!db) { S.ready = true; render(); return; }
   const plan = db.doc("fm/plan"), pend = new Set(["grupos", "cuentas", "operaciones", "semanas", "revisiones", "topstep"]);
-  const done = (k) => { pend.delete(k); if (!pend.size && !S.ready) { S.ready = true; } render(); };
+  const editando = () => { const a = ROOT.activeElement; return a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName) && a.closest("#pf-view"); };
+  const done = (k) => { pend.delete(k); if (!pend.size && !S.ready) { S.ready = true; } if (editando()) { S.renderLuego = true; return; } render(); };
+  root.addEventListener("focusout", () => setTimeout(() => { if (S.renderLuego && !editando()) { S.renderLuego = false; render(); } }, 50));
   const sub = (col, map) => plan.collection(col).onSnapshot((snap) => { map.clear(); for (const d of snap.docs) map.set(d.id, d.data()); if (col === "revisiones" && S.rev && !S.revisiones.has(S.rev.id)) {} done(col); }, () => done(col));
   sub("grupos", S.grupos); sub("cuentas", S.cuentas); sub("operaciones", S.ops); sub("semanas", S.semanas); sub("revisiones", S.revisiones);
   db.doc("fm/topstep").onSnapshot((snap) => { S.topstep = snap.exists ? snap.data() : null; done("topstep"); }, () => done("topstep"));

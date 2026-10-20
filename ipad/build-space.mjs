@@ -22,7 +22,7 @@ for (const [a, b] of [
   ["<title>Knowledge Galaxy</title>", "<title>Jarvis</title>"],
   ["<h3>CONNECTED</h3>", "<h3>CONECTADO CON</h3>"],
   ['<div id="title"><h1>KNOWLEDGE GALAXY</h1><p id="stats"></p></div>',
-   '<div id="title"><h1>JARVIS</h1><p id="stats"></p><button type="button" id="fm-open">Plan de Futuros</button><button type="button" id="cap-open">Capital propio</button><button type="button" id="fr-open">Funding Manager</button></div>'],
+   '<div id="title"><h1>JARVIS</h1><p id="stats"></p><button type="button" id="fm-open">Plan de Futuros</button><button type="button" id="cap-open">Capital propio</button><button type="button" id="fr-open">Funding Manager</button><button type="button" id="sq-open" style="margin-top:8px;border:1px solid rgba(139,124,246,.55);background:rgba(10,14,24,.75);color:#8B7CF6;font:600 13px/1 system-ui,sans-serif;letter-spacing:.06em;padding:9px 14px;border-radius:999px;cursor:pointer;pointer-events:auto;width:100%">TopStep Squad</button></div>'],
   ["${nodes.length} notes indexed · ${links.length} connections · ${groups.length} groups", "${nodes.length} recuerdos · ${links.length} conexiones · ${groups.length} grupos"],
   ["`${greeting} ${nodes.length} notes indexed.`", "`${greeting} ${nodes.length} recuerdos en tu segundo cerebro.`"],
   ["`${nodes.length} notes indexed.`", "`${nodes.length} recuerdos en tu segundo cerebro.`"],
@@ -608,6 +608,7 @@ const shell = `
 <div id="plan-host" hidden></div>
 <div id="cap-host" hidden></div>
 <div id="fr-host" hidden></div>
+<div id="sq-host" hidden></div>
 <script>
 (() => {
 const FMHOST = document.getElementById("fm-host");
@@ -657,5 +658,7 @@ if (/src="(graph-data|voice|intent)\.js"/.test(html)) throw new Error("a viewer 
 html = html.replace('<div id="graph"></div>', '<div id="graph"></div>' + shell.replace(/<script>[\s\S]*<\/script>/, "") );
 html += shell.match(/<script>[\s\S]*<\/script>/)[0];
 html = html.replace('<div id="graph"></div>', '<div id="graph"></div>' + OS.CSS + OS.MARKUP) + OS.SCRIPT;
+// TopStep Squad Manager (React, its own shadow root), fed live from fm/topstep and fm/main/cuentas.
+html += "\n" + read("ipad/squad.html");
 fs.writeFileSync(OUT, html);
 console.log(`${OUT}: ${(html.length / 1024).toFixed(0)} KB`);

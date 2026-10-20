@@ -135,6 +135,7 @@ export const MARKUP = `
       <button class="os-toggle" id="os-fm">Plan de Futuros <span>abrir</span></button>
       <button class="os-toggle" id="os-cap">Capital propio <span>abrir</span></button>
       <button class="os-toggle" id="os-fr">Funding Manager <span>abrir</span></button>
+      <button class="os-toggle" id="os-sq">TopStep Squad <span>abrir</span></button>
       <button class="os-toggle" id="os-avisos">⚠️ Avisos de hoy <span>—</span></button>
     </div>
   </div>
