@@ -263,7 +263,7 @@ V.dashboard = () => {
     values: labels.map((l) => { const w = sem.find((s) => s.semana === l && s.grupo === g.id); return w ? semanaStats(w, days).pnl : 0; }) }));
   const top = cs.map((c) => [c, pnl(c)]).filter(([, v]) => v).sort((a, b) => b[1] - a[1]).slice(0, 8);
   const alertas = vigil().filter((x) => x.nivel);
-  return `<div class="banner ${p.ok ? "ok" : "bad"}">${esc(p.txt)}</div>${alertas.map((x) => `<div class="banner warn">${NIVEL[x.nivel]} · ${esc(x.c.codigo)} lleva ${x.hoy > 0 ? "+" : ""}${money(x.hoy)} hoy</div>`).join("")}
+  return hoyHtml() + `<div class="banner ${p.ok ? "ok" : "bad"}">${esc(p.txt)}</div>${alertas.map((x) => `<div class="banner warn">${NIVEL[x.nivel]} · ${esc(x.c.codigo)} lleva ${x.hoy > 0 ? "+" : ""}${money(x.hoy)} hoy</div>`).join("")}
   <div class="grid4">
     <div class="card kpi"><div class="lab">P&amp;L TOTAL SISTEMA <span>💰</span></div><div class="val ${cls(total)}">${money(total)}</div></div>
     <div class="card kpi"><div class="lab">CAPITAL BAJO GESTIÓN <span>🏦</span></div><div class="val blue">${money(cap)}</div></div>
@@ -286,6 +286,7 @@ V.dashboard = () => {
 V.grupos = () => {
   const days = dayMap(), gs = grupos().filter((g) => S.f.chip === "todos" || g.id === S.f.chip);
   return `<div class="chips">${[["todos", "Todos"], ...grupos().map((g) => [g.id, g.nombre])].map(([k, n]) => `<button type="button" data-chip="${esc(k)}" aria-pressed="${S.f.chip === k}">${esc(n)}</button>`).join("")}</div>
+  ${hoyHtml()}
   ${repartoHtml()}
   <div class="card"><div class="cardhead"><div><h3>Grupos</h3><p class="hint">Máximo 2 grupos activos simultáneos.</p></div><button class="btn green" type="button" data-new="grupo">+ Nuevo grupo</button></div>
   <div class="tablewrap"><table><thead><tr><th>GRUPO</th><th>EMPRESA</th><th>CUENTAS ACT.</th><th>SUPLENTE</th><th>CUENTAS VERDES</th><th>CUENTAS ROJAS</th><th>P&amp;L SEMANA</th><th>P&amp;L TOTAL</th><th>% DRAWDOWN</th><th>ESTADO</th><th></th></tr></thead><tbody>
@@ -627,6 +628,73 @@ async function autoRegistro() {
   finally { S.autoregBusy = false; }
 }
 
+// ── "Hoy operas": the two-bullet plan for exams and strong day + minimum days for funded accounts ──
+// Exams: bullet 1 risks b1r to make b1t; if it wins, bullet 2 goes in the SAME account (b2r to make b2t), never past the
+// consistency cap of the day. If bullet 1 loses, that account stops for the day and the next one (or next group) takes over.
+// A winning or flat day keeps the same account in focus; a losing day moves the focus on.
+const ESTRATEGIA_DEF = { modo: "individual", opsDia: 2, b1r: 1000, b1t: 1000, b2r: 1000, b2t: 500, consistencia: 50, fuerteTP: 2500, fuerteSL: 2000, minimo: 150, minimoSL: 300, diasPayout: 5 };
+const est = () => ({ ...ESTRATEGIA_DEF, ...(S.estrategia || {}) });
+const tradesDia = (c, d) => [...(ts(c)?.trades || []).filter((x) => x.fecha === d).map((x) => ({ pnl: Number(x.pnl) || 0, at: x.cierra || "" })),
+  ...list(S.ops).filter((o) => o.cuenta === c.id && o.fecha === d).map((o) => ({ pnl: Number(o.pnl) || 0, at: o.creado || "" }))].sort((a, b) => (a.at < b.at ? -1 : 1));
+function unidades() {
+  const E = est(), gs = rotan(), ex = cuentas().filter((c) => vivaC(c) && c.tipo !== "Fondeada" && gs.some((g) => g.id === c.grupo));
+  if (E.modo === "grupo") return gs.map((g) => ({ id: g.id, nombre: g.nombre, cuentas: ex.filter((c) => c.grupo === g.id) })).filter((u) => u.cuentas.length);
+  return ex.map((c) => ({ id: c.id, nombre: c.codigo, cuentas: [c] }));
+}
+function balas(c, d) {
+  const E = est(), tr = tradesDia(c, d), tot = tr.reduce((a, x) => a + x.pnl, 0), obj = Number(c.tp) || 3000, falta = Math.max(0, obj - pnl(c));
+  const tope = obj * E.consistencia / 100, colchon = pnl(c) - (Number(c.sl) || -2000);
+  if (falta <= 0) return { estado: "hecho", txt: "🏁 Objetivo alcanzado: revisa días mínimos y consistencia antes de pedir la fondeada." };
+  if (!tr.length) { const r = Math.min(E.b1r, colchon), g = Math.min(E.b1t, falta, tope);
+    return { estado: "bala1", r, g, txt: "Bala 1: arriesga " + money(r) + " para ganar " + money(g) + "." + (colchon <= E.b1r ? " ⚠️ Solo le queda " + money(colchon) + " de margen: es su última bala." : "") }; }
+  if (tr.length === 1 && tr[0].pnl > 0) { const g = Math.min(E.b2t, falta - tot > 0 ? falta - tot : 0, Math.max(0, tope - tot)), r = Math.min(E.b2r, colchon);
+    return g > 0 ? { estado: "bala2", r, g, tot, txt: "✅ Bala 1 ganada (" + signed(tot) + "). Bala 2 en " + (E.modo === "grupo" ? "este MISMO grupo" : "esta MISMA cuenta") + ": arriesga " + money(r) + " para ganar " + money(g) + ". Ya no puede quemarse hoy." }
+                 : { estado: "fin", tot, txt: "✅ Día hecho (" + signed(tot) + "): llegas al tope del día por la consistencia. Mañana sigue esta cuenta." }; }
+  if (tr[0].pnl <= 0 && tr.length === 1) return { estado: "stop", tot, txt: "🛑 Stop en la bala 1 (" + signed(tot) + "): esta cuenta para hoy. La siguiente bala va a la siguiente cuenta." };
+  return { estado: "fin", tot, txt: (tot > 0 ? "✅ Día hecho (" : tot < 0 ? "🛑 Día cerrado (" : "Día cerrado (") + signed(tot) + "). " + (tot < 0 ? "Mañana toca otra cuenta." : "Mañana sigue esta cuenta.") };
+}
+function hoyOperas() {
+  const E = est(), dia = tradingDay(Date.now()), us = unidades(), R = S.rotacion || {};
+  if (!us.length) return { unidades: [], foco: null, lineas: ["No hay exámenes vivos en los grupos que rotan. Cuando compres cuentas, Jarvis las registra y aquí te dirá cuál operar."], fondeadas: fondeadasHoy() };
+  let i = Math.max(0, us.findIndex((u) => u.id === R.foco)); if (us.findIndex((u) => u.id === R.foco) < 0) i = 0;
+  const estadoU = (u) => balas(u.cuentas[0], dia), usadas = us.reduce((a, u) => a + tradesDia(u.cuentas[0], dia).length, 0);
+  // a stop moves the next bullet (and tomorrow's focus) to the next unit that hasn't traded today
+  let foco = us[i], e = estadoU(foco);
+  if (e.estado === "stop" || (e.estado === "fin" && e.tot < 0)) { for (let k = 1; k < us.length; k++) { const u = us[(i + k) % us.length]; if (!tradesDia(u.cuentas[0], dia).length) { foco = u; e = estadoU(u); break; } } }
+  const lineas = [];
+  if (usadas >= E.opsDia && e.estado !== "bala2") lineas.push("Por hoy has terminado tus " + E.opsDia + " operaciones. Mañana: " + foco.nombre + ".");
+  else lineas.push("Opera " + (E.modo === "grupo" ? foco.nombre + " (" + foco.cuentas.map((c) => c.codigo).join(", ") + ", copiadas desde la MASTER)" : foco.nombre) + ". " + e.txt);
+  return { dia, foco, e, unidades: us.map((u) => ({ u, e: estadoU(u) })), lineas, fondeadas: fondeadasHoy() };
+}
+function fondeadasHoy() {
+  const E = est(), dm = dayMap(), fs_ = cuentas().filter((c) => vivaC(c) && c.tipo === "Fondeada");
+  const info = fs_.map((c) => { const v = Object.values(dm[c.id] || {}); return { c, best: Math.max(0, ...v), dias: v.filter((x) => x >= E.minimo).length, colchon: pnl(c) - (Number(c.sl) || -2000) }; });
+  const fuerte = info.filter((x) => x.best < E.fuerteTP && x.dias < E.diasPayout && x.colchon >= E.fuerteSL).sort((a, b) => b.colchon - a.colchon)[0];
+  return info.map((x) => ({ cuenta: x.c.codigo, txt: x.dias >= E.diasPayout ? "💰 Ya tiene " + x.dias + " días mínimos: puedes pedir el payout."
+    : x === fuerte ? "💪 Día fuerte: objetivo " + money(E.fuerteTP) + ", stop " + money(Math.min(E.fuerteSL, x.colchon)) + "."
+    : "📅 Día mínimo: gana al menos " + money(E.minimo) + " con stop de " + money(Math.min(E.minimoSL, x.colchon)) + " (lleva " + x.dias + "/" + E.diasPayout + ")." }));
+}
+// The focus moves on by itself: a new trading day after a losing day, or a stop today, writes the next unit.
+async function avanzarFoco() {
+  if (!S.db || !S.ready || !S.rotacionLista || S.rotBusy) return;
+  const h = hoyOperas(); if (!h.foco) return;
+  const R = S.rotacion || {}; if (R.foco === h.foco.id) return;
+  S.rotBusy = true;
+  try { await S.db.doc("fm/plan").collection("config").doc("rotacion").set({ foco: h.foco.id, dia: h.dia, historial: [...(R.historial || []).slice(-40), { dia: h.dia, de: R.foco || null, a: h.foco.id }] }); }
+  catch {} finally { S.rotBusy = false; }
+}
+function hoyHtml() {
+  const E = est(), h = hoyOperas();
+  return `<div class="card" style="margin-bottom:18px;border:2px solid #22c55e"><div class="cardhead"><div><h3>🎯 Hoy operas</h3><p class="hint">Tu plan de 2 balas: Bala 1 ${money(E.b1r)} para ${money(E.b1t)}; si gana, Bala 2 en la misma cuenta ${money(E.b2r)} para ${money(E.b2t)}. Si la Bala 1 pierde, esa cuenta para y la siguiente bala va ${E.modo === "grupo" ? "al siguiente grupo" : "a la siguiente cuenta"}.</p></div>
+    <div class="seg"><button type="button" data-modo="individual" aria-pressed="${E.modo === "individual"}">Cuenta a cuenta</button><button type="button" data-modo="grupo" aria-pressed="${E.modo === "grupo"}">Por grupos (copiadas)</button></div></div>
+    ${h.lineas.map((l) => `<div class="banner ok" style="margin-bottom:8px">${esc(l)}</div>`).join("")}
+    ${h.unidades.length ? `<div class="tablewrap"><table><thead><tr><th>${E.modo === "grupo" ? "GRUPO" : "CUENTA"}</th><th>HOY</th></tr></thead><tbody>${h.unidades.map(({ u, e }) => `<tr><td><b>${esc(u.nombre)}</b>${u.id === h.foco.id ? ' <span class="live">EN FOCO</span>' : ""}<br><small class="dim">${esc(u.cuentas.map((c) => c.codigo + " " + signed(pnl(c))).join(" · "))}</small></td><td style="white-space:normal">${esc(e.txt)}</td></tr>`).join("")}</tbody></table></div>` : ""}
+    ${h.fondeadas.length ? `<div class="sec" style="margin-top:16px">FONDEADAS · DÍA FUERTE + DÍAS MÍNIMOS</div>${h.fondeadas.map((f) => `<div class="rule"><b>${esc(f.cuenta)}</b><span class="v" style="grid-column:span 2">${esc(f.txt)}</span></div>`).join("")}` : ""}
+    <details style="margin-top:12px"><summary class="hint" style="cursor:pointer">Ajustar la estrategia</summary><div class="filters" style="margin-top:10px">
+      ${[["b1r", "Bala 1 · riesgo"], ["b1t", "Bala 1 · objetivo"], ["b2r", "Bala 2 · riesgo"], ["b2t", "Bala 2 · objetivo"], ["opsDia", "Operaciones al día"], ["fuerteTP", "Día fuerte · objetivo"], ["minimo", "Día mínimo · ganar"], ["minimoSL", "Día mínimo · stop"], ["diasPayout", "Días mínimos para payout"]]
+        .map(([k, l]) => `<label style="display:grid;gap:4px;font-size:12px;color:var(--muted)">${l}<input type="number" data-est="${k}" value="${E[k]}" style="width:120px"></label>`).join("")}</div></details></div>`;
+}
+
 // ── render & events ────────────────────────────────────────────
 function render() {
   $("#pf-tabs").innerHTML = TABS.map(([k, n]) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${S.tab === k}">${n}</button>`).join("");
@@ -666,6 +734,7 @@ root.addEventListener("click", async (e) => {
     const r = revActual(); await S.db.doc("fm/plan").collection("revisiones").doc(r.id).set({ checks: r.checks, estados: r.estados, notas: r.notas, guardada: new Date().toISOString() });
     toast("Revisión guardada."); return;
   }
+  if (d.modo) { await guardarEst({ modo: d.modo }); return; }
   if (d.act === "repartir") {
     if (!S.db) return toast("Abre el Plan dentro de Claude para guardar.");
     if (!dosToques(t, "¿Aplicar? Toca otra vez")) return;
@@ -676,8 +745,13 @@ root.addEventListener("click", async (e) => {
   if (d.ign) { if (!S.db) return; await S.db.doc("fm/plan").collection("config").doc("autoregistro").update({ ignoradas: [...(S.autoreg?.ignoradas || []), d.ign] }); toast("Ignorada."); return; }
   if (d.act === "nueva-rev") { S.rev = { id: domingoHoy(), checks: {}, estados: {}, notas: "" }; render(); return; }
 });
+async function guardarEst(p) {
+  S.estrategia = { ...est(), ...p }; render();
+  if (S.db) try { await S.db.doc("fm/plan").collection("config").doc("estrategia").set(S.estrategia); toast("Estrategia guardada."); } catch (err) { toast("No se ha guardado: " + (err.message || "error")); }
+}
 root.addEventListener("change", (e) => {
   const t = e.target, d = t.dataset;
+  if (d.est) { const v = Number(t.value); if (Number.isFinite(v) && v >= 0) guardarEst({ [d.est]: v }); return; }
   if (d.f) { S.f[d.f] = t.value; S.page.cuentas = S.page.ops = 0; render(); return; }
   if (d.calf) { S.cal[d.calf] = t.value; render(); return; }
   if (d.r) { const [id, k] = d.r.split("."); S.risk[id] = { ...(S.risk[id] || {}), [k]: t.type === "number" ? Number(t.value) : t.value }; guardarRiesgo(0); return; }
@@ -726,6 +800,8 @@ function contexto() {
     operacionesRecientes: os.slice(0, 15).map((o) => ({ origen: o.auto ? "Topstep (automática)" : "apuntada a mano", fecha: o.fecha, cuenta: cCode(o.cuenta), instrumento: o.instr, direccion: o.dir, contratos: o.contratos, pnl: o.pnl, resultado: o.resultado })),
     semanas: semanasAll(days).sort((a, b) => (b.inicio || "").localeCompare(a.inicio || "")).slice(0, 12).map((w) => { const st = semanaStats(w, days);
       return { semana: w.semana, inicio: w.inicio, grupo: gName(w.grupo), pnl: Math.round(st.pnl * 100) / 100, pctCapital: Math.round(st.pct * 100) / 100, operaciones: st.ops, automatica: !!w.auto }; }),
+    hoyOperas: (() => { const h = hoyOperas(); return { queOperarHoy: h.lineas, modo: est().modo === "grupo" ? "por grupos copiados desde la MASTER" : "cuenta a cuenta",
+      estrategia: est(), cuentas: (h.unidades || []).map(({ u, e }) => ({ unidad: u.nombre, enFoco: h.foco && u.id === h.foco.id, hoy: e.txt })), fondeadas: h.fondeadas }; })(),
     vigilanciaHoy: vigil().map((x) => ({ cuenta: x.c.codigo, pnlHoy: x.hoy, limitePerdidaDiaria: x.dll, objetivoDiario: x.dpt, estado: x.nivel ? NIVEL[x.nivel] : "dentro de sus límites" })),
     fichaTopstepX: vigil().map((x) => ({ cuenta: x.c.codigo, idTopstep: x.c.topstepId, limitePerdidaDiaria: x.dll, accionLimite: x.r.dllAccion, objetivoGananciaDiaria: x.dpt, accionObjetivo: x.r.dptAccion, multiplicadorCopiador: x.r.mult })),
     cuentasTopstepSinRegistrar: sinRegistrar().map((a) => a.nombre),
@@ -750,6 +826,9 @@ window.PLAN = { contexto, render, open: (tab) => { if (typeof tab === "string" &
   const sub = (col, map) => plan.collection(col).onSnapshot((snap) => { map.clear(); for (const d of snap.docs) map.set(d.id, d.data()); if (col === "revisiones" && S.rev && !S.revisiones.has(S.rev.id)) {} done(col); }, () => done(col));
   sub("grupos", S.grupos); sub("cuentas", S.cuentas); sub("operaciones", S.ops); sub("semanas", S.semanas); sub("revisiones", S.revisiones);
   db.doc("fm/topstep").onSnapshot((snap) => { S.topstep = snap.exists ? snap.data() : null; done("topstep"); }, () => done("topstep"));
+  plan.collection("config").doc("estrategia").onSnapshot((snap) => { S.estrategia = snap.exists ? snap.data() : null; render(); }, () => {});
+  plan.collection("config").doc("rotacion").onSnapshot((snap) => { S.rotacion = snap.exists ? snap.data() : null; S.rotacionLista = true; setTimeout(avanzarFoco, 300); render(); }, () => {});
+  setInterval(avanzarFoco, 20000);
   plan.collection("config").doc("autoregistro").onSnapshot((snap) => { S.autoreg = { exists: snap.exists, ...(snap.exists ? snap.data() : {}) }; autoRegistro(); render(); }, () => {});
   setTimeout(() => { if (!S.ready) { S.ready = true; render(); } }, 8000);
   setInterval(autoRegistro, 15000);

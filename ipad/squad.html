@@ -364,11 +364,11 @@ function TopStepSquad() {
             const grupoActualLetra = String.fromCharCode(65 + currentGroup);
             setCurrentGroup(siguiente);
             setRotationLog(prev => [...prev, { group: siguiente, reason: `Stop en Grupo ${grupoActualLetra} (${acc ? acc.name : ''}) — se migra el riesgo`, trades: 0 }]);
-            setUltimoAviso({ tipo: 'migra', desde: currentGroup, hacia: siguiente, texto: `Stop registrado en Grupo ${grupoActualLetra}. Ahora te toca Grupo ${grupoLetra}.` });
+            setUltimoAviso({ tipo: 'migra', desde: currentGroup, hacia: siguiente, texto: `Stop registrado en Grupo ${grupoActualLetra}: esa cuenta para por hoy. La siguiente bala va al Grupo ${grupoLetra}.` });
         }
         else {
             const grupoLetra = String.fromCharCode(65 + currentGroup);
-            setUltimoAviso({ tipo: 'mantiene', desde: currentGroup, hacia: currentGroup, texto: `Ganancia registrada. Te mantienes en Grupo ${grupoLetra}.` });
+            setUltimoAviso({ tipo: 'mantiene', desde: currentGroup, hacia: currentGroup, texto: (acc && acc.trades.filter(t => t.fecha === new Date().toISOString().slice(0, 10)).length === 0) ? `Bala 1 ganada. Bala 2 en esta MISMA cuenta (${acc.name}): arriesga 1.000 $ para ganar 500 $. Te mantienes en Grupo ${grupoLetra}.` : `Ganancia registrada: día hecho en ${acc ? acc.name : 'esta cuenta'}. Mañana sigue el Grupo ${grupoLetra}.` });
         }
     };
     const deshacerUltimo = (accId) => {
