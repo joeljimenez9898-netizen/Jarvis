@@ -199,6 +199,107 @@ export function vigilancia(planCuentas, cuentasTs, at, prev) {
   return { fecha: hoy, at, cuentas: filas, avisados: [...ya], nuevos };
 }
 
+// <motor-reglas> Joel's rules engine. One copy: the iPad Plan de Futuros runs this same text (build-space.mjs copies it in),
+// so the hourly watch on his phone and the app always say the same. Pure: no I/O, no clock, plain JavaScript.
+//   estrategia: his settings (Plan de Futuros → Hoy operas → Ajustar la estrategia)
+//   cuentas: [{ codigo, tipo, estado, tp, sl, orden, pnl, dias: { "YYYY-MM-DD": pnl }, tradesHoy: [pnl, …] }]
+// Exams: bullet 1 risks b1r for b1t; if it wins, bullet 2 in the same account closes at exactly b2t (no trailing), and the
+// day never passes the consistency cap. Funded: one account does the strong day while the ones that already won theirs do
+// minimum days (risk minimoSL for minimo, then the stop goes to +minimo). An account with margin for less than two stops
+// trades in recovery (recupR risk) until it has it again; a failed strong day hands the strong slot to the next account.
+export const ESTRATEGIA_DEF = { v: 2, modo: "individual", opsDia: 2, b1r: 1000, b1t: 1000, b2r: 1000, b2t: 500, consistencia: 50,
+  fuerteTP: 1000, fuerteSL: 1000, minimo: 150, minimoSL: 1000, recupR: 500, diasPayout: 5 };
+// Settings saved before the strong-day ladder (v1) kept the old funded numbers; those come from the defaults now.
+export function estrategiaDe(guardada) {
+  const g = { ...(guardada || {}) };
+  if ((Number(g.v) || 1) < 2) for (const k of ["fuerteTP", "fuerteSL", "minimo", "minimoSL", "recupR", "v"]) delete g[k];
+  return { ...ESTRATEGIA_DEF, ...g };
+}
+export function motorReglas({ estrategia: E, cuentas, hoy }) {
+  const m = (n) => Math.round(Math.abs(n)).toLocaleString("es-ES", { useGrouping: "always" }) + " $";
+  const sg = (n) => (n < 0 ? "−" : "+") + m(n);
+  const viva = (c) => c.estado === "ACTIVA" || c.estado === "EXAM";
+  const out = { examenes: [], fondeadas: [], avisos: [], resumen: "" };
+  const av = (k, txt) => out.avisos.push({ key: hoy + ":" + k, txt });
+  // margin to the end-of-day trailing floor (Topstep): the floor follows the best closing balance, never above the start
+  const margen = (c) => {
+    const dias = c.dias || {}, h = Number(dias[hoy]) || 0, dd = Math.abs(Number(c.sl) || 2000), pnl0 = (Number(c.pnl) || 0) - h;
+    const prev = Object.keys(dias).filter((d) => d < hoy).sort(), suma = prev.reduce((a, d) => a + (Number(dias[d]) || 0), 0);
+    let run = pnl0 - suma, pico = Math.max(0, run);
+    for (const d of prev) { run += Number(dias[d]) || 0; pico = Math.max(pico, run); }
+    const suelo = Math.min(pico - dd, 0);
+    return { h, pnl0, antes: prev.map((d) => Number(dias[d]) || 0), m0: pnl0 - suelo, ahora: (Number(c.pnl) || 0) - suelo };
+  };
+  for (const c of cuentas.filter((x) => viva(x) && x.tipo !== "Fondeada")) {
+    const tr = c.tradesHoy || [], tot = tr.reduce((a, x) => a + x, 0), obj = Number(c.tp) || 3000, tope = obj * E.consistencia / 100, g = margen(c);
+    let txt;
+    if ((Number(c.pnl) || 0) >= obj) { txt = "🏁 Examen pasado (" + sg(c.pnl) + "). No operes más en ella: revisa la consistencia y pide la fondeada.";
+      av(c.codigo + ":objetivo", "🏁 " + c.codigo + " ha llegado al objetivo del examen (" + sg(c.pnl) + "). No operes más en ella: revisa la consistencia y pide la fondeada."); }
+    else if (tot >= tope) { txt = "🏁 Tope del día: " + sg(tot) + ". Cierra y no operes más esta cuenta hoy.";
+      av(c.codigo + ":tope", "🏁 " + c.codigo + " lleva " + sg(tot) + " hoy: es el tope del día por la consistencia (" + m(tope) + "). Cierra y no operes más esta cuenta hoy."); }
+    else if (tr.length === 1 && tr[0] > 0) { const ga = Math.min(E.b2t, tope - tot), r = Math.min(E.b2r, g.ahora);
+      txt = "✅ Bala 1 ganada. Bala 2: arriesga " + m(r) + " para ganar " + m(ga) + " y cierra en " + sg(ga) + " justos, sin trailing.";
+      av(c.codigo + ":bala2", "✅ " + c.codigo + " ha ganado la bala 1 (" + sg(tr[0]) + "). Bala 2 en la misma cuenta: arriesga " + m(r) + " para ganar " + m(ga) + " y cierra en " + sg(ga) + " justos, sin trailing. Así el día queda en " + sg(tot + ga) + ", dentro del tope de " + m(tope) + "."); }
+    else if (tr.length === 1 && tr[0] < 0) { txt = "🛑 Stop en la bala 1: esta cuenta para hoy.";
+      av(c.codigo + ":stop", "🛑 " + c.codigo + " ha hecho stop en la bala 1 (" + sg(tr[0]) + "): esta cuenta para hoy. La siguiente bala va a la siguiente cuenta."); }
+    else txt = tr.length ? "Día cerrado (" + sg(tot) + ")." : "Bala 1: arriesga " + m(Math.min(E.b1r, g.m0)) + " para ganar " + m(Math.min(E.b1t, obj - g.pnl0, tope)) + ".";
+    if (g.ahora > 0 && g.ahora <= E.b1r && !((Number(c.pnl) || 0) >= obj) && !(tr.length === 1 && tr[0] < 0))
+      av(c.codigo + ":margen", "⚠️ A " + c.codigo + " solo le quedan " + m(g.ahora) + " de margen: le cabe un stop más. Su próxima bala es la última.");
+    out.examenes.push({ cuenta: c.codigo, txt });
+  }
+  const fs_ = cuentas.filter((x) => viva(x) && x.tipo === "Fondeada")
+    .sort((a, b) => (Number(a.orden) || 0) - (Number(b.orden) || 0) || String(a.codigo).localeCompare(String(b.codigo), "es", { numeric: true }));
+  const info = fs_.map((c) => { const g = margen(c), d0 = g.antes.filter((v) => v >= E.minimo).length;
+    return { c, ...g, d0, d: d0 + (g.h >= E.minimo ? 1 : 0), fuerte0: g.antes.some((v) => v >= E.fuerteTP) }; });
+  const listo = (x) => x.d0 >= E.diasPayout, riesgo = (x, r) => (x.m0 >= 2 * r ? r : Math.max(0, Math.min(E.recupR, x.m0)));
+  const cand = info.filter((x) => !x.fuerte0 && !listo(x) && x.m0 >= 2 * E.fuerteSL), fuerte = cand[0], sig = cand[1];
+  const tras = sig ? " y el día fuerte lo hace " + sig.c.codigo : " (no queda otra cuenta para el día fuerte)";
+  for (const x of info) {
+    const cod = x.c.codigo, rol = listo(x) ? "payout" : x === fuerte ? "fuerte" : x.fuerte0 ? "minimos" : x.m0 < 2 * E.fuerteSL ? "recuperacion" : "espera";
+    const r = rol === "fuerte" ? riesgo(x, E.fuerteSL) : riesgo(x, E.minimoSL), suave = r < (rol === "fuerte" ? E.fuerteSL : E.minimoSL);
+    let txt = rol === "payout" ? "💰 Tiene " + x.d0 + " días mínimos: pide el payout."
+      : rol === "fuerte" ? "💪 Día fuerte: arriesga " + m(r) + " para ganar " + m(E.fuerteTP) + "."
+      : rol === "espera" ? (x === sig && (fuerte.h >= E.fuerteTP || fuerte.h <= -0.9 * riesgo(fuerte, E.fuerteSL)) ? "⏭ Hoy no se opera: mañana hace su día fuerte." : "⏸ Hoy no se opera: espera su turno de día fuerte" + (fuerte ? " (después de " + fuerte.c.codigo + ")." : "."))
+      : (rol === "recuperacion" || suave ? "🩹 Modo recuperación: " : "📅 Día mínimo: ") + "arriesga " + m(r) + " para ganar " + m(E.minimo) + "; al llegar a " + sg(E.minimo) +
+        " sube el stop a " + sg(E.minimo) + " y deja correr (lleva " + x.d0 + "/" + E.diasPayout + ")." +
+        (rol === "recuperacion" ? " Vuelve a la cola del día fuerte cuando tenga margen para 2 stops (le faltan " + m(2 * E.fuerteSL - x.m0) + ")." : "");
+    if (rol === "fuerte" && x.h >= E.fuerteTP) { txt = "✅ Día fuerte ganado hoy (" + sg(x.h) + "). Mañana pasa a días mínimos" + tras + ".";
+      av(cod + ":fuerte-ok", "✅ " + cod + " ha ganado su día fuerte (" + sg(x.h) + "). Cierra por hoy. Mañana " + cod + " pasa a días mínimos" + tras + "."); }
+    else if (rol === "fuerte" && r && x.h <= -0.9 * r) { txt = "🛑 Día fuerte fallado (" + sg(x.h) + "). Mañana pasa a modo recuperación" + tras + ".";
+      av(cod + ":fuerte-ko", "🛑 " + cod + " ha fallado su día fuerte (" + sg(x.h) + "). Para por hoy. Mañana " + cod + " pasa a modo recuperación (arriesga " + m(E.recupR) + " para ganar " + m(E.minimo) + ")" + tras + "."); }
+    else if ((rol === "minimos" || rol === "recuperacion") && x.h >= E.minimo) {
+      txt = "✅ Día mínimo hecho hoy (" + sg(x.h) + ", " + x.d + "/" + E.diasPayout + ").";
+      av(cod + ":min-ok", "✅ " + cod + " ya tiene su día mínimo (" + sg(x.h) + ", lleva " + x.d + "/" + E.diasPayout + "). Si sigue abierta, el stop en " + sg(E.minimo) + " y deja correr."); }
+    else if ((rol === "minimos" || rol === "recuperacion") && r && x.h <= -0.9 * r) { txt = "🛑 Stop en el día mínimo (" + sg(x.h) + "): para por hoy.";
+      av(cod + ":min-ko", "🛑 " + cod + " ha hecho stop en su día mínimo (" + sg(x.h) + "): para por hoy."); }
+    if (!listo(x) && x.d >= E.diasPayout) av(cod + ":payout", "💰 " + cod + " ya tiene " + x.d + " días mínimos: puedes pedir el payout.");
+    if (x.m0 < 2 * E.fuerteSL && x.ahora >= 2 * E.fuerteSL) av(cod + ":recuperada", "💪 " + cod + " se ha recuperado: vuelve a tener margen para 2 stops y entra otra vez en la cola del día fuerte.");
+    const ko = r && x.h <= -0.9 * r && rol !== "espera" && rol !== "payout";
+    if (!ko && x.ahora > 0 && x.ahora <= Math.max(E.fuerteSL, E.minimoSL) && x.m0 > Math.max(E.fuerteSL, E.minimoSL))
+      av(cod + ":margen", "⚠️ A " + cod + " solo le quedan " + m(x.ahora) + " de margen: le cabe un stop más. Mañana opera en modo recuperación.");
+    out.fondeadas.push({ cuenta: cod, rol, txt });
+  }
+  const juntas = out.fondeadas.filter((f) => f.rol === "minimos" || f.rol === "recuperacion").map((f) => f.cuenta);
+  const partes = [juntas.length ? juntas.join(", ") + " en días mínimos" : "", fuerte ? fuerte.c.codigo + " en día fuerte" : ""].filter(Boolean);
+  out.resumen = !info.length ? "" : !partes.length ? "Fondeadas hoy: ninguna cuenta opera (mira las que esperan payout)." :
+    "Fondeadas hoy: " + partes.join(" + ") + (partes.length > 1 ? ", operadas juntas." : ".") + (fuerte ? "" : " Todas han hecho ya su día fuerte.");
+  return out;
+}
+// </motor-reglas>
+
+/** The rules engine on the accounts Topstep reads (linked plan accounts only); a warning already given today is not repeated. */
+export function reglasDelDia(planCuentas, cuentasTs, estrategia, at, prev) {
+  const hoy = tradingDay(at), ya = new Set(prev && prev.reglas && prev.fecha === hoy ? prev.reglas.avisados || [] : []);
+  const cuentas = planCuentas.filter((c) => c.topstepId && cuentasTs[c.topstepId] && cuentasTs[c.topstepId].balance != null).map((c) => {
+    const t = cuentasTs[c.topstepId];
+    return { codigo: c.codigo, tipo: c.tipo, estado: c.estado, tp: c.tp, sl: c.sl, orden: c.orden, pnl: Math.round((t.balance - (Number(c.balanceIni) || 0)) * 100) / 100, dias: t.dias || {},
+             tradesHoy: (t.trades || []).filter((o) => o.fecha === hoy).sort((a, b) => (a.cierra < b.cierra ? -1 : 1)).map((o) => Number(o.pnl) || 0) };
+  });
+  const r = motorReglas({ estrategia: estrategiaDe(estrategia), cuentas, hoy });
+  const nuevos = r.avisos.filter((a) => !ya.has(a.key));
+  return { examenes: r.examenes, fondeadas: r.fondeadas, resumen: r.resumen, avisos: r.avisos.map((a) => a.txt), avisados: [...ya, ...nuevos.map((a) => a.key)], nuevos: nuevos.map((a) => a.txt) };
+}
+
 /** The weekday session question: today's P&L per account, and what Jarvis asks. */
 export function checkin(list, sesion, at) {
   const hoy = tradingDay(at);
@@ -262,7 +363,13 @@ async function main() {
   const raw = prevFile && fs.existsSync(prevFile) ? JSON.parse(fs.readFileSync(prevFile, "utf8")) : null;
   const prev = raw && raw.data && typeof raw.data === "object" ? raw.data : raw;
   doc.vigilancia = vigilancia(dir ? readDocs(dir, "fm/plan/cuentas") : [], doc.cuentas, at, prev && prev.vigilancia);
-  if (doc.vigilancia.nuevos.length) doc.resumen = "Vigilancia de límites:\n" + doc.vigilancia.nuevos.join("\n") + "\n\n" + doc.resumen;
+  // Joel's rules (exams: 2 bullets; funded: strong day + minimum days), each warning once a day, on the same phone message
+  const estFile = dir && path.join(dir, "fm", "plan", "config", "estrategia.json");
+  const estRaw = estFile && fs.existsSync(estFile) ? JSON.parse(fs.readFileSync(estFile, "utf8")) : null;
+  doc.vigilancia.reglas = reglasDelDia(dir ? readDocs(dir, "fm/plan/cuentas") : [], doc.cuentas, estRaw && estRaw.data && typeof estRaw.data === "object" ? estRaw.data : estRaw, at, prev && prev.vigilancia);
+  doc.vigilancia.nuevos.push(...doc.vigilancia.reglas.nuevos);
+  if (doc.vigilancia.nuevos.length) doc.resumen = "Avisos de hoy:\n" + doc.vigilancia.nuevos.join("\n") + "\n\n" + doc.resumen;
+  if (doc.vigilancia.reglas.resumen) doc.resumen += "\n" + doc.vigilancia.reglas.resumen;
   const m = mercado(token);
   fs.writeFileSync(outM, JSON.stringify(m, null, 1));
   doc.resumen += "\n\nMercado: " + m.texto;

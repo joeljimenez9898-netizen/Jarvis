@@ -195,13 +195,15 @@ export const SCRIPT = `
       const frase = (f) => f.nivel === "dll100" ? "🛑 " + f.cuenta + " ha pasado su límite de pérdida diaria: lleva " + usd(f.hoy) + " hoy (límite " + usd(-f.limitePerdida) + "). Tu plan dice parar."
         : f.nivel === "dll80" ? "⚠️ " + f.cuenta + " lleva " + usd(f.hoy) + " hoy: está al " + Math.round((-f.hoy / f.limitePerdida) * 100) + " % de su límite de pérdida diaria (" + usd(-f.limitePerdida) + ")."
         : "🎯 " + f.cuenta + " ha llegado a su objetivo del día: lleva " + usd(f.hoy) + " (objetivo " + usd(f.objetivo) + "). Tu plan dice cerrar.";
-      const lista = () => { const v = hoy(); return v ? v.cuentas.filter((f) => f.nivel).map(frase) : []; };
+      // plus what his own rules say now (Plan de Futuros: 2 bullets, strong day + minimum days), the same the hourly watch sends to his phone
+      const reglas = () => (window.PLAN && window.PLAN.avisos ? window.PLAN.avisos().map((a) => a.txt) : []);
+      const lista = () => { const v = hoy(); return [...(v ? v.cuentas.filter((f) => f.nivel).map(frase) : []), ...reglas()]; };
       const texto = () => {
         const v = hoy();
-        if (!v) return "Hoy todavía no hay ninguna comprobación de tus cuentas, Joel. Jarvis las mira cada hora de 8:00 a 22:00, de lunes a viernes.";
+        if (!v) return reglas().length ? "Avisos de tus reglas, Joel:\\n" + reglas().join("\\n") : "Hoy todavía no hay ninguna comprobación de tus cuentas, Joel. Jarvis las mira cada hora de 8:00 a 22:00, de lunes a viernes.";
         const hora = new Date(v.at).toLocaleTimeString("es-ES", { timeZone: "Europe/Madrid", hour: "2-digit", minute: "2-digit" }), L = lista();
         const resto = v.cuentas.filter((f) => !f.nivel).map((f) => f.cuenta + " " + usd(f.hoy)).join(", ");
-        return (L.length ? "Avisos de hoy, Joel:\\n" + L.join("\\n") : "Sin avisos hoy, Joel: todas tus cuentas están dentro de sus límites.") +
+        return (L.length ? "Avisos de hoy, Joel:\\n" + L.join("\\n") : "Sin avisos hoy, Joel: todas tus cuentas están dentro de sus límites y ninguna regla ha saltado.") +
           (resto ? "\\n" + (L.length ? "El resto, dentro de sus límites: " : "Hoy llevan: ") + resto + "." : "") + "\\nÚltima comprobación: " + hora + " (hora de España).";
       };
       const mostrar = () => {
@@ -210,10 +212,10 @@ export const SCRIPT = `
         card.querySelector(".q").textContent = "Jarvis · avisos de hoy";
         card.querySelector(".chips").replaceChildren();
         const a = card.querySelector(".a"); a.style.whiteSpace = "pre-line"; a.textContent = t;
-        if (window.Voice) { Voice.stopSpeaking && Voice.stopSpeaking(); Voice.speak(t.replace(/[🛑⚠️🎯]/gu, "").replace(/\\$/g, "dólares")); }
+        if (window.Voice) { Voice.stopSpeaking && Voice.stopSpeaking(); Voice.speak(t.replace(/[🛑⚠️🎯✅🏁💪💰⏭⏸🩹📅]/gu, "").replace(/\\$/g, "dólares")); }
         return t;
       };
-      setInterval(() => { const b = $("os-avisos"); if (!b) return; const n = lista().length; b.querySelector("span").textContent = hoy() ? (n ? n + (n === 1 ? " aviso" : " avisos") : "sin avisos") : "—";
+      setInterval(() => { const b = $("os-avisos"); if (!b) return; const n = lista().length; b.querySelector("span").textContent = hoy() || n ? (n ? n + (n === 1 ? " aviso" : " avisos") : "sin avisos") : "—";
         b.style.borderColor = n ? "#ff7b6b" : ""; }, 4000);
       return { lista, texto, mostrar };
     })();
@@ -328,6 +330,22 @@ export const SCRIPT = `
         card.querySelector(".a").textContent = texto;
         if (window.Voice) { Voice.stopSpeaking && Voice.stopSpeaking(); Voice.speak(texto); }
       }, 4000); }
+    // His rules (Plan de Futuros): each new warning is said once while Jarvis is open (the hourly watch also sends it to his phone).
+    { const t0 = Date.now(), KEY = "jarvis-reglas-oidas";
+      setInterval(() => {
+        const P = window.PLAN; if (!P || !P.avisos || Date.now() - t0 < 15000) return;
+        if (document.getElementById("answer").classList.contains("thinking")) return;
+        let heard = []; try { heard = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch {}
+        const nuevos = P.avisos().filter((a) => !heard.includes(a.key));
+        if (!nuevos.length) return;
+        try { localStorage.setItem(KEY, JSON.stringify([...heard, ...nuevos.map((a) => a.key)].slice(-80))); } catch {}
+        const texto = "Joel, tus reglas. " + nuevos.map((a) => a.txt).join(" "), card = $("answer");
+        card.className = "glass show";
+        card.querySelector(".q").textContent = "Jarvis · tus reglas";
+        card.querySelector(".chips").replaceChildren();
+        card.querySelector(".a").textContent = texto;
+        if (window.Voice) { Voice.stopSpeaking && Voice.stopSpeaking(); Voice.speak(texto.replace(/[🛑⚠️🎯✅🏁💪💰⏭⏸🩹📅]/gu, "").replace(/ \\$/g, " dólares")); }
+      }, 6000); }
     // Money plan (Capital propio): on withdrawal day, and when the risk his rules call for has changed, Jarvis says it once.
     { const t0 = Date.now(), KEY = "jarvis-dinero-oido";
       setInterval(() => {
