@@ -289,7 +289,8 @@ export function motorReglas({ estrategia: E, cuentas, hoy }) {
 
 /** The rules engine on the accounts Topstep reads (linked plan accounts only); a warning already given today is not repeated. */
 export function reglasDelDia(planCuentas, cuentasTs, estrategia, at, prev) {
-  const hoy = tradingDay(at), ya = new Set(prev && prev.reglas && prev.fecha === hoy ? prev.reglas.avisados || [] : []);
+  // what was said is kept in vigilancia.avisados too, which every older copy of this script carries over within the day
+  const hoy = tradingDay(at), ya = new Set(prev && prev.fecha === hoy ? [...((prev.reglas && prev.reglas.avisados) || []), ...(prev.avisados || []).filter((k) => k.startsWith(hoy + ":"))] : []);
   const cuentas = planCuentas.filter((c) => c.topstepId && cuentasTs[c.topstepId] && cuentasTs[c.topstepId].balance != null).map((c) => {
     const t = cuentasTs[c.topstepId];
     return { codigo: c.codigo, tipo: c.tipo, estado: c.estado, tp: c.tp, sl: c.sl, orden: c.orden, pnl: Math.round((t.balance - (Number(c.balanceIni) || 0)) * 100) / 100, dias: t.dias || {},
@@ -368,6 +369,7 @@ async function main() {
   const estRaw = estFile && fs.existsSync(estFile) ? JSON.parse(fs.readFileSync(estFile, "utf8")) : null;
   doc.vigilancia.reglas = reglasDelDia(dir ? readDocs(dir, "fm/plan/cuentas") : [], doc.cuentas, estRaw && estRaw.data && typeof estRaw.data === "object" ? estRaw.data : estRaw, at, prev && prev.vigilancia);
   doc.vigilancia.nuevos.push(...doc.vigilancia.reglas.nuevos);
+  doc.vigilancia.avisados = [...new Set([...doc.vigilancia.avisados, ...doc.vigilancia.reglas.avisados])];
   if (doc.vigilancia.nuevos.length) doc.resumen = "Avisos de hoy:\n" + doc.vigilancia.nuevos.join("\n") + "\n\n" + doc.resumen;
   if (doc.vigilancia.reglas.resumen) doc.resumen += "\n" + doc.vigilancia.reglas.resumen;
   const m = mercado(token);

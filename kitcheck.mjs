@@ -161,6 +161,9 @@ async function checkTopstepReadOnly() {
   const tsR = (t) => ({ 9: { balance: 50000 + t.reduce((a, b) => a + b, 0), dias: { [dR]: t.reduce((a, b) => a + b, 0) }, trades: t.map((pnl, i) => ({ fecha: dR, pnl, cierra: "2026-10-27T1" + i + ":00:00Z" })) } });
   const r1 = ts.reglasDelDia(pcR, tsR([1000]), null, atR, null), r2 = ts.reglasDelDia(pcR, tsR([1000]), null, atR, { fecha: dR, reglas: r1 }), r3 = ts.reglasDelDia(pcR, tsR([1000, 500]), null, atR, { fecha: dR, reglas: r2 });
   if (r1.nuevos.length !== 1 || r2.nuevos.length || r3.nuevos.length !== 1 || !r3.nuevos[0].includes("tope del día")) return [false, "hourly rule warnings: " + JSON.stringify([r1.nuevos, r2.nuevos, r3.nuevos])];
+  // the morning summary and the session question still run the previous copy: what they carry over (vigilancia.avisados) keeps a warning from repeating
+  const vR = ts.vigilancia(pcR, tsR([1000]), atR, null); vR.avisados = [...vR.avisados, ...r1.avisados];
+  if (ts.reglasDelDia(pcR, tsR([1000]), null, atR, ts.vigilancia(pcR, tsR([1000]), atR, vR)).nuevos.length) return [false, "a rule warning repeats after a run of the older script"];
   const day = ts.tradingDay("2026-10-15T23:30:00Z");          // 18:30 Chicago belongs to the next session
   return [ok && day === "2026-10-16", ok ? `Topstep sync limited to ${allowed.join(", ")}; trading day rolls at 17:00 Chicago (${day}); fills become whole trades (SHORT 12 MNQ, +1.503,36 net); daily limits warned once (85 %, then passed); his rules: bullet 2 to +500 sharp, +1.500 day cap, strong-day ladder with recovery, each warning once`
                                          : `Topstep sync allows: ${allowed.join(", ")}`];
