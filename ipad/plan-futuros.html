@@ -378,6 +378,27 @@ V.semanas = () => {
     <td>${w.auto ? "" : `<button class="ico" type="button" data-edit="semana" data-id="${w.id}" title="Editar">✏️</button>`}</td></tr>`; }).join("") || '<tr><td colspan="11" class="empty">Sin semanas todavía.</td></tr>'}
   </tbody></table></div></div>`;
 };
+// The rules and checklists he had before, kept so he can compare and choose (est().reglas / est().checks = "antes").
+const REGLAS_ANTES = [
+  ["ROTACIÓN DE CUENTAS", [["TP Objetivo", "3% sobre balance inicial", "Cuando toca → sigue operando, priorizas esta cuenta"], ["SL Límite Fondeada", "-2% sobre balance inicial", "Cuando toca → apartar, pasar a siguiente cuenta"],
+    ["SL Límite Challenge", "-1.5% sobre balance inicial", "Regla más estricta por el examen"], ["Tiempo máximo sin tocar TP/SL", "5 días hábiles", "Rotar aunque no haya tocado ninguno"],
+    ["Prioridad diaria", "Cuenta más cerca del 3%", "La 'estrella' del día — mayor foco y size completo"]]],
+  ["SISTEMA SUPLENTE", [["Condición de activación", "Pérdida de 1 fondeada + ≥2 verdes", "No activar durante rachas malas generales"], ["Máximo suplentes por grupo", "1 cuenta", "Siempre 1 de reserva"],
+    ["Reemplazar suplente", "Tan pronto se repone la fondeada perdida", ""]]],
+  ["REGLA DE PAUSA GRUPAL", [["Umbral de pausa", "-5% del capital en 1 semana", "Pausar copiador 2-3 días hábiles"], ["Qué se pausa", "Todas las cuentas copiadas del grupo", "Los challenges siguen en manual con size mínimo"],
+    ["Reactivación", "Tras 2-3 días + revisión de estrategia", ""]]],
+  ["CHALLENGES — REGLAS ESPECIALES", [["Copiado", "SIEMPRE manual, NUNCA en el copiador", "El examen se opera con la cabeza, no con el copiador"], ["Size", "Mínimo durante la pausa del grupo", ""],
+    ["Examen casi pasado", "Preparar su paso a GRUPO 1", "Revisar en el checklist dominical"]]],
+];
+const CHECKS_ANTES = {
+  nocturno: ["🌙 Checklist Nocturno (diario)", "Revisa esto cada noche antes de cerrar", ["Ninguna cuenta tocó el drawdown límite hoy", "Ningún examen se quemó hoy", "MAESTRA cerró en positivo o breakeven", "Los lotes copiados fueron correctos (G1: 1:1 / G2: 0.5:1)", "No hubo noticias de alto impacto sin gestionar"]],
+  dominical: ["☀️ Checklist Dominical (semanal)", "Cada domingo antes de que abra el mercado", ["Revisé P&L de GRUPO 1 y GRUPO 2", "GRUPO 2 lejos del drawdown (sin ajuste de lotes)", "Revisé el estado de los 4 exámenes activos", "Algún examen casi pasado → preparé movimiento a G1", "Anoté la semana en el tracker", "Revisé si hay suplentes que activar", "Decidí el plan de la próxima semana"]],
+  decisiones: ["🎯 Decisiones estratégicas", "Marca lo que decides esta semana", ["Mantener lotes G2 al 0.5:1 (sin cambios)", "Reducir G2 a 0.25:1 (drawdown elevado)", "Mover examen pasado → GRUPO 1", "Activar suplente (cuenta quemada esta semana)", "Comprar nuevo examen Lucid o Tradeify", "Pausar GRUPO 2 esta semana (racha negativa)", "Aumentar lotes G1 (racha positiva confirmada)"]],
+  mensual: ["📅 Checklist Mensual", "Primer domingo de cada mes", ["Revisé exámenes pasados y los reasigné", "Comparé rendimiento G1 vs G2 este mes", "Evalué si comprar más exámenes", "Calculé retiros disponibles en fondeadas", "Ajusté el plan del próximo mes"]],
+};
+const reglasElegidas = () => (est().reglas === "antes" ? REGLAS_ANTES : reglas());
+const checksElegidos = () => (est().checks === "antes" ? CHECKS_ANTES : CHECKS);
+const eleccion = (k, a, b) => { const v = est()[k] === "antes"; return `<div class="seg" style="margin:8px 0 4px"><button type="button" data-ver="${k}:nuevas" aria-pressed="${!v}">${a}</button><button type="button" data-ver="${k}:antes" aria-pressed="${v}">${b}</button></div>`; };
 // Joel's own system, written from his strategy settings (Hoy operas → Ajustar la estrategia), so the rules and the daily plan say the same.
 function reglas() {
   const E = est(), m = (n) => money(n).replace(",00", ""), tope = 3000 * E.consistencia / 100, grupo = E.modo === "grupo";
@@ -401,8 +422,9 @@ function reglas() {
       ["Vigilancia", "Cada hora de 8:00 a 22:00", "Jarvis te avisa al 80 % del límite, al pasarlo y al llegar al objetivo"]]],
   ];
 }
-V.reglas = () => `<div class="card"><h3>📜 Reglas del Sistema</h3><p class="hint">Tus reglas, sacadas de tu estrategia. Si cambias las balas o el modo en «Hoy operas → Ajustar la estrategia», se actualizan solas.</p>
-  ${reglas().map(([t, rs]) => `<div class="sec">${t}</div>${rs.map(([a, b, c]) => `<div class="rule"><b>‣ ${esc(a)}</b><span class="v">${esc(b)}</span><span class="n">${esc(c)}</span></div>`).join("")}`).join("")}</div>`;
+V.reglas = () => `<div class="card"><h3>📜 Reglas del Sistema</h3>${eleccion("reglas", "✨ Mis reglas (estrategia de 2 balas)", "📜 Reglas de antes")}
+  <p class="hint">${est().reglas === "antes" ? "Las reglas que tenías antes (rotación por TP/SL, suplentes, pausa grupal, challenges a mano)." : "Sacadas de tu estrategia: si cambias las balas o el modo en «Hoy operas → Ajustar la estrategia», se actualizan solas."} Las que elijas aquí son las que usa Jarvis cuando le preguntas.</p>
+  ${reglasElegidas().map(([t, rs]) => `<div class="sec">${t}</div>${rs.map(([a, b, c]) => `<div class="rule"><b>‣ ${esc(a)}</b><span class="v">${esc(b)}</span><span class="n">${esc(c)}</span></div>`).join("")}`).join("")}</div>`;
 const CHECKS = {
   nocturno: ["🌙 Checklist Nocturno (diario)", "Revisa esto cada noche antes de cerrar", ["Respeté las 2 balas: ninguna tercera operación", "Tras un stop en la Bala 1 no volví a tocar esa cuenta", "Ninguna cuenta tocó su límite diario ni el drawdown", "El copiador solo copió a las cuentas en foco", "Revisé los avisos de hoy en Jarvis"]],
   dominical: ["☀️ Checklist Dominical (semanal)", "Cada domingo antes de que abra el mercado", ["Revisé cuánto le falta a cada examen para los 3.000 $", "Comprobé la consistencia: ningún día por encima del tope", "Repasé el reparto automático de grupos", "Fondeadas: revisé los días mínimos para el payout", "Miré en «Hoy operas» qué cuenta empieza el lunes"]],
@@ -416,8 +438,9 @@ function revActual() {
 }
 V.domingo = () => {
   const r = revActual(), revs = list(S.revisiones).sort((a, b) => b.id.localeCompare(a.id));
-  const box = (k) => { const [t, h, items] = CHECKS[k]; return `<div class="card"><h3>${t}</h3><p class="hint">${h}</p>${items.map((it, i) => `<label class="check"><input type="checkbox" data-check="${k}.${i}" ${r.checks[k + "." + i] ? "checked" : ""}><span>${esc(it)}</span></label>`).join("")}</div>`; };
-  return `<div class="cardhead"><div><span style="font-size:28px">📋</span><p class="hint">Cada domingo, 15 min con la cabeza fría. Toma tus decisiones antes de que abra el mercado.</p></div>
+  const pre = est().checks === "antes" ? "antes." : "";
+  const box = (k) => { const [t, h, items] = checksElegidos()[k]; return `<div class="card"><h3>${t}</h3><p class="hint">${h}</p>${items.map((it, i) => `<label class="check"><input type="checkbox" data-check="${pre}${k}.${i}" ${r.checks[pre + k + "." + i] ? "checked" : ""}><span>${esc(it)}</span></label>`).join("")}</div>`; };
+  return eleccion("checks", "✨ Checklists de mi estrategia", "📜 Checklists de antes") + `<div class="cardhead"><div><span style="font-size:28px">📋</span><p class="hint">Cada domingo, 15 min con la cabeza fría. Toma tus decisiones antes de que abra el mercado.</p></div>
     <div style="margin-left:auto;display:flex;gap:10px;flex-wrap:wrap" class="dark"><select data-rev style="width:auto">${[r.id, ...revs.map((x) => x.id).filter((x) => x !== r.id)].map((d) => `<option value="${d}" ${d === r.id ? "selected" : ""}>Revisión ${fecha(d)}</option>`).join("")}</select>
     <button class="btn green" type="button" data-act="guardar-rev">💾 Guardar revisión</button><button class="btn" type="button" data-act="nueva-rev">+ Nueva</button></div></div>
   <div class="grid2">${box("nocturno")}${box("dominical")}${box("decisiones")}${box("mensual")}
@@ -747,6 +770,7 @@ root.addEventListener("click", async (e) => {
     toast("Revisión guardada."); return;
   }
   if (d.modo) { await guardarEst({ modo: d.modo }); return; }
+  if (d.ver) { const [k, v] = d.ver.split(":"); await guardarEst({ [k]: v }); return; }
   if (d.act === "repartir") {
     if (!S.db) return toast("Abre el Plan dentro de Claude para guardar.");
     if (!dosToques(t, "¿Aplicar? Toca otra vez")) return;
@@ -819,7 +843,7 @@ function contexto() {
     cuentasTopstepSinRegistrar: sinRegistrar().map((a) => a.nombre),
     repartoAutomaticoPendiente: reparto().map((x) => cCode(x.id) + ": " + gName(x.de) + " → " + gName(x.a)),
     winRate: os.length ? Math.round((os.filter((o) => o.resultado === "TP").length / os.length) * 1000) / 10 + "%" : null,
-    reglas: reglas().map(([t, rs]) => t + ": " + rs.map(([a, b]) => `${a} = ${b}`).join("; ")),
+    reglas: reglasElegidas().map(([t, rs]) => t + ": " + rs.map(([a, b]) => `${a} = ${b}`).join("; ")),
   };
 }
 // open(tab): Jarvis opens the Plan on a tab when Joel asks for it by voice.
