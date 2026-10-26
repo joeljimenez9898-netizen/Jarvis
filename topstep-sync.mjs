@@ -208,7 +208,8 @@ export function vigilancia(planCuentas, cuentasTs, at, prev) {
 // lonMax; averaging in never takes the whole position past −lonR. New York only plays with London's profit, up to the day's
 // consistency cap; a London stop means no New York on that account. Exams, 2 bullets (exModo "balas"): bullet 1 risks b1r for
 // b1t; if it wins, bullet 2 in the same account closes at exactly b2t (no trailing). The day never passes the consistency cap.
-// Pause: pausaStops stops in one day end the day; a week at −pausaSemana or pausaRojos red days means a day off. Funded: one account does the strong day while the ones that already won theirs do
+// Pause: pausaStops stops in one day end the day; a week at −pausaSemana or pausaRojos red days means a day off.
+// Funded: one account does the strong day while the ones that already won theirs do
 // minimum days (risk minimoSL for minimo, then the stop goes to +minimo). An account with margin for less than two stops
 // trades in recovery (recupR risk) until it has it again; a failed strong day hands the strong slot to the next account.
 export const ESTRATEGIA_DEF = { v: 3, modo: "individual", exModo: "londres", lonR: 1000, lonT: 500, lonMax: 1000, opsDia: 2, b1r: 1000, b1t: 1000, b2r: 1000, b2t: 500,
@@ -287,7 +288,7 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
   const tras = sig ? " y el día fuerte lo hace " + sig.c.codigo : " (no queda otra cuenta para el día fuerte)";
   for (const x of info) {
     if (x.ahora <= 0) { av(x.c.codigo + ":quemada", "🔥 " + x.c.codigo + " se ha quemado. Si era la del día fuerte, lo hace la siguiente; repón la cuenta con un examen nuevo del fondo de exámenes.");
-      out.fondeadas.push({ cuenta: x.c.codigo, rol: "quemada", txt: "🔥 Cuenta quemada." }); continue; }
+      out.fondeadas.push({ cuenta: x.c.codigo, rol: "quemada", txt: "🔥 Cuenta quemada.", hoy: x.h, pnl: Number(x.c.pnl) || 0, margen: x.ahora, dias: x.d }); continue; }
     const cod = x.c.codigo, rol = listo(x) ? "payout" : x === fuerte ? "fuerte" : x.fuerte0 ? "minimos" : x.m0 < 2 * E.fuerteSL ? "recuperacion" : "espera";
     const r = rol === "fuerte" ? riesgo(x, E.fuerteSL) : riesgo(x, E.minimoSL), suave = r < (rol === "fuerte" ? E.fuerteSL : E.minimoSL);
     let txt = rol === "payout" ? "💰 Tiene " + x.d0 + " días mínimos: pide el payout."
