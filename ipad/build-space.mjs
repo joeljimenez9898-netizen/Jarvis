@@ -414,9 +414,14 @@ window.GRAPH = { nodes: [], links: [] };
     [/grupo/, "grupos", "Grupos"], [/reglas/, "reglas", "Reglas"], [/domingo|revision semanal/, "domingo", "Domingo"], [/pestana (de )?cuentas|apartado (de )?cuentas|lista de cuentas/, "cuentas", "Cuentas"]];
   // «Jarvis, backtest: martes 2:40, Londres 1, corto, gané 2R…» (or a chart photo saying backtest): one trade into his backtesting
   // journal (Plan de Futuros → Backtesting). Questions about his backtests go to the brain, which has the stats.
-  const BT_DO = /\bbacktest/i, BT_ASK = /[¿?]|^\s*(que|cual|cuales|como|cuando|donde|dime|ensena|muestra|abre|abreme|ver)\b/i;
+  const BT_CLASE = /revisa(me)? (la |mi )?semana|clase (de la semana|semanal|de trading)|explica(me)? mi estrategia/i, BT_DO = /\bbacktest/i, BT_ASK = /[¿?]|^\s*(que|cual|cuales|como|cuando|donde|dime|ensena|muestra|abre|abreme|ver)\b/i;
   async function btRoute(question) {
     const q = String(question).trim(), f = q.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/^\s*(oye\s+)?jarvis[,:]?\s*/i, "");
+    if (BT_CLASE.test(f) && window.PLAN && window.PLAN.btClase) {
+      let answer; try { answer = await window.PLAN.btClase(/estrategia/i.test(f) ? "estrategia" : "semana"); } catch (err) { answer = "No he podido preparar la clase: " + (err.message || "error") + "."; }
+      history.push({ role: "user", content: "Pregunta: " + q }, { role: "assistant", content: answer }); history = history.slice(-12);
+      return { answer, nodes: [], about_notes: false };
+    }
     if (!BT_DO.test(f) || (BT_ASK.test(f) && !B.pendingImage) || !window.PLAN || !window.PLAN.btApuntar) return null;
     const image = B.pendingImage; B.pendingImage = null;
     let answer;

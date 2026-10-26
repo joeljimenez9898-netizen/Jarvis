@@ -884,7 +884,7 @@ function contexto() {
   };
 }
 // open(tab): Jarvis opens the Plan on a tab when Joel asks for it by voice.
-window.PLAN = { contexto, render, btApuntar: (texto, imagen) => btApuntar(texto, imagen), avisos: () => (S.ready ? motor().avisos : []), open: (tab) => { if (typeof tab === "string" && TABS.some(([k]) => k === tab)) { S.tab = tab; try { localStorage.setItem("pf-tab", tab); } catch {} } render(); } };
+window.PLAN = { contexto, render, btApuntar: (texto, imagen) => btApuntar(texto, imagen), btClase: (tipo) => btLeccion(tipo), avisos: () => (S.ready ? motor().avisos : []), open: (tab) => { if (typeof tab === "string" && TABS.some(([k]) => k === tab)) { S.tab = tab; try { localStorage.setItem("pf-tab", tab); } catch {} } render(); } };
 
 // The 📒 Backtesting tab lives in ipad/backtest.js; build-space.mjs copies it in here.
 /*@backtest@*/

@@ -251,7 +251,9 @@ async function checkIpadApps() {
           || b2.length !== 1 || b2[0].hora !== "00:30" || b2[0].dir !== "LONG" || tab.acierto !== 50 || tab.be !== 1)
         wrongSym.push("Backtesting: setups, sessions, R or the TradingView import are wrong: " + JSON.stringify([b1, b2, tab]));
       if (!page.includes('["backtest", "📒 Backtesting"]') || !page.includes("backtesting: btContexto()") || !page.includes("const bt = await btRoute(question);"))
-        wrongSym.push("Backtesting: the tab, Jarvis's context or the «Jarvis, backtest:» voice route is missing"); }
+        wrongSym.push("Backtesting: the tab, Jarvis's context or the «Jarvis, backtest:» voice route is missing");
+      if (!page.includes("async function btLeccion(tipo)") || !page.includes("eres su profesor de trading") || !page.includes("function btProfHtml(P)") || !page.includes("BT_CLASE.test(f) && window.PLAN && window.PLAN.btClase"))
+        wrongSym.push("Backtesting: the teacher (correction of each screenshot, weekly class, strategy explained) is missing"); }
     if (!page.includes('id="cap-host"') || !page.includes("capitalPropio: window.CAPITAL?.contexto") || !page.includes('db.doc("fm/capital")')) wrongSym.push("Capital propio is not wired into Jarvis");
     if (!page.includes("<avisos>") || !page.includes("hacia las 11:00")) wrongSym.push("Jarvis does not know the scheduled 11:00 summary");
     if (!page.includes('db.doc("fm/mercado")') || !page.includes("no es en directo")) wrongSym.push("the MNQ price star is missing or not marked as not live");
