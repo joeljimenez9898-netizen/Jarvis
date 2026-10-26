@@ -143,20 +143,34 @@ async function checkTopstepReadOnly() {
     return [false, "daily limit watch: " + JSON.stringify([v1.nuevos, v2.nuevos, v3.nuevos])];
   // Joel's rules engine: bullet 2 closes at exactly +500, the day caps at +1.500, the strong-day ladder hands on, a failed strong day
   // goes to recovery, and the hourly watch says each warning once a day; old saved settings get the new funded numbers
-  const E = ts.estrategiaDe({ fuerteTP: 2500, minimoSL: 300, modo: "grupo" }), H = "2026-10-27";
-  if (E.fuerteTP !== 1000 || E.minimoSL !== 1000 || E.recupR !== 500 || E.modo !== "grupo") return [false, "strategy defaults: " + JSON.stringify(E)];
+  const E0 = ts.estrategiaDe({ fuerteTP: 2500, minimoSL: 300, modo: "grupo" }), E = ts.estrategiaDe({ v: 3, exModo: "balas" }), H = "2026-10-27";
+  if (E0.fuerteTP !== 1000 || E0.minimoSL !== 1000 || E0.recupR !== 500 || E0.modo !== "grupo" || E0.exModo !== "londres" || E.exModo !== "balas") return [false, "strategy defaults: " + JSON.stringify(E0)];
   const Fd = (codigo, orden, dias) => ({ codigo, tipo: "Fondeada", estado: "ACTIVA", sl: -2000, orden, dias, pnl: Object.values(dias).reduce((a, b) => a + b, 0) });
   const Ex = (codigo, t) => ({ codigo, tipo: "Challenge", estado: "EXAM", tp: 3000, sl: -2000, dias: { [H]: t.reduce((a, b) => a + b, 0) }, tradesHoy: t, pnl: t.reduce((a, b) => a + b, 0) });
   const mr = ts.motorReglas({ estrategia: E, hoy: H, cuentas: [Ex("E1", [1000]), Ex("E2", [1000, 500]), Ex("E3", [-1000]), Fd("A", 1, { "2026-10-26": 1000, [H]: 200 }), Fd("B", 2, { [H]: -1000 }), Fd("C", 3, {})] });
   const k = mr.avisos.map((a) => a.key.split(":").slice(1).join(":")).join(" ");
   const rol = Object.fromEntries(mr.fondeadas.map((x) => [x.cuenta, x.rol]));
-  if (k !== "E1:bala2 E2:tope E3:stop A:min-ok B:fuerte-ko" || !mr.avisos[0].txt.includes("justos, sin trailing") || !mr.avisos[1].txt.includes("+1.500 $")
+  if (k !== "E1:bala2 E2:tope E3:stop A:min-ok B:fuerte-ko pausa-dia" || !mr.avisos[0].txt.includes("justos, sin trailing") || !mr.avisos[1].txt.includes("+1.500 $")
       || rol.A !== "minimos" || rol.B !== "fuerte" || rol.C !== "espera" || !mr.avisos[4].txt.includes("modo recuperación") || !mr.avisos[4].txt.includes("lo hace C"))
     return [false, "rules engine: " + k + " " + JSON.stringify(rol)];
   const next = ts.motorReglas({ estrategia: E, hoy: "2026-10-28", cuentas: [Fd("A", 1, { "2026-10-26": 1000, "2026-10-27": 200 }), Fd("B", 2, { "2026-10-27": -1000 }), Fd("C", 3, {})] });
   const fb = next.fondeadas.find((x) => x.cuenta === "B");
   if (fb.rol !== "recuperacion" || !fb.txt.includes("arriesga 500 $") || next.fondeadas.find((x) => x.cuenta === "C").rol !== "fuerte" || !next.resumen.includes("A, B en días mínimos + C en día fuerte"))
     return [false, "strong-day ladder next day: " + JSON.stringify(next.fondeadas)];
+  // London + New York: London's profit is all New York may risk; a London stop closes the account's day; 2 stops end the day
+  const LO = "2026-10-27T08:00:00Z", NYt = "2026-10-27T15:00:00Z", XL = (codigo, t) => ({ ...Ex(codigo, t.map((x) => x.pnl)), tradesHoy: t });
+  const ml = ts.motorReglas({ estrategia: E0, hoy: H, ahora: NYt, cuentas: [XL("L1", [{ pnl: 500, at: LO }]), XL("L2", [{ pnl: -1000, at: LO }]), XL("L3", [{ pnl: 600, at: LO }, { pnl: -600, at: NYt }]), XL("L4", [])] });
+  const kl = ml.avisos.map((a) => a.key.split(":").slice(1).join(":")).join(" "), l1 = ml.examenes.find((x) => x.cuenta === "L1").txt, l4 = ml.examenes.find((x) => x.cuenta === "L4").txt;
+  if (kl !== "L1:lon-ok L2:lon-ko L3:ny-cero" || !ml.avisos[0].txt.includes("arriesga como máximo 500 $") || !l1.includes("+1.000 $ más") || !l4.includes("nunca pasa de −1.000 $"))
+    return [false, "London + New York: " + kl + " | " + l1];
+  const sem = ts.motorReglas({ estrategia: E0, hoy: H, cuentas: [{ ...Ex("W1", [-500]), dias: { "2026-10-26": -1600, [H]: -500 }, pnl: -2100 }, Ex("W2", [-1000])] });
+  if (!sem.pausa.semanal || !sem.avisos.some((a) => a.key.endsWith(":pausa-semana")) || !sem.avisos.some((a) => a.key.endsWith(":W1:quemada")))
+    return [false, "weekly pause / burned account: " + JSON.stringify(sem.pausa)];
+  // after London: what he traded, how each account stands and the next step
+  const rs = ts.resumenSesion([{ codigo: "TS-1", tipo: "Challenge", estado: "EXAM", tp: 3000, sl: -2000, balanceIni: 50000, topstepId: "1" }],
+    { 1: { balance: 50620, dias: { [H]: 620 }, trades: [{ fecha: H, instr: "MNQ", dir: "LONG", contratos: 3, pnl: 620, cierra: LO }] } }, null, "Londres", "2026-10-27T10:57:00Z");
+  if (!rs.includes("MNQ largo 3 contratos +620 $") || !rs.includes("le faltan 2.380 $") || !rs.includes("Siguiente paso: 🗽 Nueva York") || !rs.includes("como máximo 620 $"))
+    return [false, "London summary: " + rs];
   const atR = "2026-10-27T15:00:00Z", dR = ts.tradingDay(atR), pcR = [{ codigo: "TS-1", tipo: "Challenge", estado: "EXAM", tp: 3000, sl: -2000, balanceIni: 50000, topstepId: "9" }];
   const tsR = (t) => ({ 9: { balance: 50000 + t.reduce((a, b) => a + b, 0), dias: { [dR]: t.reduce((a, b) => a + b, 0) }, trades: t.map((pnl, i) => ({ fecha: dR, pnl, cierra: "2026-10-27T1" + i + ":00:00Z" })) } });
   const r1 = ts.reglasDelDia(pcR, tsR([1000]), null, atR, null), r2 = ts.reglasDelDia(pcR, tsR([1000]), null, atR, { fecha: dR, reglas: r1 }), r3 = ts.reglasDelDia(pcR, tsR([1000, 500]), null, atR, { fecha: dR, reglas: r2 });
@@ -165,7 +179,7 @@ async function checkTopstepReadOnly() {
   const vR = ts.vigilancia(pcR, tsR([1000]), atR, null); vR.avisados = [...vR.avisados, ...r1.avisados];
   if (ts.reglasDelDia(pcR, tsR([1000]), null, atR, ts.vigilancia(pcR, tsR([1000]), atR, vR)).nuevos.length) return [false, "a rule warning repeats after a run of the older script"];
   const day = ts.tradingDay("2026-10-15T23:30:00Z");          // 18:30 Chicago belongs to the next session
-  return [ok && day === "2026-10-16", ok ? `Topstep sync limited to ${allowed.join(", ")}; trading day rolls at 17:00 Chicago (${day}); fills become whole trades (SHORT 12 MNQ, +1.503,36 net); daily limits warned once (85 %, then passed); his rules: bullet 2 to +500 sharp, +1.500 day cap, strong-day ladder with recovery, each warning once`
+  return [ok && day === "2026-10-16", ok ? `Topstep sync limited to ${allowed.join(", ")}; trading day rolls at 17:00 Chicago (${day}); fills become whole trades (SHORT 12 MNQ, +1.503,36 net); daily limits warned once (85 %, then passed); his rules: London + New York on London's profit, bullet 2 to +500 sharp, +1.500 day cap, strong-day ladder with recovery, day and week pause, each warning once; London summary with the next step`
                                          : `Topstep sync allows: ${allowed.join(", ")}`];
 }
 
@@ -223,6 +237,8 @@ async function checkIpadApps() {
     if (!page.includes("const REGLAS_ANTES = [") || !page.includes("const CHECKS_ANTES = {") || !page.includes('eleccion("reglas"') || !page.includes('eleccion("checks"')) wrongSym.push("Plan de Futuros: the old rules and Sunday checklists must stay one tap away to compare");
     if (!page.includes("function motorReglas(") || page.includes("@motor-reglas@") || !page.includes("avisos: () => (S.ready ? motor().avisos : [])") || !page.includes("function ahoraHtml()")
         || !page.includes('"jarvis-reglas-oidas"') || !page.includes("window.PLAN.avisos().map((a) => a.txt)")) wrongSym.push("Plan de Futuros: the rules engine (shared with the hourly watch) must run in the app, show «Lo que te toca ahora» and speak each warning in Avisos de hoy");
+    if (!page.includes('data-ver=\"exModo:londres\"') || !page.includes('"EXÁMENES · LONDRES + NUEVA YORK"') || !page.includes('"SISTEMA SUPLENTE"') || !page.includes('"REGLA DE PAUSA"'))
+      wrongSym.push("Plan de Futuros: his rules must offer London + New York and carry the suplente and pause rules of his strategy");
     if (!page.includes('id="cap-host"') || !page.includes("capitalPropio: window.CAPITAL?.contexto") || !page.includes('db.doc("fm/capital")')) wrongSym.push("Capital propio is not wired into Jarvis");
     if (!page.includes("<avisos>") || !page.includes("hacia las 11:00")) wrongSym.push("Jarvis does not know the scheduled 11:00 summary");
     if (!page.includes('db.doc("fm/mercado")') || !page.includes("no es en directo")) wrongSym.push("the MNQ price star is missing or not marked as not live");
