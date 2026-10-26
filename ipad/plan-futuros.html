@@ -160,7 +160,7 @@ const GRUPO_ESTADOS = { MAESTRA: "👑 MAESTRA", ACTIVO: "🔄 ACTIVO", PAUSADO:
 const ICONO = (g, i) => (g.estado === "MAESTRA" ? "🥇" : i === 1 ? "🥈" : "📊");
 const ACCIONES = ["Liquidar", "Cerrar y bloquear", "Solo alertar"];
 const TABS = [["dashboard", "Dashboard"], ["grupos", "Grupos"], ["cuentas", "Cuentas"], ["operaciones", "Operaciones"], ["semanas", "Semanas"],
-              ["reglas", "Reglas"], ["domingo", "📋 Domingo"], ["riesgo", "⚙️ Riesgo"], ["calendario", "📅 Calendario"]];
+              ["reglas", "Reglas"], ["backtest", "📒 Backtesting"], ["domingo", "📋 Domingo"], ["riesgo", "⚙️ Riesgo"], ["calendario", "📅 Calendario"]];
 
 const S = { tab: "dashboard", grupos: new Map(), cuentas: new Map(), ops: new Map(), semanas: new Map(), revisiones: new Map(), topstep: null,
             ready: false, db: null, page: { cuentas: 0, ops: 0 }, f: { chip: "todos", cg: "", ct: "", ce: "", og: "", oc: "", or: "", oq: "", rq: "", rg: "" },
@@ -879,11 +879,15 @@ function contexto() {
     cuentasTopstepSinRegistrar: sinRegistrar().map((a) => a.nombre),
     repartoAutomaticoPendiente: reparto().map((x) => cCode(x.id) + ": " + gName(x.de) + " → " + gName(x.a)),
     winRate: os.length ? Math.round((os.filter((o) => o.resultado === "TP").length / os.length) * 1000) / 10 + "%" : null,
+    backtesting: btContexto(),
     reglas: reglasElegidas().map(([t, rs]) => t + ": " + rs.map(([a, b]) => `${a} = ${b}`).join("; ")),
   };
 }
 // open(tab): Jarvis opens the Plan on a tab when Joel asks for it by voice.
-window.PLAN = { contexto, render, avisos: () => (S.ready ? motor().avisos : []), open: (tab) => { if (typeof tab === "string" && TABS.some(([k]) => k === tab)) { S.tab = tab; try { localStorage.setItem("pf-tab", tab); } catch {} } render(); } };
+window.PLAN = { contexto, render, btApuntar: (texto, imagen) => btApuntar(texto, imagen), avisos: () => (S.ready ? motor().avisos : []), open: (tab) => { if (typeof tab === "string" && TABS.some(([k]) => k === tab)) { S.tab = tab; try { localStorage.setItem("pf-tab", tab); } catch {} } render(); } };
+
+// The 📒 Backtesting tab lives in ipad/backtest.js; build-space.mjs copies it in here.
+/*@backtest@*/
 
 // ── data ───────────────────────────────────────────────────────
 (async () => {
@@ -896,6 +900,7 @@ window.PLAN = { contexto, render, avisos: () => (S.ready ? motor().avisos : []),
   const done = (k) => { pend.delete(k); if (!pend.size && !S.ready) { S.ready = true; } if (k === "topstep" || k === "cuentas") setTimeout(autoRegistro, 500); if (editando()) { S.renderLuego = true; return; } render(); };
   root.addEventListener("focusout", () => setTimeout(() => { if (S.renderLuego && !editando()) { S.renderLuego = false; render(); } }, 50));
   const sub = (col, map) => plan.collection(col).onSnapshot((snap) => { map.clear(); for (const d of snap.docs) map.set(d.id, d.data()); if (col === "revisiones" && S.rev && !S.revisiones.has(S.rev.id)) {} done(col); }, () => done(col));
+  btSub(plan);
   sub("grupos", S.grupos); sub("cuentas", S.cuentas); sub("operaciones", S.ops); sub("semanas", S.semanas); sub("revisiones", S.revisiones);
   db.doc("fm/topstep").onSnapshot((snap) => { S.topstep = snap.exists ? snap.data() : null; done("topstep"); }, () => done("topstep"));
   plan.collection("config").doc("estrategia").onSnapshot((snap) => { S.estrategia = snap.exists ? snap.data() : null; render(); }, () => {});

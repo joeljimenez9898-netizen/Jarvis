@@ -239,6 +239,19 @@ async function checkIpadApps() {
         || !page.includes('"jarvis-reglas-oidas"') || !page.includes("window.PLAN.avisos().map((a) => a.txt)")) wrongSym.push("Plan de Futuros: the rules engine (shared with the hourly watch) must run in the app, show «Lo que te toca ahora» and speak each warning in Avisos de hoy");
     if (!page.includes('data-ver=\"exModo:londres\"') || !page.includes('"EXÁMENES · LONDRES + NUEVA YORK"') || !page.includes('"SISTEMA SUPLENTE"') || !page.includes('"REGLA DE PAUSA"'))
       wrongSym.push("Plan de Futuros: his rules must offer London + New York and carry the suplente and pause rules of his strategy");
+    // 📒 Backtesting: his 4 setups, New York hours to sessions, R from prices, TradingView Paper Trading exports, and the voice route
+    { const i = page.indexOf("const BT_SETUPS"), j = page.indexOf("// ── data and state", i);
+      const BT = i > 0 && j > i ? new Function(page.slice(i, j) + "; return { BT_SETUPS, btSesion, btDia, btR, btTabla, btCSV, btImportar, btConclusiones };")() : null;
+      const bal = "Time,Realized P&L (value),Action\n2026-10-20 07:05:00,1000,\"Close short position for symbol CME_MINI:MNQ1! at price 20900.00 for 5 units. Position AVG Price was 21000.000000, currency: USD\"\n";
+      const ord = "Symbol,Side,Qty,Fill Price,Status,Closing Time\nCME_MINI:MNQ1!,Buy,2,21000.25,Filled,2026-10-22 06:30:01\nCME_MINI:MNQ1!,Sell,2,21050.25,Filled,2026-10-22 07:10:00\nCME_MINI:MNQ1!,Sell,2,,Cancelled,2026-10-22 07:10:00\n";
+      const b1 = BT && BT.btImportar(BT.btCSV(bal), "UTC", 1000)[0], b2 = BT && BT.btImportar(BT.btCSV(ord), "Europe/Madrid", 1000);
+      const tab = BT && BT.btTabla([{ r: 2 }, { r: -1 }, { r: 0 }], () => "x")[0];
+      if (!BT || BT.BT_SETUPS.map((x) => x.id).join() !== "L1,L2,NYR,NYV" || BT.btSesion("02:40") !== "Londres" || BT.btSesion("09:45") !== "Nueva York" || BT.btDia("2026-10-20") !== "Martes"
+          || BT.btR({ dir: "SHORT", entrada: 21000, stop: 21020, salida: 20960 }) !== 2 || !b1 || b1.hora !== "03:05" || b1.dir !== "SHORT" || b1.r !== 1
+          || b2.length !== 1 || b2[0].hora !== "00:30" || b2[0].dir !== "LONG" || tab.acierto !== 50 || tab.be !== 1)
+        wrongSym.push("Backtesting: setups, sessions, R or the TradingView import are wrong: " + JSON.stringify([b1, b2, tab]));
+      if (!page.includes('["backtest", "📒 Backtesting"]') || !page.includes("backtesting: btContexto()") || !page.includes("const bt = await btRoute(question);"))
+        wrongSym.push("Backtesting: the tab, Jarvis's context or the «Jarvis, backtest:» voice route is missing"); }
     if (!page.includes('id="cap-host"') || !page.includes("capitalPropio: window.CAPITAL?.contexto") || !page.includes('db.doc("fm/capital")')) wrongSym.push("Capital propio is not wired into Jarvis");
     if (!page.includes("<avisos>") || !page.includes("hacia las 11:00")) wrongSym.push("Jarvis does not know the scheduled 11:00 summary");
     if (!page.includes('db.doc("fm/mercado")') || !page.includes("no es en directo")) wrongSym.push("the MNQ price star is missing or not marked as not live");
