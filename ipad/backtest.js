@@ -166,7 +166,7 @@ function btImportar(filas, zona, riesgo) {
 }
 
 // ── data and state
-S.bt = new Map(); S.btClases = new Map(); S.btf = null; S.btImp = null; S.btBusy = false;
+S.bt = new Map(); S.btClases = new Map(); S.btSubida = null; S.btf = null; S.btImp = null; S.btBusy = false;
 const btLista = () => list(S.bt).sort((a, b) => ((b.fecha || "") + (b.hora || "")).localeCompare((a.fecha || "") + (a.hora || "")));
 function btSub(plan) {
   plan.collection("clases").onSnapshot((snap) => { S.btClases.clear(); for (const d of snap.docs) S.btClases.set(d.id, d.data()); if (S.tab === "backtest") render(); }, () => {});
@@ -211,28 +211,29 @@ async function btFotogramas(file, n) {
   } finally { v.removeAttribute("src"); v.load(); v.remove(); URL.revokeObjectURL(url); }
 }
 // Claude may take fewer pictures at once than a long video gives: try them all, then fewer, keeping the order
-async function btLeerSecuencia(fotos) {
+async function btLeerSecuencia(fotos, texto) {
   let ultimoError = null;
   for (const n of [fotos.length, 6, 4, 2]) {
     if (n > fotos.length || n < 1) continue;
     const pick = n === fotos.length ? fotos : Array.from({ length: n }, (_, i) => fotos[Math.round((i * (fotos.length - 1)) / (n - 1 || 1))]);
-    try { return await btLeer("", pick.length === 1 ? pick[0] : pick); } catch (err) { ultimoError = err; }
+    try { return await btLeer(texto || "", pick.length === 1 ? pick[0] : pick); } catch (err) { ultimoError = err; }
   }
   throw ultimoError || new Error("no he podido leerlo");
 }
 async function btLeer(texto, imagen) {
   const sample = window.claude?.use ? await window.claude.use("sample") : null;
   if (!sample) throw new Error("Abre Jarvis dentro de Claude para que pueda leerlo.");
-  const ask = "Extrae UNA operación de backtesting de trading de Joel" + (Array.isArray(imagen) ? " de estas " + imagen.length + " imágenes de TradingView en orden de principio a fin (fotogramas de un vídeo o capturas seguidas de la misma operación: mira cómo evoluciona, la entrada, lo que hace el precio y cómo termina)" : imagen ? " de esta captura de TradingView" : "") + (texto ? " (y de lo que dice: «" + texto + "»)" : "") + ". Hoy es " + iso(new Date()) + ".\n" +
+  const ask = "Extrae UNA operación de backtesting de trading de Joel" + (Array.isArray(imagen) ? " de estas " + imagen.length + " imágenes de TradingView en orden de principio a fin (fotogramas de un vídeo o capturas seguidas de la misma operación: mira cómo evoluciona, la entrada, lo que hace el precio y cómo termina)" : imagen ? " de esta captura de TradingView" : "") + (texto && !imagen ? " (y de lo que dice: «" + texto + "»)" : "") + ". Hoy es " + iso(new Date()) + ".\n" +
     "Sus modelos (id = nombre): " + BT_SETUPS.map((s) => s.id + " = " + s.n).join("; ") + ".\n" +
     "Cómo opera: " + BT_REGLAS + "\n" +
     "Errores posibles: " + BT_ERRORES.join("; ") + ".\n" +
+    (imagen && texto ? "Joel te explica él mismo por qué entró, cómo ejecutó y qué opina: «" + texto + "». Tenlo en cuenta al corregirle: dile con sinceridad en qué tiene razón y en qué no, y usa lo que cuenta (hora, set up, gestión) si en el gráfico no se ve.\n" : "") +
     (imagen ? "Además eres su profesor de trading: revisa la entrada contra el checklist de su modelo, regla por regla, con lo que se ve en el gráfico (velas, cuerpos, media móvil, líneas de hora, zonas AS/LO, la caja de la posición). Sé concreto y honesto; si algo no se ve, dilo en vez de suponerlo.\n" : "") +
     "Responde SOLO con un JSON: {\"fecha\": \"AAAA-MM-DD\" del gráfico o null, \"hora\": \"HH:MM\" de la entrada (búscala en el eje de tiempo, en la etiqueta de fecha y hora o en la caja de la posición; es muy importante) o null, \"zona\": zona horaria del gráfico si se ve o null, \"instr\": símbolo o null, \"tf\": \"M1\"/\"M5\"/\"M15\"... o null, " +
     "\"dir\": \"LONG\" o \"SHORT\" o null, \"setup\": \"L1\"/\"L2\"/\"NYR\"/\"NYV\" o null, \"entrada\": número o null, \"stop\": número o null, \"salida\": número o null, \"resultado\": \"TP\"/\"SL\"/\"BE\" o null, " +
     "\"r\": resultado en R o null, \"pnl\": dólares o null, \"errores\": [de la lista], \"nota\": texto corto o \"\"" +
     (imagen ? ", \"profesor\": {\"veredicto\": \"libro\" (cumple sus reglas), \"dudosa\" o \"no\" (no era su set up), \"reglas\": [{\"regla\": texto corto, \"ok\": true/false/null si no se ve, \"por\": por qué}], " +
-      "\"loQueVeo\": 2-3 frases de lo que pasa en el gráfico, \"queHabriaHecho\": qué habría hecho un buen trader con sus reglas (otra entrada, otro stop, no entrar, una segunda oportunidad…), \"leccion\": una frase para recordar}" : "") +
+      "\"loQueVeo\": 2-3 frases de lo que pasa en el gráfico, \"queHabriaHecho\": qué habría hecho un buen trader con sus reglas (otra entrada, otro stop, no entrar, una segunda oportunidad…), \"leccion\": una frase para recordar, \"bien\": [lo que ha hecho bien, frases cortas], \"mal\": [lo que ha hecho mal, frases cortas]" + (texto ? ", \"respuesta\": 2-4 frases contestando a su explicación (en qué acierta su razonamiento y en qué se equivoca)" : "") + "}" : "") +
     "}. Si un dato no está, null: no lo inventes. Háblale de tú, en español.";
   const { text } = await sample([{ role: "user", content: ask }], imagen ? { cache: false, images: Array.isArray(imagen) ? imagen : [imagen] } : { cache: false, effort: "low" });
   const o = JSON.parse((String(text).match(/\{[\s\S]*\}/) || ["{}"])[0]) || {};
@@ -247,7 +248,9 @@ async function btLeer(texto, imagen) {
            errores: (o.errores || []).filter((e) => BT_ERRORES.includes(e)), nota: String(o.nota || ""), origen: Array.isArray(imagen) ? "vídeo" : imagen ? "captura" : "voz", tipo: /\breal\b|topstep|en directo|en vivo/i.test(texto || "") ? "real" : "backtest",
            ...(o.profesor && typeof o.profesor === "object" ? { profesor: { veredicto: ["libro", "dudosa", "no"].includes(o.profesor.veredicto) ? o.profesor.veredicto : "dudosa",
              reglas: (o.profesor.reglas || []).slice(0, 8).map((r) => ({ regla: String(r.regla || ""), ok: r.ok === true ? true : r.ok === false ? false : null, por: String(r.por || "") })),
-             loQueVeo: String(o.profesor.loQueVeo || ""), queHabriaHecho: String(o.profesor.queHabriaHecho || ""), leccion: String(o.profesor.leccion || "") } } : {}) };
+             loQueVeo: String(o.profesor.loQueVeo || ""), queHabriaHecho: String(o.profesor.queHabriaHecho || ""), leccion: String(o.profesor.leccion || ""),
+             bien: (o.profesor.bien || []).slice(0, 6).map(String), mal: (o.profesor.mal || []).slice(0, 6).map(String), respuesta: String(o.profesor.respuesta || "") } } : {}),
+           ...(imagen && texto ? { explicacion: String(texto) } : {}) };
 }
 // by voice («Jarvis, backtest: …»): straight to the journal, and Jarvis says what it wrote and what is missing
 async function btApuntar(texto, imagen) {
@@ -267,7 +270,7 @@ async function btLeccion(tipo) {
   const ts = btLista(), desde = iso(new Date(Date.now() - 7 * 86400000)), semana = tipo === "semana" ? ts.filter((t) => t.fecha >= desde) : ts;
   const reales = tipo === "semana" ? btRealesTopstep(desde) : [];
   if (!semana.length && !reales.length) return tipo === "semana" ? "Esta semana no has apuntado ninguna operación de backtest, Joel. Mándame capturas y te corrijo." : "Todavía no hay operaciones apuntadas para explicarte tu estrategia.";
-  const datos = semana.slice(0, 60).map((t) => ({ tipo: t.tipo === "real" ? "real" : "backtest", fecha: t.fecha, dia: btDia(t.fecha), horaNY: t.hora, sesion: btSesionT(t), setup: btNombre(t.setup), dir: t.dir, tf: t.tf, r: btR(t), errores: t.errores || [], nota: t.nota || "",
+  const datos = semana.slice(0, 60).map((t) => ({ tipo: t.tipo === "real" ? "real" : "backtest", fecha: t.fecha, dia: btDia(t.fecha), horaNY: t.hora, sesion: btSesionT(t), setup: btNombre(t.setup), dir: t.dir, tf: t.tf, r: btR(t), errores: t.errores || [], nota: t.nota || "", explicacionDeJoel: t.explicacion || null,
     profesor: t.profesor ? { veredicto: t.profesor.veredicto, loQueVeo: t.profesor.loQueVeo, queHabriaHecho: t.profesor.queHabriaHecho, leccion: t.profesor.leccion } : null }));
   const ask = "Eres el profesor de trading de Joel. Sus set ups: " + BT_SETUPS.map((s) => s.n + ": " + s.d).join(" ") + " Cómo opera: " + BT_REGLAS + "\n" +
     "Estadísticas de todo su backtesting: " + JSON.stringify({ porSetup: btTabla(ts, (t) => btNombre(t.setup)), porDia: btTabla(ts, (t) => btDia(t.fecha)), porSesion: btTabla(ts, btSesionT), porFranjaNY: btTabla(ts, btFranja), horario: "Londres 2:00–5:00 y Nueva York 10:30–12:00, hora de Nueva York" }) + "\n" +
@@ -311,6 +314,9 @@ function btProfHtml(P) {
   return `<div class="banner ${P.veredicto === "libro" ? "ok" : P.veredicto === "no" ? "bad" : "warn"}" style="margin-top:12px;font-weight:400"><b>🎓 Tu profesor: ${esc(BT_VERED[P.veredicto])}</b>
     ${P.loQueVeo ? `<p style="margin:6px 0">${esc(P.loQueVeo)}</p>` : ""}
     ${(P.reglas || []).map((r) => `<div style="margin:3px 0">${r.ok === true ? "✅" : r.ok === false ? "❌" : "❔"} <b>${esc(r.regla)}</b> — ${esc(r.por)}</div>`).join("")}
+    ${(P.bien || []).length ? `<p style="margin:8px 0 2px"><b>👍 Lo que has hecho bien</b></p>${P.bien.map((x) => `<div style="margin:2px 0">• ${esc(x)}</div>`).join("")}` : ""}
+    ${(P.mal || []).length ? `<p style="margin:8px 0 2px"><b>👎 Lo que has hecho mal</b></p>${P.mal.map((x) => `<div style="margin:2px 0">• ${esc(x)}</div>`).join("")}` : ""}
+    ${P.respuesta ? `<p style="margin:8px 0"><b>💬 Sobre tu explicación:</b> ${esc(P.respuesta)}</p>` : ""}
     ${P.queHabriaHecho ? `<p style="margin:6px 0"><b>Lo que yo habría hecho:</b> ${esc(P.queHabriaHecho)}</p>` : ""}
     ${P.leccion ? `<p style="margin:6px 0 0"><b>Lección:</b> ${esc(P.leccion)}</p>` : ""}</div>`;
 }
@@ -333,9 +339,19 @@ function btFormHtml() {
     <div class="chips">${["TP", "SL", "BE"].map((x) => chip("resultado", x, x === "TP" ? "✅ TP" : x === "SL" ? "🛑 SL" : "➖ BE", f.resultado === x)).join("")}<span class="hint" id="bt-r" style="align-self:center">${r == null ? "" : "Resultado: " + (r > 0 ? "+" : "") + r + "R"}</span></div>
     <div class="sec">¿QUÉ FALLÓ? <small class="dim">(nada marcado = bien ejecutada)</small></div>
     <div class="chips">${BT_ERRORES.map((e) => chip("err", e, e, (f.errores || []).includes(e))).join("")}</div>
+    ${f.explicacion != null || f.profesor ? `<div class="sec">TU EXPLICACIÓN</div><textarea data-btf="explicacion" rows="3" placeholder="Por qué entraste, cómo ejecutaste, qué opinas…" style="width:100%;border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:8px">${esc(f.explicacion || "")}</textarea>` : ""}
     <textarea data-btf="nota" rows="2" placeholder="Nota: qué viste, qué sentiste…" style="width:100%;border:1px solid var(--line);border-radius:12px;padding:10px">${esc(f.nota)}</textarea>
     <div style="display:flex;gap:10px;margin-top:12px"><button type="button" class="btn green" data-bt="guardar">Guardar</button><button type="button" class="btn" data-bt="cancelar">Cancelar</button></div></div>`;
 }
+function btSubidaHtml() {
+  const U = S.btSubida, v = U.files.find(btEsVideo), n = U.files.length;
+  return `<div class="card" style="margin-bottom:18px;border:2px solid #6366f1"><h3>🎓 Explícale tu operación al profesor</h3>
+    <p class="hint">📎 ${v ? "1 vídeo listo" : n === 1 ? "1 captura lista" : n + " capturas listas"}. Antes de mandarla, cuéntale por qué entraste, cómo la ejecutaste y qué opinas tú. Puedes dictarlo con el micrófono del teclado.</p>
+    <textarea data-btsub rows="5" placeholder="Ej.: Entré en la primera vela de M15 después de las 2:00 porque rompió el high de Asia con cuerpo. Promedié una vez porque retrocedió hasta la media. Creo que salí demasiado pronto…" style="width:100%;border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:10px">${esc(U.texto || "")}</textarea>
+    <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap"><button type="button" class="btn green" data-bt="enviar-prof">🎓 Mandar al profesor</button><button type="button" class="btn" data-bt="cancelar-sub">Cancelar</button></div>
+    <p class="hint" style="margin-top:8px">Si no quieres explicar nada, mándala igual: el profesor la corrige solo con lo que ve.</p></div>`;
+}
+const btEsVideo = (f) => /^video\//.test(f.type) || /\.(mov|mp4|m4v|webm)$/i.test(f.name || "");
 function btImpHtml() {
   const I = S.btImp;
   return `<div class="card" style="margin-bottom:18px;border:2px solid #0ea5e9"><h3>Importar de TradingView</h3>
@@ -351,7 +367,7 @@ function btImpHtml() {
 S.btVer = "todo";
 V.backtest = () => {
   const todas = btLista(), ts = S.btVer === "todo" ? todas : todas.filter((t) => (t.tipo === "real" ? "real" : "backtest") === S.btVer), sinSet = todas.filter((t) => !t.setup).length;
-  return (S.btf ? btFormHtml() : "") + (S.btImp ? btImpHtml() : "") +
+  return (S.btSubida && !S.btBusy ? btSubidaHtml() : "") + (S.btf ? btFormHtml() : "") + (S.btImp ? btImpHtml() : "") +
   `<div class="card" style="margin-bottom:18px"><div class="cardhead"><div><h3>📒 Backtesting</h3><p class="hint">Tus pruebas de TradingView (Paper Trading y Bar Replay) y tus operaciones reales. Jarvis guarda set up, día, hora y sesión de cada entrada para decirte qué te funciona y en qué fallas.</p></div></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap"><button type="button" class="btn green" data-bt="nueva">+ Apuntar operación</button>
       <button type="button" class="btn" data-bt="foto">📷 Captura o vídeo</button><button type="button" class="btn" data-bt="csv">⬆️ Importar de TradingView</button>
@@ -390,6 +406,27 @@ root.addEventListener("click", async (e) => {
   if (d.bt === "foto") { $("#bt-foto").value = ""; $("#bt-foto").click(); return; }
   if (d.bt === "csv") { $("#bt-csv").value = ""; $("#bt-csv").click(); return; }
   if (d.bt === "cancelar-imp") { S.btImp = null; render(); return; }
+  if (d.bt === "cancelar-sub") { S.btSubida = null; render(); return; }
+  if (d.bt === "enviar-prof" && S.btSubida) {
+    const U = S.btSubida, files = U.files, video = files.find(btEsVideo), texto = (U.texto || "").trim();
+    S.btBusy = true; render();
+    try {
+      if (video) {
+        const { frames, dur } = await btFotogramas(video, 12);
+        if (dur > 180) toast("Vídeo de " + Math.round(dur / 60) + " minutos: para que el profesor vea bien la operación, mejor vídeos de 1 o 2 minutos.");
+        S.btf = await btLeerSecuencia(frames, texto);
+      } else {
+        const fotos = files.filter((f) => /^image\//.test(f.type) || /\.(jpe?g|png|heic|webp)$/i.test(f.name || "")).sort((a, b) => a.lastModified - b.lastModified);
+        S.btf = fotos.length > 1 ? await btLeerSecuencia(fotos, texto) : await btLeer(texto, fotos[0] || files[0]);
+      }
+      if (texto && S.btf.explicacion == null) S.btf.explicacion = texto;
+      S.btSubida = null;
+      toast("Mira la corrección de tu profesor, revisa los datos y guarda.");
+    }
+    catch (err) { toast("No he podido leer tu operación: " + (err.message || "error") + (video ? ". Prueba con 3 o 4 capturas seguidas (entrada, mitad y final): elígelas a la vez." : "")); }
+    finally { S.btBusy = false; render(); }
+    return;
+  }
   if (d.bt === "clase-semana" || d.bt === "clase-estrategia") {
     S.btClaseBusy = true; render();
     try { const txt = await btLeccion(d.bt === "clase-semana" ? "semana" : "estrategia"); if (!S.db) toast(txt.slice(0, 120)); }
@@ -423,6 +460,7 @@ root.addEventListener("click", async (e) => {
 function confirmarSinSet(btn) { if (dosToques(btn, "Sin set up: toca otra vez para guardar igual")) return true; return false; }
 root.addEventListener("input", (e) => {
   const d = e.target.dataset;
+  if (d.btsub != null && S.btSubida) { S.btSubida.texto = e.target.value; return; }
   if (d.btf != null && S.btf) {
     S.btf[d.btf] = e.target.value;
     if (["fecha", "hora"].includes(d.btf)) { const h = $("#bt-auto"); if (h) h.textContent = btDia(S.btf.fecha) + ", " + btSesion(S.btf.hora); }
@@ -440,21 +478,5 @@ root.addEventListener("change", async (e) => {
     if (!S.btImp.trades.length) toast("No he encontrado operaciones cerradas en ese archivo. Exporta el historial de Paper Trading (órdenes o balance).");
     render(); return;
   }
-  if (t.id === "bt-foto" && t.files && t.files[0]) {
-    const files = [...t.files], video = files.find((f) => /^video\//.test(f.type) || /\.(mov|mp4|m4v|webm)$/i.test(f.name || ""));
-    S.btBusy = true; render();
-    try {
-      if (video) {
-        const { frames, dur } = await btFotogramas(video, 12);
-        if (dur > 180) toast("Vídeo de " + Math.round(dur / 60) + " minutos: para que el profesor vea bien la operación, mejor vídeos de 1 o 2 minutos.");
-        S.btf = await btLeerSecuencia(frames);
-      } else {
-        const fotos = files.filter((f) => /^image\//.test(f.type) || /\.(jpe?g|png|heic|webp)$/i.test(f.name || "")).sort((a, b) => a.lastModified - b.lastModified);
-        S.btf = fotos.length > 1 ? await btLeerSecuencia(fotos) : await btLeer("", fotos[0] || files[0]);
-      }
-      toast("Mira la corrección de tu profesor, revisa los datos y guarda.");
-    }
-    catch (err) { toast("No he podido leer tu operación: " + (err.message || "error") + (video ? ". Prueba con 3 o 4 capturas seguidas (entrada, mitad y final): elígelas a la vez." : "")); }
-    finally { S.btBusy = false; render(); }
-  }
+  if (t.id === "bt-foto" && t.files && t.files[0]) { S.btSubida = { files: [...t.files], texto: "" }; S.btf = null; render(); }
 });
