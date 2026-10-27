@@ -256,7 +256,9 @@ async function checkIpadApps() {
         wrongSym.push("Backtesting: the teacher (correction of each screenshot, weekly class, strategy explained) is missing");
       if (!page.includes("async function btFotogramas(file, n)") || !page.includes("accept=\"image/*,video/*\"") || !page.includes("function btRealesTopstep(desde)") || !page.includes("data-btver=")
           || !page.includes("Si toma el high de Asia con mecha, se invalida") || !page.includes("const btFueraRango = (t)"))
-        wrongSym.push("Backtesting: video frames, real trades, his checklist per model or the operating window is missing"); }
+        wrongSym.push("Backtesting: video frames, real trades, his checklist per model or the operating window is missing");
+      if (!page.includes('const BT_HORARIO = [["Londres", "02:00", "05:00"], ["Nueva York", "10:30", "12:00"]];') || !page.includes("POR HORA DE ENTRADA · TU HORARIO") || !page.includes("⚠️ Falta la hora de entrada"))
+        wrongSym.push("Backtesting: the hour table must follow his hours (London 2:00–5:00, New York 10:30–12:00) and ask for a missing hour"); }
     if (!page.includes('id="cap-host"') || !page.includes("capitalPropio: window.CAPITAL?.contexto") || !page.includes('db.doc("fm/capital")')) wrongSym.push("Capital propio is not wired into Jarvis");
     if (!page.includes("<avisos>") || !page.includes("hacia las 11:00")) wrongSym.push("Jarvis does not know the scheduled 11:00 summary");
     if (!page.includes('db.doc("fm/mercado")') || !page.includes("no es en directo")) wrongSym.push("the MNQ price star is missing or not marked as not live");

@@ -9,14 +9,14 @@ const BT_SETUPS = [
     reglas: ["Entrada en Londres, en el rango operativo de 2:00 a 5:00", "Rompe una zona de liquidez, arriba o abajo", "Si rompe una acumulación por el medio o lateraliza, el set up se invalida",
       "Si toma el high de Asia con mecha, se invalida; si lo toma con cuerpo, esperar el retroceso", "Entrada siempre en la primera vela de M15, nunca esperar otra",
       "SL siempre por encima o por debajo de los máximos o mínimos secundarios, mínimo 100 puntos; nunca en un máximo o mínimo muy cercano"] },
-  { id: "L2", ses: "Londres", n: "Modelo 2 London", rango: ["02:00", "08:00"],
+  { id: "L2", ses: "Londres", n: "Modelo 2 London", rango: ["02:00", "05:00"],
     d: "Si el modelo 1 se escapa o no sucede: una vela con un 75 % de cuerpo toca la media móvil en M5 y la rompe con cuerpo; esperas a que toque la media móvil en M15 y entras a favor.",
     reglas: ["Solo si el modelo 1 se ha escapado o no ha sucedido", "Vela con un 75 % de cuerpo que toca la media móvil en M5 y la rompe con cuerpo", "Esperar a que toque la media móvil en M15 y entrar a favor"] },
-  { id: "NYR", ses: "Nueva York", n: "Modelo 1 NY · Ruptura", rango: ["09:30", "10:30"],
-    d: "Acumulación de 9:30 a 10:30: en la apertura te unes en la dirección en la que rompa, siempre entrando en M5.",
+  { id: "NYR", ses: "Nueva York", n: "Modelo 1 NY · Ruptura", rango: ["10:30", "12:00"],
+    d: "Acumulación de 9:30 a 10:30: a partir de las 10:30 te unes en la dirección en la que rompa, siempre entrando en M5.",
     reglas: ["Acumulación de 9:30 a 10:30; en la apertura, unirse en la dirección que rompa", "Siempre entrada en M5",
       "Si la primera vela de M5 de la apertura no rompe y cierra con cuerpo fuera del rango, se busca el modelo 2 de reversión"] },
-  { id: "NYV", ses: "Nueva York", n: "Modelo 2 NY · Reversión", rango: ["11:00", "16:00"],
+  { id: "NYV", ses: "Nueva York", n: "Modelo 2 NY · Reversión", rango: ["11:00", "12:00"],
     d: "Si no hubo entrada en la apertura: pasadas las 11:00, tras un rompimiento, una vela gigante con volumen en M15 a por el PDL/PDH o el PWL; entrada en M15 mirando M5 a la vez.",
     reglas: ["Solo si no hubo entrada en la apertura; rango operativo a partir de las 11:00", "Entrada después de un rompimiento", "Vela gigante con volumen en M15 a por el PDL o el PWL",
       "En la reversión tiene que haber un PDL o PDH cerca al que quiera ir", "Entrada en M15 (da más confianza), mirando M5 a la vez",
@@ -43,7 +43,18 @@ function btSesion(hora) {
   return h >= 2 && h < 8 ? "Londres" : h >= 8 && h < 17 ? "Nueva York" : h >= 18 || h < 2 ? "Asia" : "Fuera de sesión";
 }
 const btDia = (fecha) => (/^\d{4}-\d{2}-\d{2}$/.test(fecha || "") ? BT_DIAS[new Date(fecha + "T12:00:00Z").getUTCDay()] : "—");
-const btHora = (hora) => { const m = /^(\d{1,2}):/.exec(hora || ""); return m ? String(Number(m[1])).padStart(2, "0") + ":00" : "—"; };
+const btHora = (hora) => { const m = /^(\d{1,2}):/.exec(hora || ""); return m ? String(Number(m[1])).padStart(2, "0") + ":00" : "Sin hora"; };
+// his operating hours (New York time): London 2:00–5:00 and New York 10:30–12:00, in half hours; the hour table follows them
+const BT_HORARIO = [["Londres", "02:00", "05:00"], ["Nueva York", "10:30", "12:00"]];
+const btHM = (x) => { const [h, m] = x.split(":").map(Number); return h * 60 + m; }, btTxt = (n) => String(Math.floor(n / 60)).padStart(2, "0") + ":" + String(n % 60).padStart(2, "0");
+const BT_FRANJAS = BT_HORARIO.flatMap(([, a, z]) => { const out = []; for (let x = btHM(a); x < btHM(z); x += 30) out.push(btTxt(x) + "–" + btTxt(x + 30)); return out; });
+function btFranja(t) {
+  if (!/^\d{1,2}:\d{2}$/.test(t.hora || "")) return "Sin hora";
+  const x = btHM(t.hora.padStart(5, "0")), f = BT_FRANJAS.find((k) => x >= btHM(k.slice(0, 5)) && x < btHM(k.slice(6)));
+  return f || "Fuera de tu horario";
+}
+// the session: from the hour, or, when the hour wasn't read, from the model's session
+const btSesionT = (t) => (/^\d{1,2}:\d{2}$/.test(t.hora || "") ? btSesion(t.hora) : btSetup(t.setup) ? btSetup(t.setup).ses : "Sin hora");
 // result in R: what he wrote, else from entry, stop and exit
 function btR(t) {
   if (t.r != null && t.r !== "" && Number.isFinite(Number(t.r))) return Number(t.r);
@@ -68,7 +79,7 @@ function btConclusiones(trades) {
   const out = [], conR = (rows) => rows.filter((r) => r.n >= BT_MIN && r.rMedio != null);
   const combos = conR([
     ...btTabla(trades, (t) => (t.setup ? btNombre(t.setup) + " · " + btDia(t.fecha) : null)),
-    ...btTabla(trades, (t) => (t.setup ? btNombre(t.setup) + " · " + btHora(t.hora) + " (NY)" : null)),
+    ...btTabla(trades, (t) => (t.setup ? btNombre(t.setup) + " · " + btFranja(t) + " (NY)" : null)),
     ...btTabla(trades, (t) => (t.setup ? btNombre(t.setup) : null))]).sort((a, b) => b.rMedio - a.rMedio);
   if (combos.length) {
     const b = combos[0], w = combos[combos.length - 1];
@@ -217,7 +228,7 @@ async function btLeer(texto, imagen) {
     "Cómo opera: " + BT_REGLAS + "\n" +
     "Errores posibles: " + BT_ERRORES.join("; ") + ".\n" +
     (imagen ? "Además eres su profesor de trading: revisa la entrada contra el checklist de su modelo, regla por regla, con lo que se ve en el gráfico (velas, cuerpos, media móvil, líneas de hora, zonas AS/LO, la caja de la posición). Sé concreto y honesto; si algo no se ve, dilo en vez de suponerlo.\n" : "") +
-    "Responde SOLO con un JSON: {\"fecha\": \"AAAA-MM-DD\" del gráfico o null, \"hora\": \"HH:MM\" de la entrada o null, \"zona\": zona horaria del gráfico si se ve o null, \"instr\": símbolo o null, \"tf\": \"M1\"/\"M5\"/\"M15\"... o null, " +
+    "Responde SOLO con un JSON: {\"fecha\": \"AAAA-MM-DD\" del gráfico o null, \"hora\": \"HH:MM\" de la entrada (búscala en el eje de tiempo, en la etiqueta de fecha y hora o en la caja de la posición; es muy importante) o null, \"zona\": zona horaria del gráfico si se ve o null, \"instr\": símbolo o null, \"tf\": \"M1\"/\"M5\"/\"M15\"... o null, " +
     "\"dir\": \"LONG\" o \"SHORT\" o null, \"setup\": \"L1\"/\"L2\"/\"NYR\"/\"NYV\" o null, \"entrada\": número o null, \"stop\": número o null, \"salida\": número o null, \"resultado\": \"TP\"/\"SL\"/\"BE\" o null, " +
     "\"r\": resultado en R o null, \"pnl\": dólares o null, \"errores\": [de la lista], \"nota\": texto corto o \"\"" +
     (imagen ? ", \"profesor\": {\"veredicto\": \"libro\" (cumple sus reglas), \"dudosa\" o \"no\" (no era su set up), \"reglas\": [{\"regla\": texto corto, \"ok\": true/false/null si no se ve, \"por\": por qué}], " +
@@ -256,10 +267,10 @@ async function btLeccion(tipo) {
   const ts = btLista(), desde = iso(new Date(Date.now() - 7 * 86400000)), semana = tipo === "semana" ? ts.filter((t) => t.fecha >= desde) : ts;
   const reales = tipo === "semana" ? btRealesTopstep(desde) : [];
   if (!semana.length && !reales.length) return tipo === "semana" ? "Esta semana no has apuntado ninguna operación de backtest, Joel. Mándame capturas y te corrijo." : "Todavía no hay operaciones apuntadas para explicarte tu estrategia.";
-  const datos = semana.slice(0, 60).map((t) => ({ tipo: t.tipo === "real" ? "real" : "backtest", fecha: t.fecha, dia: btDia(t.fecha), horaNY: t.hora, sesion: btSesion(t.hora), setup: btNombre(t.setup), dir: t.dir, tf: t.tf, r: btR(t), errores: t.errores || [], nota: t.nota || "",
+  const datos = semana.slice(0, 60).map((t) => ({ tipo: t.tipo === "real" ? "real" : "backtest", fecha: t.fecha, dia: btDia(t.fecha), horaNY: t.hora, sesion: btSesionT(t), setup: btNombre(t.setup), dir: t.dir, tf: t.tf, r: btR(t), errores: t.errores || [], nota: t.nota || "",
     profesor: t.profesor ? { veredicto: t.profesor.veredicto, loQueVeo: t.profesor.loQueVeo, queHabriaHecho: t.profesor.queHabriaHecho, leccion: t.profesor.leccion } : null }));
   const ask = "Eres el profesor de trading de Joel. Sus set ups: " + BT_SETUPS.map((s) => s.n + ": " + s.d).join(" ") + " Cómo opera: " + BT_REGLAS + "\n" +
-    "Estadísticas de todo su backtesting: " + JSON.stringify({ porSetup: btTabla(ts, (t) => btNombre(t.setup)), porDia: btTabla(ts, (t) => btDia(t.fecha)), porSesion: btTabla(ts, (t) => btSesion(t.hora)), porHoraNY: btTabla(ts, (t) => btHora(t.hora)) }) + "\n" +
+    "Estadísticas de todo su backtesting: " + JSON.stringify({ porSetup: btTabla(ts, (t) => btNombre(t.setup)), porDia: btTabla(ts, (t) => btDia(t.fecha)), porSesion: btTabla(ts, btSesionT), porFranjaNY: btTabla(ts, btFranja), horario: "Londres 2:00–5:00 y Nueva York 10:30–12:00, hora de Nueva York" }) + "\n" +
     "Operaciones de su diario" + (tipo === "semana" ? " de esta semana" : "") + " (tipo backtest o real, con la corrección del profesor si mandó captura): " + JSON.stringify(datos) + "\n" +
     (reales.length ? "Sus operaciones reales de Topstep de esta semana, leídas de su cuenta (sin set up ni captura): " + JSON.stringify(reales) + "\n" : "") +
     (tipo === "semana" ? "Dale su clase de la semana, en español, de tú, en texto plano sin markdown y en menos de 250 palabras: 1) cómo ha ido, separando backtest y real (números), 2) los patrones que se repiten en sus aciertos y en sus fallos, 3) en qué se ha equivocado en real y si en real hace lo mismo que en el backtest (horas, sesiones, promediar), 4) la regla que más se salta, 5) dos cosas concretas para practicar la semana que viene."
@@ -282,7 +293,7 @@ function btRealesTopstep(desde) {
 function btContexto() {
   const ts = btLista();
   return { operaciones: ts.length, minimoParaConcluir: BT_MIN, conclusiones: btConclusiones(ts), porSetup: btTabla(ts, (t) => btNombre(t.setup)), porDia: btTabla(ts, (t) => btDia(t.fecha)),
-           porSesion: btTabla(ts, (t) => btSesion(t.hora)), porHoraNY: btTabla(ts, (t) => btHora(t.hora)), porDireccion: btTabla(ts, (t) => (t.dir === "SHORT" ? "Cortos" : "Largos")),
+           porSesion: btTabla(ts, btSesionT), porFranjaNY: btTabla(ts, btFranja), horario: "Londres 2:00–5:00, Nueva York 10:30–12:00 (hora de Nueva York)", porDireccion: btTabla(ts, (t) => (t.dir === "SHORT" ? "Cortos" : "Largos")),
            errores: BT_ERRORES.map((e) => ({ error: e, ...(btTabla(ts.filter((t) => (t.errores || []).includes(e)), () => e)[0] || { n: 0 }) })).filter((x) => x.n),
            ultimas: ts.slice(0, 15).map((t) => ({ fecha: t.fecha, dia: btDia(t.fecha), horaNY: t.hora, sesion: btSesion(t.hora), setup: btNombre(t.setup), dir: t.dir, r: btR(t), errores: t.errores || [], nota: t.nota || "", profesor: t.profesor ? BT_VERED[t.profesor.veredicto] + ". " + t.profesor.leccion : null })),
            ultimaClase: (list(S.btClases).sort((a, b) => (b.creado || "").localeCompare(a.creado || ""))[0] || {}).texto || null, comoOpera: BT_REGLAS,
@@ -310,6 +321,7 @@ function btFormHtml() {
   const r = btR(f);
   return `<div class="card" style="margin-bottom:18px;border:2px solid #6366f1"><h3>${f.id ? "Editar operación" : "Nueva operación de backtest"}</h3>
     <p class="hint">Hora de Nueva York (la de tus set ups). Jarvis pone solo el día y la sesión: <b id="bt-auto">${esc(btDia(f.fecha))}, ${esc(btSesion(f.hora))}</b>.</p>
+    ${!f.hora ? '<div class="banner warn" style="margin-top:10px">⚠️ Falta la hora de entrada: ponla para que la operación cuente en tu horario (Londres 2:00–5:00, Nueva York 10:30–12:00).</div>' : ""}
     <div class="filters" style="margin-top:12px">${lab("Fecha del gráfico", inp("fecha", "date", "", 160))}${lab("Hora de entrada (NY)", inp("hora", "time", "", 120))}${lab("Instrumento", inp("instr", "text", "MNQ", 90))}</div>
     ${f.profesor ? btProfHtml(f.profesor) : ""}
     <div class="chips" style="margin-top:12px">${chip("tipo", "backtest", "🧪 Backtest", f.tipo !== "real")}${chip("tipo", "real", "💵 Operación real", f.tipo === "real")}</div>
@@ -355,14 +367,16 @@ V.backtest = () => {
     <p class="hint">${ts.length} operaciones apuntadas. Los grupos con menos de ${BT_MIN} salen en gris: todavía no dicen nada.</p>
     ${btConclusiones(ts).map((c) => `<div class="banner ${/^✅/.test(c) ? "ok" : /^⚠️|^🛑/.test(c) ? "warn" : ""}" style="margin-top:8px">${esc(c)}</div>`).join("")}
     ${btTablaHtml("POR SET UP", btTabla(ts, (t) => btNombre(t.setup)))}
-    ${btTablaHtml("POR SESIÓN", btTabla(ts, (t) => btSesion(t.hora)))}
+    ${btTablaHtml("POR SESIÓN", btTabla(ts, btSesionT))}
     ${btTablaHtml("POR DÍA", btTabla(ts, (t) => btDia(t.fecha)).sort((a, b) => BT_DIAS.indexOf(a.k) - BT_DIAS.indexOf(b.k)))}
-    ${btTablaHtml("POR HORA DE ENTRADA (NUEVA YORK)", btTabla(ts, (t) => btHora(t.hora)).sort((a, b) => a.k.localeCompare(b.k)))}
+    ${btTablaHtml("POR HORA DE ENTRADA · TU HORARIO", (() => { const rows = btTabla(ts, btFranja), orden = [...BT_FRANJAS, "Fuera de tu horario", "Sin hora"];
+      return orden.map((k) => rows.find((r) => r.k === k) || (BT_FRANJAS.includes(k) ? { k, n: 0, gan: 0, per: 0, be: 0, acierto: null, rMedio: null, rTotal: 0 } : null)).filter(Boolean); })(),
+      "Hora de Nueva York. Londres de 2:00 a 5:00 y Nueva York de 10:30 a 12:00 (en España, de 8:00 a 11:00 y de 16:30 a 18:00).")}
     ${btTablaHtml("LARGOS Y CORTOS", btTabla(ts, (t) => (t.dir === "SHORT" ? "Cortos" : "Largos")))}
     ${btTablaHtml("ERRORES", [btTabla(ts.filter((t) => !(t.errores || []).length), () => "✓ Bien ejecutadas")[0], ...BT_ERRORES.map((e) => btTabla(ts.filter((t) => (t.errores || []).includes(e)), () => e)[0])].filter(Boolean), "Cómo te va cuando cometes cada error, frente a las operaciones bien ejecutadas.")}</div>
   <div class="card"><h3>Tu diario${sinSet ? ` <small class="dim">· ${sinSet} sin set up</small>` : ""}</h3>
     ${todas.length ? `<div class="tablewrap"><table><thead><tr><th>CUÁNDO (NY)</th><th>SET UP</th><th>RESULTADO</th><th></th></tr></thead><tbody>${todas.slice(0, 80).map((t) => { const r = btR(t);
-      return `<tr><td>${t.tipo === "real" ? "💵 " : ""}${esc(btDia(t.fecha).slice(0, 3))} ${esc(t.fecha.split("-").reverse().join("/"))} ${esc(t.hora || "")}<br><small class="dim">${esc(btSesion(t.hora))} · ${esc(t.instr || "")} ${t.dir === "SHORT" ? "corto" : "largo"}${t.tf ? " · " + esc(t.tf) : ""}</small></td>
+      return `<tr><td>${t.tipo === "real" ? "💵 " : ""}${esc(btDia(t.fecha).slice(0, 3))} ${esc(t.fecha.split("-").reverse().join("/"))} ${esc(t.hora || "")}<br><small class="dim">${t.hora ? esc(btSesion(t.hora)) : "⚠️ sin hora"} · ${esc(t.instr || "")} ${t.dir === "SHORT" ? "corto" : "largo"}${t.tf ? " · " + esc(t.tf) : ""}</small></td>
         <td style="white-space:normal">${t.setup ? esc(btNombre(t.setup)) : `<div class="chips" style="margin:0">${BT_SETUPS.map((s) => `<button type="button" data-btset="${t.id}:${s.id}">${esc(s.id)}</button>`).join("")}</div>`}${(t.errores || []).length ? `<br><small class="dim">${esc(t.errores.join(" · "))}</small>` : ""}${t.profesor ? `<br><small>${esc(BT_VERED[t.profesor.veredicto])}${t.profesor.leccion ? " · " + esc(t.profesor.leccion) : ""}</small>` : ""}</td>
         <td>${r == null ? esc(t.resultado || "—") : (r > 0 ? "+" : "") + r + "R"}${t.pnl ? `<br><small class="dim">${esc(signed(t.pnl))}</small>` : ""}</td>
         <td><button type="button" class="btn small" data-btedit="${t.id}">Editar</button> <button type="button" class="btn small" data-btdel="${t.id}">Borrar</button></td></tr>`; }).join("")}</tbody></table></div>` : '<p class="empty">Todavía no hay operaciones. Apunta la primera, mándale una captura a Jarvis o importa tu historial de Paper Trading.</p>'}</div>`;
