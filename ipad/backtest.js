@@ -1,17 +1,37 @@
 // ── 📒 Backtesting: Joel's TradingView backtests (Paper Trading and Bar Replay), one document per trade in fm/plan/backtest.
 // build-space.mjs copies this file into the Plan de Futuros script. The setups are his own; the stats say which setup, day,
 // hour and session work for him and which mistakes cost him. Hours are New York time, the clock his setups are written in.
+// His four entry models, from his own checklist («Checklist Caminoalmillon»). Hours are New York time. «rango» is the window
+// the model is traded in; each rule is a line of his checklist, and the teacher checks every chart against them one by one.
 const BT_SETUPS = [
-  { id: "L1", ses: "Londres", n: "Londres 1 · vela 75 % tras las 2:00", d: "Después de la línea roja de las 2:00 (hora de Nueva York), una vela con volumen (más del 75 % de cuerpo) rompe a favor de la tendencia: entras a su favor. RR 1:1." },
-  { id: "L2", ses: "Londres", n: "Londres 2 · vela 75 % rompe la media", d: "Una vela con más del 75 % de cuerpo rompe con cuerpo la media móvil en M5 o M15: entras a su favor." },
-  { id: "NYR", ses: "Nueva York", n: "NY · Ruptura", d: "Tu modelo de ruptura en Nueva York." },
-  { id: "NYV", ses: "Nueva York", n: "NY · Reversión", d: "Tu modelo de reversión en Nueva York." },
+  { id: "L1", ses: "Londres", n: "Modelo 1 London", rango: ["02:00", "05:00"],
+    d: "Después de la línea roja de las 2:00, una vela con volumen (más del 75 % de cuerpo) rompe una zona de liquidez, arriba o abajo: entras a su favor en esa primera vela de M15.",
+    reglas: ["Entrada en Londres, en el rango operativo de 2:00 a 5:00", "Rompe una zona de liquidez, arriba o abajo", "Si rompe una acumulación por el medio o lateraliza, el set up se invalida",
+      "Si toma el high de Asia con mecha, se invalida; si lo toma con cuerpo, esperar el retroceso", "Entrada siempre en la primera vela de M15, nunca esperar otra",
+      "SL siempre por encima o por debajo de los máximos o mínimos secundarios, mínimo 100 puntos; nunca en un máximo o mínimo muy cercano"] },
+  { id: "L2", ses: "Londres", n: "Modelo 2 London", rango: ["02:00", "08:00"],
+    d: "Si el modelo 1 se escapa o no sucede: una vela con un 75 % de cuerpo toca la media móvil en M5 y la rompe con cuerpo; esperas a que toque la media móvil en M15 y entras a favor.",
+    reglas: ["Solo si el modelo 1 se ha escapado o no ha sucedido", "Vela con un 75 % de cuerpo que toca la media móvil en M5 y la rompe con cuerpo", "Esperar a que toque la media móvil en M15 y entrar a favor"] },
+  { id: "NYR", ses: "Nueva York", n: "Modelo 1 NY · Ruptura", rango: ["09:30", "10:30"],
+    d: "Acumulación de 9:30 a 10:30: en la apertura te unes en la dirección en la que rompa, siempre entrando en M5.",
+    reglas: ["Acumulación de 9:30 a 10:30; en la apertura, unirse en la dirección que rompa", "Siempre entrada en M5",
+      "Si la primera vela de M5 de la apertura no rompe y cierra con cuerpo fuera del rango, se busca el modelo 2 de reversión"] },
+  { id: "NYV", ses: "Nueva York", n: "Modelo 2 NY · Reversión", rango: ["11:00", "16:00"],
+    d: "Si no hubo entrada en la apertura: pasadas las 11:00, tras un rompimiento, una vela gigante con volumen en M15 a por el PDL/PDH o el PWL; entrada en M15 mirando M5 a la vez.",
+    reglas: ["Solo si no hubo entrada en la apertura; rango operativo a partir de las 11:00", "Entrada después de un rompimiento", "Vela gigante con volumen en M15 a por el PDL o el PWL",
+      "En la reversión tiene que haber un PDL o PDH cerca al que quiera ir", "Entrada en M15 (da más confianza), mirando M5 a la vez",
+      "Si Londres ha expandido mucho y hay cerca un PDH o PDL con el camino en blanco, buscar la reversión hacia ese PDL o PDH cercano (y no operar en contra)"] },
 ];
-const BT_ERRORES = ["Entré antes de que cerrara la vela", "La vela no tenía el 75 % de cuerpo", "No rompió con cuerpo", "Fuera de su horario", "Contra la tendencia",
+const BT_ERRORES = ["Entré antes de que cerrara la vela", "La vela no tenía el 75 % de cuerpo", "No rompió con cuerpo", "Fuera del rango operativo", "Rompió por el medio de la acumulación o lateralizaba",
+  "Tomó el high de Asia con mecha", "No entré en la primera vela de M15", "Stop en un máximo o mínimo demasiado cercano", "Sin PDH/PDL cerca para la reversión", "Contra la tendencia",
   "Moví el stop", "Salí antes de tiempo", "Promedié de más", "Sobreoperé"];
-// Joel's own words about how he trades them; the teacher judges every chart against these
-const BT_REGLAS = "Opera siempre después de la línea roja de las 2:00 de Nueva York (las 8:00 en España). Entra a favor de la dirección (si es alcista, compra) cuando una vela con volumen, de más del 75 % de cuerpo, rompe. " +
-  "Su ratio es 1:1. Si el precio va en contra, promedia; si va a favor, añade contratos. El stop de toda la posición no se mueve nunca. Marca las zonas: AS.H/AS.L = máximo y mínimo de Asia, LO.H/LO.L = máximo y mínimo de Londres.";
+// how he trades all of them; the teacher judges every chart against this and the model's checklist
+const BT_REGLAS = "Opera siempre después de la línea roja de las 2:00 de Nueva York (las 8:00 en España). Entra a favor de la dirección cuando una vela con volumen, de más del 75 % de cuerpo, rompe. " +
+  "Su ratio es 1:1. Si el precio va en contra, promedia; si va a favor, añade contratos. El stop de toda la posición no se mueve nunca. Zonas que marca: AS.H/AS.L = máximo y mínimo de Asia, " +
+  "LO.H/LO.L = máximo y mínimo de Londres, PDH/PDL = máximo y mínimo del día anterior, PWL = mínimo de la semana anterior. Sus modelos y su checklist: " +
+  BT_SETUPS.map((s) => s.n + " (" + s.rango.join("–") + " hora NY): " + s.reglas.join("; ") + ".").join(" ");
+// outside the model's window: the form says so and the teacher counts it as a mistake
+const btFueraRango = (t) => { const s = btSetup(t.setup); return !!(s && /^\d{2}:\d{2}$/.test(t.hora || "") && (t.hora < s.rango[0] || t.hora > s.rango[1])); };
 const BT_DIAS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
 const BT_MIN = 10;                       // fewer trades than this and a percentage says nothing yet
 const btSetup = (id) => BT_SETUPS.find((s) => s.id === id);
@@ -147,23 +167,43 @@ async function btGuardar(t) {
   await S.db.doc("fm/plan").collection("backtest").doc(id).set(d);
   return id;
 }
-const BT_VACIA = () => ({ fecha: iso(new Date()), hora: "", setup: "", dir: "LONG", instr: "MNQ", tf: "M5", entrada: "", stop: "", salida: "", resultado: "", r: "", pnl: "", errores: [], nota: "", origen: "a mano" });
+const BT_VACIA = () => ({ tipo: "backtest", fecha: iso(new Date()), hora: "", setup: "", dir: "LONG", instr: "MNQ", tf: "M5", entrada: "", stop: "", salida: "", resultado: "", r: "", pnl: "", errores: [], nota: "", origen: "a mano" });
 // a sentence or a chart screenshot → one trade, read by Claude; never invented: what isn't there comes back empty
+// a video of the trade → frames in order (Claude reads images, not video): evenly spaced, the last one at the very end
+async function btFotogramas(file, n) {
+  const url = URL.createObjectURL(file), v = document.createElement("video");
+  v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = url;
+  try {
+    await new Promise((ok, ko) => { v.onloadeddata = ok; v.onerror = () => ko(new Error("no puedo abrir ese vídeo")); setTimeout(() => ko(new Error("el vídeo tarda demasiado en abrir")), 15000); });
+    const dur = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 1, k = Math.max(2, n || 6), out = [];
+    const esc_ = Math.min(1, 1280 / (v.videoWidth || 1280)), c = document.createElement("canvas");
+    c.width = Math.round((v.videoWidth || 1280) * esc_); c.height = Math.round((v.videoHeight || 720) * esc_);
+    for (let i = 0; i < k; i++) {
+      const t = Math.min(dur - 0.05, (dur * i) / (k - 1));
+      await new Promise((ok) => { v.onseeked = ok; v.currentTime = Math.max(0, t); setTimeout(ok, 4000); });
+      c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+      const blob = await new Promise((ok) => c.toBlob(ok, "image/jpeg", 0.8));
+      if (blob) out.push(new File([blob], "fotograma-" + (i + 1) + ".jpg", { type: "image/jpeg" }));
+    }
+    if (!out.length) throw new Error("no he podido sacar imágenes del vídeo");
+    return out;
+  } finally { URL.revokeObjectURL(url); }
+}
 async function btLeer(texto, imagen) {
   const sample = window.claude?.use ? await window.claude.use("sample") : null;
   if (!sample) throw new Error("Abre Jarvis dentro de Claude para que pueda leerlo.");
-  const ask = "Extrae UNA operación de backtesting de trading de Joel" + (imagen ? " de esta captura de TradingView" : "") + (texto ? " (y de lo que dice: «" + texto + "»)" : "") + ". Hoy es " + iso(new Date()) + ".\n" +
-    "Sus set ups: L1 = Londres 1 (después de las 2:00 hora de Nueva York, vela que rompe con más del 75 % de cuerpo, entra a favor); L2 = Londres 2 (vela de más del 75 % de cuerpo que rompe con cuerpo la media móvil en M5 o M15); NYR = Nueva York ruptura; NYV = Nueva York reversión.\n" +
+  const ask = "Extrae UNA operación de backtesting de trading de Joel" + (Array.isArray(imagen) ? " de estos " + imagen.length + " fotogramas de un vídeo de TradingView, en orden de principio a fin (mira cómo evoluciona la operación: la entrada, lo que hace el precio y cómo termina)" : imagen ? " de esta captura de TradingView" : "") + (texto ? " (y de lo que dice: «" + texto + "»)" : "") + ". Hoy es " + iso(new Date()) + ".\n" +
+    "Sus modelos (id = nombre): " + BT_SETUPS.map((s) => s.id + " = " + s.n).join("; ") + ".\n" +
     "Cómo opera: " + BT_REGLAS + "\n" +
     "Errores posibles: " + BT_ERRORES.join("; ") + ".\n" +
-    (imagen ? "Además eres su profesor de trading: revisa la entrada contra sus reglas y su set up, con lo que se ve en el gráfico (velas, cuerpos, media móvil, líneas de hora, zonas AS/LO, la caja de la posición). Sé concreto y honesto; si algo no se ve, dilo en vez de suponerlo.\n" : "") +
+    (imagen ? "Además eres su profesor de trading: revisa la entrada contra el checklist de su modelo, regla por regla, con lo que se ve en el gráfico (velas, cuerpos, media móvil, líneas de hora, zonas AS/LO, la caja de la posición). Sé concreto y honesto; si algo no se ve, dilo en vez de suponerlo.\n" : "") +
     "Responde SOLO con un JSON: {\"fecha\": \"AAAA-MM-DD\" del gráfico o null, \"hora\": \"HH:MM\" de la entrada o null, \"zona\": zona horaria del gráfico si se ve o null, \"instr\": símbolo o null, \"tf\": \"M1\"/\"M5\"/\"M15\"... o null, " +
     "\"dir\": \"LONG\" o \"SHORT\" o null, \"setup\": \"L1\"/\"L2\"/\"NYR\"/\"NYV\" o null, \"entrada\": número o null, \"stop\": número o null, \"salida\": número o null, \"resultado\": \"TP\"/\"SL\"/\"BE\" o null, " +
     "\"r\": resultado en R o null, \"pnl\": dólares o null, \"errores\": [de la lista], \"nota\": texto corto o \"\"" +
     (imagen ? ", \"profesor\": {\"veredicto\": \"libro\" (cumple sus reglas), \"dudosa\" o \"no\" (no era su set up), \"reglas\": [{\"regla\": texto corto, \"ok\": true/false/null si no se ve, \"por\": por qué}], " +
       "\"loQueVeo\": 2-3 frases de lo que pasa en el gráfico, \"queHabriaHecho\": qué habría hecho un buen trader con sus reglas (otra entrada, otro stop, no entrar, una segunda oportunidad…), \"leccion\": una frase para recordar}" : "") +
     "}. Si un dato no está, null: no lo inventes. Háblale de tú, en español.";
-  const { text } = await sample([{ role: "user", content: ask }], imagen ? { cache: false, images: [imagen] } : { cache: false, effort: "low" });
+  const { text } = await sample([{ role: "user", content: ask }], imagen ? { cache: false, images: Array.isArray(imagen) ? imagen : [imagen] } : { cache: false, effort: "low" });
   const o = JSON.parse((String(text).match(/\{[\s\S]*\}/) || ["{}"])[0]) || {};
   let fecha = /^\d{4}-\d{2}-\d{2}$/.test(o.fecha || "") ? o.fecha : iso(new Date()), hora = /^\d{1,2}:\d{2}$/.test(o.hora || "") ? o.hora.padStart(5, "0") : "";
   if (hora && o.zona && !/new.?york|nueva york|^et$|est|edt|america\/new_york/i.test(o.zona)) {
@@ -173,7 +213,7 @@ async function btLeer(texto, imagen) {
   const num = (x) => (x == null || x === "" || !Number.isFinite(Number(x)) ? "" : Number(x));
   return { ...BT_VACIA(), fecha, hora, setup: btSetup(o.setup) ? o.setup : "", dir: o.dir === "SHORT" ? "SHORT" : "LONG", instr: o.instr ? String(o.instr).replace(/\d*!$/, "") : "MNQ",
            tf: o.tf || "M5", entrada: num(o.entrada), stop: num(o.stop), salida: num(o.salida), resultado: ["TP", "SL", "BE"].includes(o.resultado) ? o.resultado : "", r: num(o.r), pnl: num(o.pnl),
-           errores: (o.errores || []).filter((e) => BT_ERRORES.includes(e)), nota: String(o.nota || ""), origen: imagen ? "captura" : "voz",
+           errores: (o.errores || []).filter((e) => BT_ERRORES.includes(e)), nota: String(o.nota || ""), origen: Array.isArray(imagen) ? "vídeo" : imagen ? "captura" : "voz", tipo: /\breal\b|topstep|en directo|en vivo/i.test(texto || "") ? "real" : "backtest",
            ...(o.profesor && typeof o.profesor === "object" ? { profesor: { veredicto: ["libro", "dudosa", "no"].includes(o.profesor.veredicto) ? o.profesor.veredicto : "dudosa",
              reglas: (o.profesor.reglas || []).slice(0, 8).map((r) => ({ regla: String(r.regla || ""), ok: r.ok === true ? true : r.ok === false ? false : null, por: String(r.por || "") })),
              loQueVeo: String(o.profesor.loQueVeo || ""), queHabriaHecho: String(o.profesor.queHabriaHecho || ""), leccion: String(o.profesor.leccion || "") } } : {}) };
@@ -182,7 +222,7 @@ async function btLeer(texto, imagen) {
 async function btApuntar(texto, imagen) {
   const t = await btLeer(texto, imagen); await btGuardar(t);
   const r = btR(t), falta = [!t.setup && "el set up", !t.hora && "la hora", r == null && !t.resultado && "el resultado"].filter(Boolean);
-  return "Apuntado en tu backtesting: " + (t.setup ? btNombre(t.setup) : "sin set up") + ", " + (t.dir === "LONG" ? "largo" : "corto") + " el " + btDia(t.fecha).toLowerCase() + " " + t.fecha.split("-").reverse().join("/") +
+  return "Apuntado en tu diario" + (t.tipo === "real" ? " (operación real)" : " de backtesting") + ": " + (t.setup ? btNombre(t.setup) : "sin set up") + ", " + (t.dir === "LONG" ? "largo" : "corto") + " el " + btDia(t.fecha).toLowerCase() + " " + t.fecha.split("-").reverse().join("/") +
     (t.hora ? " a las " + t.hora + " (Nueva York, " + btSesion(t.hora) + ")" : "") + (r != null ? ", " + (r > 0 ? "+" : "") + r + "R" : t.resultado ? ", " + t.resultado : "") +
     (t.errores.length ? ". Errores: " + t.errores.join(", ").toLowerCase() : "") + "." + (t.profesor ? " " + BT_VERED[t.profesor.veredicto] + ". " + t.profesor.loQueVeo + " " +
       (t.profesor.veredicto !== "libro" && t.profesor.queHabriaHecho ? "Lo que yo habría hecho: " + t.profesor.queHabriaHecho + " " : "") + (t.profesor.leccion ? "Lección: " + t.profesor.leccion : "") : "") + (falta.length ? " Me falta " + falta.join(" y ") + ": complétalo en Plan de Futuros → Backtesting." : "");
@@ -193,20 +233,30 @@ const BT_VERED = { libro: "✅ De libro", dudosa: "⚠️ Dudosa", no: "❌ No e
 async function btLeccion(tipo) {
   const sample = window.claude?.use ? await window.claude.use("sample") : null;
   if (!sample) throw new Error("Abre Jarvis dentro de Claude para la clase.");
-  const ts = btLista(), semana = tipo === "semana" ? ts.filter((t) => t.fecha >= iso(new Date(Date.now() - 7 * 86400000))) : ts;
-  if (!semana.length) return tipo === "semana" ? "Esta semana no has apuntado ninguna operación de backtest, Joel. Mándame capturas y te corrijo." : "Todavía no hay operaciones apuntadas para explicarte tu estrategia.";
-  const datos = semana.slice(0, 60).map((t) => ({ fecha: t.fecha, dia: btDia(t.fecha), horaNY: t.hora, sesion: btSesion(t.hora), setup: btNombre(t.setup), dir: t.dir, tf: t.tf, r: btR(t), errores: t.errores || [], nota: t.nota || "",
+  const ts = btLista(), desde = iso(new Date(Date.now() - 7 * 86400000)), semana = tipo === "semana" ? ts.filter((t) => t.fecha >= desde) : ts;
+  const reales = tipo === "semana" ? btRealesTopstep(desde) : [];
+  if (!semana.length && !reales.length) return tipo === "semana" ? "Esta semana no has apuntado ninguna operación de backtest, Joel. Mándame capturas y te corrijo." : "Todavía no hay operaciones apuntadas para explicarte tu estrategia.";
+  const datos = semana.slice(0, 60).map((t) => ({ tipo: t.tipo === "real" ? "real" : "backtest", fecha: t.fecha, dia: btDia(t.fecha), horaNY: t.hora, sesion: btSesion(t.hora), setup: btNombre(t.setup), dir: t.dir, tf: t.tf, r: btR(t), errores: t.errores || [], nota: t.nota || "",
     profesor: t.profesor ? { veredicto: t.profesor.veredicto, loQueVeo: t.profesor.loQueVeo, queHabriaHecho: t.profesor.queHabriaHecho, leccion: t.profesor.leccion } : null }));
   const ask = "Eres el profesor de trading de Joel. Sus set ups: " + BT_SETUPS.map((s) => s.n + ": " + s.d).join(" ") + " Cómo opera: " + BT_REGLAS + "\n" +
     "Estadísticas de todo su backtesting: " + JSON.stringify({ porSetup: btTabla(ts, (t) => btNombre(t.setup)), porDia: btTabla(ts, (t) => btDia(t.fecha)), porSesion: btTabla(ts, (t) => btSesion(t.hora)), porHoraNY: btTabla(ts, (t) => btHora(t.hora)) }) + "\n" +
-    "Operaciones" + (tipo === "semana" ? " de esta semana" : "") + ": " + JSON.stringify(datos) + "\n" +
-    (tipo === "semana" ? "Dale su clase de la semana, en español, de tú, en texto plano sin markdown y en menos de 250 palabras: 1) cómo ha ido (números), 2) los patrones que se repiten en sus aciertos y en sus fallos, 3) la regla que más se salta, 4) dos cosas concretas para practicar la semana que viene."
+    "Operaciones de su diario" + (tipo === "semana" ? " de esta semana" : "") + " (tipo backtest o real, con la corrección del profesor si mandó captura): " + JSON.stringify(datos) + "\n" +
+    (reales.length ? "Sus operaciones reales de Topstep de esta semana, leídas de su cuenta (sin set up ni captura): " + JSON.stringify(reales) + "\n" : "") +
+    (tipo === "semana" ? "Dale su clase de la semana, en español, de tú, en texto plano sin markdown y en menos de 250 palabras: 1) cómo ha ido, separando backtest y real (números), 2) los patrones que se repiten en sus aciertos y en sus fallos, 3) en qué se ha equivocado en real y si en real hace lo mismo que en el backtest (horas, sesiones, promediar), 4) la regla que más se salta, 5) dos cosas concretas para practicar la semana que viene."
       : "Explícale su estrategia con sus propias operaciones, en español, de tú, en texto plano sin markdown y en menos de 300 palabras: cómo es una entrada de libro de cada set up, en qué horas, días y sesiones funciona mejor, qué la estropea y qué gestión le funciona (promediar, añadir). ") +
     " Di siempre cuántas operaciones hay detrás de cada conclusión; con menos de " + BT_MIN + " en un grupo, dile que todavía es pronto.";
   const { text } = await sample([{ role: "user", content: ask }], { cache: false });
   const txt = String(text || "").trim();
   if (S.db) await S.db.doc("fm/plan").collection("clases").doc(tipo + "-" + iso(new Date())).set({ tipo, texto: txt, operaciones: semana.length, creado: new Date().toISOString() });
   return txt;
+}
+// the week's real trades as Topstep reports them (account, New York hour, session, result), for the class
+function btRealesTopstep(desde) {
+  const por = new Map(cuentas().filter((c) => c.topstepId).map((c) => [String(c.topstepId), c.codigo]));
+  return Object.entries(S.topstep?.cuentas || {}).flatMap(([id, a]) => (a.trades || []).filter((o) => o.fecha >= desde).map((o) => {
+    const w = o.abre || o.cierra ? btNY(Date.parse(o.abre || o.cierra)) : { fecha: o.fecha, hora: "" };
+    return { cuenta: por.get(String(id)) || a.nombre, fecha: o.fecha, dia: btDia(o.fecha), horaEntradaNY: w.hora, sesion: btSesion(w.hora), instr: o.instr, dir: o.dir, contratos: o.contratos, pnl: o.pnl, minutos: o.dur };
+  })).sort((a, b) => (a.fecha + a.horaEntradaNY).localeCompare(b.fecha + b.horaEntradaNY)).slice(-80);
 }
 // what Jarvis reads when Joel asks about his backtests
 function btContexto() {
@@ -216,7 +266,7 @@ function btContexto() {
            errores: BT_ERRORES.map((e) => ({ error: e, ...(btTabla(ts.filter((t) => (t.errores || []).includes(e)), () => e)[0] || { n: 0 }) })).filter((x) => x.n),
            ultimas: ts.slice(0, 15).map((t) => ({ fecha: t.fecha, dia: btDia(t.fecha), horaNY: t.hora, sesion: btSesion(t.hora), setup: btNombre(t.setup), dir: t.dir, r: btR(t), errores: t.errores || [], nota: t.nota || "", profesor: t.profesor ? BT_VERED[t.profesor.veredicto] + ". " + t.profesor.leccion : null })),
            ultimaClase: (list(S.btClases).sort((a, b) => (b.creado || "").localeCompare(a.creado || ""))[0] || {}).texto || null, comoOpera: BT_REGLAS,
-           setups: BT_SETUPS.map((s) => s.n + ": " + s.d) };
+           setups: BT_SETUPS.map((s) => s.n + " (" + s.rango.join("–") + " hora NY): " + s.d + " Checklist: " + s.reglas.join("; ")) };
 }
 
 // ── the tab
@@ -242,8 +292,9 @@ function btFormHtml() {
     <p class="hint">Hora de Nueva York (la de tus set ups). Jarvis pone solo el día y la sesión: <b id="bt-auto">${esc(btDia(f.fecha))}, ${esc(btSesion(f.hora))}</b>.</p>
     <div class="filters" style="margin-top:12px">${lab("Fecha del gráfico", inp("fecha", "date", "", 160))}${lab("Hora de entrada (NY)", inp("hora", "time", "", 120))}${lab("Instrumento", inp("instr", "text", "MNQ", 90))}</div>
     ${f.profesor ? btProfHtml(f.profesor) : ""}
+    <div class="chips" style="margin-top:12px">${chip("tipo", "backtest", "🧪 Backtest", f.tipo !== "real")}${chip("tipo", "real", "💵 Operación real", f.tipo === "real")}</div>
     <div class="sec" style="margin-top:6px">SET UP</div><div class="chips">${BT_SETUPS.map((s) => chip("setup", s.id, s.n, f.setup === s.id)).join("")}</div>
-    ${f.setup ? `<p class="hint" style="margin-top:-10px">${esc(btSetup(f.setup).d)}</p>` : ""}
+    ${f.setup ? `<p class="hint" style="margin-top:-10px">${esc(btSetup(f.setup).d)} <b>Rango: ${btSetup(f.setup).rango.join("–")} (NY).</b></p>${btFueraRango(f) ? `<div class="banner warn" style="margin:-6px 0 12px">⚠️ A las ${esc(f.hora)} estás fuera del rango operativo de este modelo.</div>` : ""}` : ""}
     <div class="chips">${chip("dir", "LONG", "Largo", f.dir === "LONG")}${chip("dir", "SHORT", "Corto", f.dir === "SHORT")}<span style="width:12px"></span>${["M1", "M5", "M15"].map((x) => chip("tf", x, x, f.tf === x)).join("")}</div>
     <div class="sec">RESULTADO</div>
     <div class="filters">${lab("Entrada", inp("entrada", "number"))}${lab("Stop", inp("stop", "number"))}${lab("Salida", inp("salida", "number"))}${lab("Resultado en R", inp("r", "number", "si no pones precios", 140))}${lab("Dólares", inp("pnl", "number"))}</div>
@@ -265,20 +316,23 @@ function btImpHtml() {
     <p class="hint">Entran sin set up: luego tocas el set up de cada una en la lista.</p>
     <div style="display:flex;gap:10px;margin-top:12px"><button type="button" class="btn green" data-bt="importar"${I.trades.length ? "" : " disabled"}>Importar ${I.trades.length}</button><button type="button" class="btn" data-bt="cancelar-imp">Cancelar</button></div></div>`;
 }
+S.btVer = "todo";
 V.backtest = () => {
-  const ts = btLista(), sinSet = ts.filter((t) => !t.setup).length;
+  const todas = btLista(), ts = S.btVer === "todo" ? todas : todas.filter((t) => (t.tipo === "real" ? "real" : "backtest") === S.btVer), sinSet = todas.filter((t) => !t.setup).length;
   return (S.btf ? btFormHtml() : "") + (S.btImp ? btImpHtml() : "") +
-  `<div class="card" style="margin-bottom:18px"><div class="cardhead"><div><h3>📒 Backtesting</h3><p class="hint">Tus pruebas de TradingView (Paper Trading y Bar Replay). Jarvis guarda set up, día, hora y sesión de cada entrada para decirte qué te funciona y en qué fallas.</p></div></div>
+  `<div class="card" style="margin-bottom:18px"><div class="cardhead"><div><h3>📒 Backtesting</h3><p class="hint">Tus pruebas de TradingView (Paper Trading y Bar Replay) y tus operaciones reales. Jarvis guarda set up, día, hora y sesión de cada entrada para decirte qué te funciona y en qué fallas.</p></div></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap"><button type="button" class="btn green" data-bt="nueva">+ Apuntar operación</button>
-      <button type="button" class="btn" data-bt="foto">📷 Desde una captura</button><button type="button" class="btn" data-bt="csv">⬆️ Importar de TradingView</button>
-      <input type="file" id="bt-foto" accept="image/*" hidden><input type="file" id="bt-csv" accept=".csv,text/csv" hidden></div>
+      <button type="button" class="btn" data-bt="foto">📷 Captura o vídeo</button><button type="button" class="btn" data-bt="csv">⬆️ Importar de TradingView</button>
+      <input type="file" id="bt-foto" accept="image/*,video/*" hidden><input type="file" id="bt-csv" accept=".csv,text/csv" hidden></div>
     <p class="hint" style="margin-top:10px">También por voz: «Jarvis, backtest: martes 2:40, Londres 1, corto, gané 2R, entré antes de que cerrara la vela».</p>
-    ${S.btBusy ? '<div class="banner warn" style="margin-top:10px">Jarvis está leyendo la captura…</div>' : ""}</div>
-  <div class="card" style="margin-bottom:18px"><h3>🎓 Tu profesor</h3><p class="hint">Mándale una captura de cada operación (📷) y te la corrige contra tus reglas. Con todas, te da la clase de la semana y te explica tu estrategia.</p>
+    ${S.btBusy ? '<div class="banner warn" style="margin-top:10px">Jarvis está mirando tu operación…</div>' : ""}</div>
+  <div class="card" style="margin-bottom:18px"><h3>🎓 Tu profesor</h3><p class="hint">Mándale una captura o un vídeo de cada operación, de backtest o real (📷), y te la corrige contra tus reglas. Cada domingo te llega sola la clase de la semana, con tus operaciones de backtest y las reales de Topstep.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px"><button type="button" class="btn dark" data-bt="clase-semana">🎓 Clase de la semana</button><button type="button" class="btn" data-bt="clase-estrategia">📘 Explícame mi estrategia</button></div>
     ${S.btClaseBusy ? '<div class="banner warn" style="margin-top:10px">Tu profesor está preparando la clase…</div>' : ""}
     ${(() => { const c = list(S.btClases).sort((a, b) => (b.creado || "").localeCompare(a.creado || ""))[0]; return c ? `<div class="banner" style="margin-top:12px;font-weight:400;white-space:pre-line;border-color:var(--line)"><b>${c.tipo === "semana" ? "Clase de la semana" : "Tu estrategia"} · ${esc(c.creado.slice(0, 10).split("-").reverse().join("/"))}</b>\n${esc(c.texto)}</div>` : ""; })()}</div>
-  <div class="card" style="margin-bottom:18px"><h3>🧠 Lo que dice tu backtesting</h3><p class="hint">${ts.length} operaciones apuntadas. Los grupos con menos de ${BT_MIN} salen en gris: todavía no dicen nada.</p>
+  <div class="card" style="margin-bottom:18px"><h3>🧠 Lo que dice tu backtesting</h3>
+    <div class="seg" style="margin:8px 0 4px">${[["todo", "Todo"], ["backtest", "🧪 Backtest"], ["real", "💵 Real"]].map(([k, n]) => `<button type="button" data-btver="${k}" aria-pressed="${S.btVer === k}">${n}</button>`).join("")}</div>
+    <p class="hint">${ts.length} operaciones apuntadas. Los grupos con menos de ${BT_MIN} salen en gris: todavía no dicen nada.</p>
     ${btConclusiones(ts).map((c) => `<div class="banner ${/^✅/.test(c) ? "ok" : /^⚠️|^🛑/.test(c) ? "warn" : ""}" style="margin-top:8px">${esc(c)}</div>`).join("")}
     ${btTablaHtml("POR SET UP", btTabla(ts, (t) => btNombre(t.setup)))}
     ${btTablaHtml("POR SESIÓN", btTabla(ts, (t) => btSesion(t.hora)))}
@@ -286,9 +340,9 @@ V.backtest = () => {
     ${btTablaHtml("POR HORA DE ENTRADA (NUEVA YORK)", btTabla(ts, (t) => btHora(t.hora)).sort((a, b) => a.k.localeCompare(b.k)))}
     ${btTablaHtml("LARGOS Y CORTOS", btTabla(ts, (t) => (t.dir === "SHORT" ? "Cortos" : "Largos")))}
     ${btTablaHtml("ERRORES", [btTabla(ts.filter((t) => !(t.errores || []).length), () => "✓ Bien ejecutadas")[0], ...BT_ERRORES.map((e) => btTabla(ts.filter((t) => (t.errores || []).includes(e)), () => e)[0])].filter(Boolean), "Cómo te va cuando cometes cada error, frente a las operaciones bien ejecutadas.")}</div>
-  <div class="card"><h3>Operaciones${sinSet ? ` <small class="dim">· ${sinSet} sin set up</small>` : ""}</h3>
-    ${ts.length ? `<div class="tablewrap"><table><thead><tr><th>CUÁNDO (NY)</th><th>SET UP</th><th>RESULTADO</th><th></th></tr></thead><tbody>${ts.slice(0, 80).map((t) => { const r = btR(t);
-      return `<tr><td>${esc(btDia(t.fecha).slice(0, 3))} ${esc(t.fecha.split("-").reverse().join("/"))} ${esc(t.hora || "")}<br><small class="dim">${esc(btSesion(t.hora))} · ${esc(t.instr || "")} ${t.dir === "SHORT" ? "corto" : "largo"}${t.tf ? " · " + esc(t.tf) : ""}</small></td>
+  <div class="card"><h3>Tu diario${sinSet ? ` <small class="dim">· ${sinSet} sin set up</small>` : ""}</h3>
+    ${todas.length ? `<div class="tablewrap"><table><thead><tr><th>CUÁNDO (NY)</th><th>SET UP</th><th>RESULTADO</th><th></th></tr></thead><tbody>${todas.slice(0, 80).map((t) => { const r = btR(t);
+      return `<tr><td>${t.tipo === "real" ? "💵 " : ""}${esc(btDia(t.fecha).slice(0, 3))} ${esc(t.fecha.split("-").reverse().join("/"))} ${esc(t.hora || "")}<br><small class="dim">${esc(btSesion(t.hora))} · ${esc(t.instr || "")} ${t.dir === "SHORT" ? "corto" : "largo"}${t.tf ? " · " + esc(t.tf) : ""}</small></td>
         <td style="white-space:normal">${t.setup ? esc(btNombre(t.setup)) : `<div class="chips" style="margin:0">${BT_SETUPS.map((s) => `<button type="button" data-btset="${t.id}:${s.id}">${esc(s.id)}</button>`).join("")}</div>`}${(t.errores || []).length ? `<br><small class="dim">${esc(t.errores.join(" · "))}</small>` : ""}${t.profesor ? `<br><small>${esc(BT_VERED[t.profesor.veredicto])}${t.profesor.leccion ? " · " + esc(t.profesor.leccion) : ""}</small>` : ""}</td>
         <td>${r == null ? esc(t.resultado || "—") : (r > 0 ? "+" : "") + r + "R"}${t.pnl ? `<br><small class="dim">${esc(signed(t.pnl))}</small>` : ""}</td>
         <td><button type="button" class="btn small" data-btedit="${t.id}">Editar</button> <button type="button" class="btn small" data-btdel="${t.id}">Borrar</button></td></tr>`; }).join("")}</tbody></table></div>` : '<p class="empty">Todavía no hay operaciones. Apunta la primera, mándale una captura a Jarvis o importa tu historial de Paper Trading.</p>'}</div>`;
@@ -311,6 +365,7 @@ root.addEventListener("click", async (e) => {
   }
   if (d.bt === "guardar") {
     const f = S.btf; if (!f.setup && !confirmarSinSet(t)) return;
+    if (btFueraRango(f) && !(f.errores || []).includes("Fuera del rango operativo")) f.errores = [...(f.errores || []), "Fuera del rango operativo"];
     const x = { ...f, entrada: f.entrada === "" ? "" : Number(f.entrada), stop: f.stop === "" ? "" : Number(f.stop), salida: f.salida === "" ? "" : Number(f.salida), r: f.r === "" ? "" : Number(f.r), pnl: f.pnl === "" ? "" : Number(f.pnl) };
     await btGuardar(x); S.btf = null; render(); toast("Operación guardada."); return;
   }
@@ -325,6 +380,7 @@ root.addEventListener("click", async (e) => {
     else f[campo] = f[campo] === val && (campo === "setup" || campo === "resultado") ? "" : val;
     render(); return;
   }
+  if (d.btver) { S.btVer = d.btver; render(); return; }
   if (d.btset) { const [id, s] = d.btset.split(":"), x = S.bt.get(id); if (x) { await btGuardar({ ...x, id, setup: s }); toast(btNombre(s) + "."); } return; }
   if (d.btedit) { const x = S.bt.get(d.btedit); if (x) { S.btf = { ...BT_VACIA(), ...x, id: d.btedit, errores: [...(x.errores || [])] }; render(); } return; }
   if (d.btdel) { if (!dosToques(t, "¿Borrar? Toca otra vez")) return; if (S.db) await S.db.doc("fm/plan").collection("backtest").doc(d.btdel).delete(); toast("Borrada."); return; }
@@ -352,8 +408,11 @@ root.addEventListener("change", async (e) => {
   }
   if (t.id === "bt-foto" && t.files && t.files[0]) {
     S.btBusy = true; render();
-    try { S.btf = await btLeer("", t.files[0]); toast("Mira la corrección de tu profesor, revisa los datos y guarda."); }
-    catch (err) { toast("No he podido leer la captura: " + (err.message || "error")); }
+    try { const f0 = t.files[0], esVideo = /^video\//.test(f0.type) || /\.(mov|mp4|m4v|webm)$/i.test(f0.name || "");
+      const frames = esVideo ? await btFotogramas(f0, 8) : null;
+      try { S.btf = await btLeer("", frames || f0); }
+      catch (err) { if (!frames || frames.length <= 4) throw err; S.btf = await btLeer("", [frames[0], frames[2], frames[5], frames[7]].filter(Boolean)); } toast("Mira la corrección de tu profesor, revisa los datos y guarda."); }
+    catch (err) { toast("No he podido leer tu operación: " + (err.message || "error")); }
     finally { S.btBusy = false; render(); }
   }
 });
