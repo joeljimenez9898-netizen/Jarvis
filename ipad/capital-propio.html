@@ -55,6 +55,22 @@
 .cp .ghost { display: flex; align-items: center; gap: 6px; background: transparent; border: 1px solid var(--border); color: var(--faint); padding: 8px 14px; border-radius: 8px; font-size: 12px; margin-top: 12px; }
 .cp .reset { display: block; margin: 32px auto 0; }
 .cp .empty { font-size: 13px; color: var(--faint); }
+.cp .calhead { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.cp .calhead b { font-size: 15px; min-width: 140px; text-align: center; text-transform: capitalize; }
+.cp .calhead button { background: var(--raised); border: 1px solid var(--borderLight); color: var(--text); border-radius: 8px; padding: 6px 12px; font-size: 14px; }
+.cp .calgrid { display: grid; grid-template-columns: repeat(5, 1fr) 1.1fr; gap: 4px; }
+.cp .calgrid .dow { font-size: 10px; color: var(--faint); text-align: center; letter-spacing: .06em; padding: 2px 0; }
+.cp .cal { background: var(--raised); border: 1px solid var(--border); border-radius: 8px; min-height: 52px; padding: 4px 3px; overflow: hidden; min-width: 0; display: flex; flex-direction: column; gap: 1px; font-size: 10.5px; color: var(--muted); text-align: left; }
+.cp .cal .d { font-size: 10px; color: var(--faint); }
+.cp .cal .e { font-weight: 700; font-size: 11px; white-space: nowrap; letter-spacing: -.02em; } .cp .cal .p { font-size: 9.5px; white-space: nowrap; }
+.cp .cal.g { background: var(--accentSoft); border-color: rgba(0,217,145,.45); } .cp .cal.g .e, .cp .cal.g .p { color: var(--accent); }
+.cp .cal.r { background: var(--coralSoft); border-color: rgba(255,107,107,.45); } .cp .cal.r .e, .cp .cal.r .p { color: var(--coral); }
+.cp .cal.off { opacity: .35; } .cp .cal.sem { background: transparent; border-style: dashed; }
+.cp .cal.sel { outline: 2px solid var(--text); }
+.cp .calres { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-top: 12px; }
+.cp .calres div { background: var(--raised); border-radius: 8px; padding: 8px 10px; font-size: 11px; color: var(--faint); } .cp .calres b { display: block; font-size: 15px; color: var(--text); margin-top: 2px; }
+.cp .calanio { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.cp .calanio .cal { min-height: 64px; }
 .cp .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--raised); border: 1px solid var(--accent); color: var(--text); padding: 10px 16px; border-radius: 10px; z-index: 30; font-size: 13px; }
 .cp .toast[hidden] { display: none; }
 .cp .tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
@@ -633,6 +649,60 @@ function vivo() {
   const set = (id, h) => { const el = $(id); if (el) el.innerHTML = h; };
   set("#cp-prev", textoPrevio()); set("#cp-como", htmlComo()); set("#cp-hoy", htmlHoy()); set("#cp-tabla", tablaCuerpo());
 }
+// ── Calendar: each day's result of his trades in euros and as a % of the balance he started that day with.
+// Deposits and withdrawals are not results: they show as ➕/➖ on their day. Weeks run Monday to Friday plus the week's total.
+const eurC = (n) => eur(n).replace(" €", "€");
+const pcCal = (x) => (Math.abs(x) < 0.05 ? "0,0 %" : (x > 0 ? "+" : "−") + Math.abs(x).toFixed(1).replace(".", ",") + " %");
+function diasCal() {
+  const m = {};
+  for (const e of S.log) {
+    const d = (m[e.date] ||= { pnl: 0, inicio: null, ops: 0, g: 0, p: 0, aporte: 0, retiro: 0 });
+    if (isTrade(e)) { if (d.inicio == null) d.inicio = e.balanceBefore; d.pnl += e.balanceAfter - e.balanceBefore; d.ops++; e.resultado === "win" ? d.g++ : d.p++; }
+    else if (e.resultado === "aporte") d.aporte += e.importe; else if (e.resultado === "retiro") d.retiro += e.importe;
+  }
+  for (const d of Object.values(m)) d.pct = d.inicio ? (d.pnl / d.inicio) * 100 : 0;
+  return m;
+}
+// a run of days (a week, a month, a year): result in euros and in %, days in green and red, best and worst day
+function tramoCal(dias, desde, hasta) {
+  const ks = Object.keys(dias).filter((k) => k >= desde && k <= hasta && dias[k].ops).sort();
+  const pnl = ks.reduce((a, k) => a + dias[k].pnl, 0);
+  const g = ks.reduce((a, k) => a + dias[k].g, 0), p = ks.reduce((a, k) => a + dias[k].p, 0);
+  const mejor = ks.length ? ks.reduce((a, k) => (dias[k].pnl > dias[a].pnl ? k : a)) : null, peor = ks.length ? ks.reduce((a, k) => (dias[k].pnl < dias[a].pnl ? k : a)) : null;
+  // the % chains the days (each on the balance he started it with), so a deposit or a withdrawal in between does not bend it
+  const pct = (ks.reduce((a, k) => a * (1 + dias[k].pct / 100), 1) - 1) * 100;
+  return { pnl, pct, dias: ks.length, verdes: ks.filter((k) => dias[k].pnl > 0).length, rojos: ks.filter((k) => dias[k].pnl < 0).length, g, p, mejor, peor };
+}
+const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+const isoD = (y, m, d) => y + "-" + String(m + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+function htmlCal() {
+  const C = (S.cal ||= { y: Number(today().slice(0, 4)), m: Number(today().slice(5, 7)) - 1, vista: "mes", sel: null }), dias = diasCal(), hoy = today();
+  const celda = (d, k, extra) => { const x = dias[k], cls = x && x.ops ? (x.pnl > 0 ? " g" : x.pnl < 0 ? " r" : "") : "";
+    return `<button type="button" class="cal${cls}${extra || ""}${C.sel === k ? " sel" : ""}" data-act="cal-dia" data-v="${k}"><span class="d">${d}${k === hoy ? " · hoy" : ""}</span>${x && x.ops ? `<span class="e">${eurC(x.pnl)}</span><span class="p">${pcCal(x.pct)}</span>` : ""}${x && x.aporte ? `<span class="p">➕${eurC(x.aporte).replace(/^\+/, "")}</span>` : ""}${x && x.retiro ? `<span class="p">➖${eurC(x.retiro).replace(/^\+/, "")}</span>` : ""}</button>`; };
+  const res = (t, titulo) => `<div class="calres"><div>${titulo}<b style="color:${t.pnl > 0 ? "var(--accent)" : t.pnl < 0 ? "var(--coral)" : "var(--text)"}">${eur(t.pnl)} · ${pcCal(t.pct)}</b></div>
+    <div>Días en verde / rojo<b>${t.verdes} / ${t.rojos}</b></div><div>Acierto<b>${t.g + t.p ? Math.round((t.g / (t.g + t.p)) * 100) + " %" : "—"}</b></div>
+    <div>Mejor día<b>${t.mejor ? eur(dias[t.mejor].pnl) + " (" + t.mejor.slice(8) + "/" + t.mejor.slice(5, 7) + ")" : "—"}</b></div><div>Peor día<b>${t.peor && dias[t.peor].pnl < 0 ? eur(dias[t.peor].pnl) + " (" + t.peor.slice(8) + "/" + t.peor.slice(5, 7) + ")" : "—"}</b></div></div>`;
+  const cab = `<div class="calhead"><button type="button" data-act="cal-prev" aria-label="Anterior">‹</button><b>${C.vista === "mes" ? MESES[C.m] + " " + C.y : C.y}</b><button type="button" data-act="cal-next" aria-label="Siguiente">›</button>
+    <div class="modo" style="margin:0 0 0 auto"><button type="button" data-act="cal-vista" data-v="mes" class="${C.vista === "mes" ? "on" : ""}">Mes</button><button type="button" data-act="cal-vista" data-v="anio" class="${C.vista === "anio" ? "on" : ""}">Año</button></div></div>`;
+  if (C.vista === "anio") {
+    return cab + `<div class="calanio">${MESES.map((n, m) => { const t = tramoCal(dias, isoD(C.y, m, 1), isoD(C.y, m, 31));
+      return `<button type="button" class="cal${t.dias ? (t.pnl > 0 ? " g" : t.pnl < 0 ? " r" : "") : ""}" data-act="cal-mes" data-v="${m}"><span class="d" style="text-transform:capitalize">${n}</span>${t.dias ? `<span class="e">${eurC(t.pnl)}</span><span class="p">${pcCal(t.pct)} · ${t.dias} días</span>` : ""}</button>`; }).join("")}</div>` +
+      res(tramoCal(dias, isoD(C.y, 0, 1), isoD(C.y, 11, 31)), "Año " + C.y);
+  }
+  // Monday to Friday, then the week's total; days of the month before or after are faded
+  const primero = new Date(Date.UTC(C.y, C.m, 1)), lunes = new Date(primero.getTime() - ((primero.getUTCDay() + 6) % 7) * 86400000), ultimo = isoD(C.y, C.m, new Date(Date.UTC(C.y, C.m + 1, 0)).getUTCDate());
+  let h = ["L", "M", "X", "J", "V", "SEMANA"].map((d) => `<div class="dow">${d}</div>`).join("");
+  for (let w = new Date(lunes); w.toISOString().slice(0, 10) <= ultimo; w = new Date(w.getTime() + 7 * 86400000)) {
+    for (let i = 0; i < 5; i++) { const t = new Date(w.getTime() + i * 86400000), k = t.toISOString().slice(0, 10); h += celda(t.getUTCDate(), k, t.getUTCMonth() !== C.m ? " off" : ""); }
+    const k0 = w.toISOString().slice(0, 10), k6 = new Date(w.getTime() + 6 * 86400000).toISOString().slice(0, 10), t = tramoCal(dias, k0, k6);
+    h += `<div class="cal sem${t.dias ? (t.pnl > 0 ? " g" : t.pnl < 0 ? " r" : "") : ""}">${t.dias ? `<span class="e">${eurC(t.pnl)}</span><span class="p">${pcCal(t.pct)}</span>` : '<span class="d">—</span>'}</div>`;
+  }
+  const sel = C.sel && C.sel.slice(0, 7) === isoD(C.y, C.m, 1).slice(0, 7) ? C.sel : null;
+  const detalle = sel ? (() => { const es = S.log.filter((e) => e.date === sel), x = dias[sel];
+    return `<div class="note" style="margin:12px 0 0"><b style="color:var(--text)">${sel.split("-").reverse().join("/")}</b>${x && x.ops ? ` · ${eur(x.pnl)} (${pcCal(x.pct)}) · ${x.g} ganadas, ${x.p} perdidas` : ""}<br>
+      ${es.length ? es.map((e) => (isTrade(e) ? (e.resultado === "win" ? "✓ " : "✗ ") + eur(e.balanceAfter - e.balanceBefore) + " · riesgo " + pct(e.riesgoPct) : (e.resultado === "aporte" ? "➕ aporte " : "➖ retiro ") + eur(e.importe).replace(/^\+/, "")) + " · saldo " + eur(e.balanceAfter).replace(/^\+/, "")).join("<br>") : "Sin registros ese día."}</div>`; })() : "";
+  return cab + `<div class="calgrid">${h}</div>` + detalle + res(tramoCal(dias, isoD(C.y, C.m, 1), ultimo), "Mes de " + MESES[C.m]);
+}
 function render() {
   const I = S.inputs, s = saldo(), c = calc(), up = s >= I.saldoInicial;
   $("#cp-view").innerHTML = `
@@ -668,7 +738,9 @@ function render() {
       <div class="shield${c.esSeguro ? "" : " bad"}"><span style="font-size:20px">${c.esSeguro ? "🛡️" : "⚠️"}</span><div><b>${c.esSeguro ? "Tu riesgo actual aguanta el margen" : "Tu riesgo actual no aguanta el margen"}</b>
         <small>Al ${pct(I.riesgoPct)}, llegarías a tu límite en ~${Number.isFinite(c.stopsHastaLimite) ? c.stopsHastaLimite.toFixed(1) : "∞"} stops seguidos${c.esSeguro ? " — por encima del margen exigido." : " — por debajo del margen exigido. Baja el riesgo."}</small></div></div></div></div>
 
-  <div class="sec"><b>04</b><span>Registro de hoy y días anteriores</span></div>
+  <div class="sec"><b>04</b><span>Calendario de ganancias y pérdidas</span></div>
+  <div class="card" style="margin:0 0 28px" id="cp-cal">${htmlCal()}</div>
+  <div class="sec"><b>04·b</b><span>Registro de hoy y días anteriores</span></div>
   <div class="card">${S.log.length ? [...S.log].reverse().map((e) => `<div class="row${e.resultado === "win" || e.resultado === "aporte" ? "" : " l"}"><span>${({ win: "✓", loss: "✗", aporte: "➕", retiro: "➖" })[e.resultado]}&nbsp; ${e.date} · ${isTrade(e) ? (e.importe ? (e.resultado === "win" ? "+" : "−") + eur(e.importe).replace(/^[+−]/, "") + " · " : "") + "riesgo " + pct(e.riesgoPct) : (e.resultado === "aporte" ? "aporte " : "retiro ") + eur(e.importe).replace(/^\+/, "")}</span><b>${eur(e.balanceAfter).replace(/^\+/, "")}</b></div>`).join("")
     : '<div class="empty">Sin registros todavía — usa "Registrar Win" o "Registrar Loss" arriba para empezar a componer tu saldo.</div>'}
     ${S.log.length ? '<button class="ghost" type="button" data-act="undo">🗑 Deshacer último registro</button>' : ""}</div>
@@ -732,6 +804,15 @@ function accion(b) {
 }
 function hacer(b) {
   const a = b.dataset.act;
+  if (a.startsWith("cal-")) {
+    const C = S.cal, v = b.dataset.v;
+    if (a === "cal-prev" || a === "cal-next") { const k = a === "cal-prev" ? -1 : 1; if (C.vista === "anio") C.y += k; else { C.m += k; if (C.m < 0) { C.m = 11; C.y--; } if (C.m > 11) { C.m = 0; C.y++; } } }
+    else if (a === "cal-vista") C.vista = v;
+    else if (a === "cal-mes") { C.m = Number(v); C.vista = "mes"; }
+    else if (a === "cal-dia") C.sel = C.sel === v ? null : v;
+    const el = $("#cp-cal"); if (el) el.innerHTML = htmlCal();
+    return;
+  }
   if (a === "win" || a === "loss") return registrar(a);
   if (a === "aporte" || a === "retiro") {
     const box = $(a === "aporte" ? "#cp-apo" : "#cp-ret"), v = Math.abs(Number(String(box.value).replace(",", ".")) || 0);
@@ -796,6 +877,9 @@ function contexto() {
     ratioTpSl: I.ratioTpSl, winrate: I.winrate + "%", stopsMaxDia: I.stopsMaxDia, stopsHoy: deHoy.filter((e) => e.resultado === "loss").length,
     winsHoy: deHoy.filter((e) => e.resultado === "win").length, siPierdesTodosLosStopsHoy: -Math.round(c.dineroDrawdownDiario * 100) / 100,
     riesgoQueDiceTuRacha: pct(c.riesgoQueDiceTuRacha, 2), riesgoAguantaElMargen: c.esSeguro, stopsHastaElLimite: Number.isFinite(c.stopsHastaLimite) ? Math.round(c.stopsHastaLimite * 10) / 10 : null,
+    calendario: (() => { const d = diasCal(), ks = Object.keys(d).filter((k) => d[k].ops).sort(), meses = [...new Set(ks.map((k) => k.slice(0, 7)))];
+      return { ultimosDias: ks.slice(-20).map((k) => ({ fecha: k, euros: Math.round(d[k].pnl * 100) / 100, porcentaje: Math.round(d[k].pct * 100) / 100, ganadas: d[k].g, perdidas: d[k].p })),
+               porMes: meses.map((mm) => { const t = tramoCal(d, mm + "-01", mm + "-31"); return { mes: mm, euros: Math.round(t.pnl * 100) / 100, porcentaje: Math.round(t.pct * 100) / 100, diasVerdes: t.verdes, diasRojos: t.rojos }; }) }; })(),
     ultimosRegistros: S.log.slice(-10).map((e) => ({ fecha: e.date, resultado: e.resultado, importe: e.importe, saldo: Math.round(e.balanceAfter * 100) / 100 })),
     comoVoy: comoVoy(), planDeDinero: planDeDinero(), propuestaDeJarvis: (({ inputs, ...p }) => p)(recomendar()) };
 }

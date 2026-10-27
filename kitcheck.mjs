@@ -261,6 +261,8 @@ async function checkIpadApps() {
         wrongSym.push("Backtesting: the hour table must follow his hours (London 2:00–5:00, New York 10:30–12:00) and ask for a missing hour");
       if (!page.includes("function btSubidaHtml()") || !page.includes("Joel te explica él mismo por qué entró") || !page.includes("💬 Sobre tu explicación:") || !page.includes("explicacionDeJoel: t.explicacion"))
         wrongSym.push("Backtesting: his own explanation must go with each screenshot or video to the teacher, be answered and kept"); }
+    if (!page.includes("function htmlCal()") || !page.includes("Calendario de ganancias y pérdidas") || !page.includes("calendario: (() => { const d = diasCal()"))
+      wrongSym.push("Capital propio: the calendar of gains and losses (euros and %) is missing");
     if (!page.includes('id="cap-host"') || !page.includes("capitalPropio: window.CAPITAL?.contexto") || !page.includes('db.doc("fm/capital")')) wrongSym.push("Capital propio is not wired into Jarvis");
     if (!page.includes("<avisos>") || !page.includes("hacia las 11:00")) wrongSym.push("Jarvis does not know the scheduled 11:00 summary");
     if (!page.includes('db.doc("fm/mercado")') || !page.includes("no es en directo")) wrongSym.push("the MNQ price star is missing or not marked as not live");
