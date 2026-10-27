@@ -144,7 +144,7 @@ async function checkTopstepReadOnly() {
   // Joel's rules engine: bullet 2 closes at exactly +500, the day caps at +1.500, the strong-day ladder hands on, a failed strong day
   // goes to recovery, and the hourly watch says each warning once a day; old saved settings get the new funded numbers
   const E0 = ts.estrategiaDe({ fuerteTP: 2500, minimoSL: 300, modo: "grupo" }), E = ts.estrategiaDe({ v: 3, exModo: "balas" }), H = "2026-10-27";
-  if (E0.fuerteTP !== 1000 || E0.minimoSL !== 1000 || E0.recupR !== 500 || E0.modo !== "grupo" || E0.exModo !== "londres" || E.exModo !== "balas") return [false, "strategy defaults: " + JSON.stringify(E0)];
+  if (E0.fuerteTP !== 1000 || E0.minimoSL !== 1000 || E0.recupR !== 500 || E0.modo !== "grupo" || E0.exModo !== "londres" || E.exModo !== "balas" || E0.lonT !== 1000 || ts.estrategiaDe({ v: 3, lonT: 500, lonMax: 1000 }).lonT !== 1000) return [false, "strategy defaults: " + JSON.stringify(E0)];
   const Fd = (codigo, orden, dias) => ({ codigo, tipo: "Fondeada", estado: "ACTIVA", sl: -2000, orden, dias, pnl: Object.values(dias).reduce((a, b) => a + b, 0) });
   const Ex = (codigo, t) => ({ codigo, tipo: "Challenge", estado: "EXAM", tp: 3000, sl: -2000, dias: { [H]: t.reduce((a, b) => a + b, 0) }, tradesHoy: t, pnl: t.reduce((a, b) => a + b, 0) });
   const mr = ts.motorReglas({ estrategia: E, hoy: H, cuentas: [Ex("E1", [1000]), Ex("E2", [1000, 500]), Ex("E3", [-1000]), Fd("A", 1, { "2026-10-26": 1000, [H]: 200 }), Fd("B", 2, { [H]: -1000 }), Fd("C", 3, {})] });

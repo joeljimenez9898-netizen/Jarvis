@@ -169,30 +169,50 @@ async function btGuardar(t) {
 }
 const BT_VACIA = () => ({ tipo: "backtest", fecha: iso(new Date()), hora: "", setup: "", dir: "LONG", instr: "MNQ", tf: "M5", entrada: "", stop: "", salida: "", resultado: "", r: "", pnl: "", errores: [], nota: "", origen: "a mano" });
 // a sentence or a chart screenshot → one trade, read by Claude; never invented: what isn't there comes back empty
-// a video of the trade → frames in order (Claude reads images, not video): evenly spaced, the last one at the very end
+// a video of the trade → frames in order (Claude reads images, not video): evenly spaced, the last one at the very end.
+// iPhone and iPad only load a video's pictures once it has played, so it is put in the page, played muted and paused first.
 async function btFotogramas(file, n) {
   const url = URL.createObjectURL(file), v = document.createElement("video");
-  v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = url;
+  v.muted = true; v.defaultMuted = true; v.playsInline = true; v.setAttribute("playsinline", ""); v.setAttribute("muted", ""); v.preload = "auto";
+  v.style.cssText = "position:fixed;left:0;top:0;width:2px;height:2px;opacity:0;pointer-events:none";
+  root.appendChild(v);
+  const espera = (ev, ms, msg) => new Promise((ok, ko) => { const tm = setTimeout(() => (msg ? ko(new Error(msg)) : ok()), ms); v.addEventListener(ev, () => { clearTimeout(tm); ok(); }, { once: true }); });
   try {
-    await new Promise((ok, ko) => { v.onloadeddata = ok; v.onerror = () => ko(new Error("no puedo abrir ese vídeo")); setTimeout(() => ko(new Error("el vídeo tarda demasiado en abrir")), 15000); });
-    const dur = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 1, k = Math.max(2, n || 6), out = [];
+    const meta = espera("loadedmetadata", 30000, "el vídeo tarda demasiado en abrir");
+    v.addEventListener("error", () => {}, { once: true });
+    v.src = url; v.load();
+    try { await v.play(); v.pause(); } catch {}
+    await meta;
+    if (v.readyState < 2) await espera("loadeddata", 15000);
+    const dur = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 1, k = Math.max(2, n || 8), out = [];
     const esc_ = Math.min(1, 1280 / (v.videoWidth || 1280)), c = document.createElement("canvas");
     c.width = Math.round((v.videoWidth || 1280) * esc_); c.height = Math.round((v.videoHeight || 720) * esc_);
     for (let i = 0; i < k; i++) {
-      const t = Math.min(dur - 0.05, (dur * i) / (k - 1));
-      await new Promise((ok) => { v.onseeked = ok; v.currentTime = Math.max(0, t); setTimeout(ok, 4000); });
+      const t = Math.min(dur - 0.1, (dur * i) / (k - 1));
+      const visto = espera("seeked", 8000); v.currentTime = Math.max(0, t); await visto;
+      await new Promise((ok) => (v.requestVideoFrameCallback ? (v.requestVideoFrameCallback(() => ok()), setTimeout(ok, 500)) : requestAnimationFrame(() => setTimeout(ok, 80))));
       c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
       const blob = await new Promise((ok) => c.toBlob(ok, "image/jpeg", 0.8));
       if (blob) out.push(new File([blob], "fotograma-" + (i + 1) + ".jpg", { type: "image/jpeg" }));
     }
     if (!out.length) throw new Error("no he podido sacar imágenes del vídeo");
-    return out;
-  } finally { URL.revokeObjectURL(url); }
+    return { frames: out, dur };
+  } finally { v.removeAttribute("src"); v.load(); v.remove(); URL.revokeObjectURL(url); }
+}
+// Claude may take fewer pictures at once than a long video gives: try them all, then fewer, keeping the order
+async function btLeerSecuencia(fotos) {
+  let ultimoError = null;
+  for (const n of [fotos.length, 6, 4, 2]) {
+    if (n > fotos.length || n < 1) continue;
+    const pick = n === fotos.length ? fotos : Array.from({ length: n }, (_, i) => fotos[Math.round((i * (fotos.length - 1)) / (n - 1 || 1))]);
+    try { return await btLeer("", pick.length === 1 ? pick[0] : pick); } catch (err) { ultimoError = err; }
+  }
+  throw ultimoError || new Error("no he podido leerlo");
 }
 async function btLeer(texto, imagen) {
   const sample = window.claude?.use ? await window.claude.use("sample") : null;
   if (!sample) throw new Error("Abre Jarvis dentro de Claude para que pueda leerlo.");
-  const ask = "Extrae UNA operación de backtesting de trading de Joel" + (Array.isArray(imagen) ? " de estos " + imagen.length + " fotogramas de un vídeo de TradingView, en orden de principio a fin (mira cómo evoluciona la operación: la entrada, lo que hace el precio y cómo termina)" : imagen ? " de esta captura de TradingView" : "") + (texto ? " (y de lo que dice: «" + texto + "»)" : "") + ". Hoy es " + iso(new Date()) + ".\n" +
+  const ask = "Extrae UNA operación de backtesting de trading de Joel" + (Array.isArray(imagen) ? " de estas " + imagen.length + " imágenes de TradingView en orden de principio a fin (fotogramas de un vídeo o capturas seguidas de la misma operación: mira cómo evoluciona, la entrada, lo que hace el precio y cómo termina)" : imagen ? " de esta captura de TradingView" : "") + (texto ? " (y de lo que dice: «" + texto + "»)" : "") + ". Hoy es " + iso(new Date()) + ".\n" +
     "Sus modelos (id = nombre): " + BT_SETUPS.map((s) => s.id + " = " + s.n).join("; ") + ".\n" +
     "Cómo opera: " + BT_REGLAS + "\n" +
     "Errores posibles: " + BT_ERRORES.join("; ") + ".\n" +
@@ -323,10 +343,10 @@ V.backtest = () => {
   `<div class="card" style="margin-bottom:18px"><div class="cardhead"><div><h3>📒 Backtesting</h3><p class="hint">Tus pruebas de TradingView (Paper Trading y Bar Replay) y tus operaciones reales. Jarvis guarda set up, día, hora y sesión de cada entrada para decirte qué te funciona y en qué fallas.</p></div></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap"><button type="button" class="btn green" data-bt="nueva">+ Apuntar operación</button>
       <button type="button" class="btn" data-bt="foto">📷 Captura o vídeo</button><button type="button" class="btn" data-bt="csv">⬆️ Importar de TradingView</button>
-      <input type="file" id="bt-foto" accept="image/*,video/*" hidden><input type="file" id="bt-csv" accept=".csv,text/csv" hidden></div>
+      <input type="file" id="bt-foto" accept="image/*,video/*" multiple hidden><input type="file" id="bt-csv" accept=".csv,text/csv" hidden></div>
     <p class="hint" style="margin-top:10px">También por voz: «Jarvis, backtest: martes 2:40, Londres 1, corto, gané 2R, entré antes de que cerrara la vela».</p>
     ${S.btBusy ? '<div class="banner warn" style="margin-top:10px">Jarvis está mirando tu operación…</div>' : ""}</div>
-  <div class="card" style="margin-bottom:18px"><h3>🎓 Tu profesor</h3><p class="hint">Mándale una captura o un vídeo de cada operación, de backtest o real (📷), y te la corrige contra tus reglas. Cada domingo te llega sola la clase de la semana, con tus operaciones de backtest y las reales de Topstep.</p>
+  <div class="card" style="margin-bottom:18px"><h3>🎓 Tu profesor</h3><p class="hint">Mándale un vídeo o varias capturas seguidas de cada operación, de backtest o real (📷), y te la corrige contra tus reglas. Cada domingo te llega sola la clase de la semana, con tus operaciones de backtest y las reales de Topstep.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px"><button type="button" class="btn dark" data-bt="clase-semana">🎓 Clase de la semana</button><button type="button" class="btn" data-bt="clase-estrategia">📘 Explícame mi estrategia</button></div>
     ${S.btClaseBusy ? '<div class="banner warn" style="margin-top:10px">Tu profesor está preparando la clase…</div>' : ""}
     ${(() => { const c = list(S.btClases).sort((a, b) => (b.creado || "").localeCompare(a.creado || ""))[0]; return c ? `<div class="banner" style="margin-top:12px;font-weight:400;white-space:pre-line;border-color:var(--line)"><b>${c.tipo === "semana" ? "Clase de la semana" : "Tu estrategia"} · ${esc(c.creado.slice(0, 10).split("-").reverse().join("/"))}</b>\n${esc(c.texto)}</div>` : ""; })()}</div>
@@ -407,12 +427,20 @@ root.addEventListener("change", async (e) => {
     render(); return;
   }
   if (t.id === "bt-foto" && t.files && t.files[0]) {
+    const files = [...t.files], video = files.find((f) => /^video\//.test(f.type) || /\.(mov|mp4|m4v|webm)$/i.test(f.name || ""));
     S.btBusy = true; render();
-    try { const f0 = t.files[0], esVideo = /^video\//.test(f0.type) || /\.(mov|mp4|m4v|webm)$/i.test(f0.name || "");
-      const frames = esVideo ? await btFotogramas(f0, 8) : null;
-      try { S.btf = await btLeer("", frames || f0); }
-      catch (err) { if (!frames || frames.length <= 4) throw err; S.btf = await btLeer("", [frames[0], frames[2], frames[5], frames[7]].filter(Boolean)); } toast("Mira la corrección de tu profesor, revisa los datos y guarda."); }
-    catch (err) { toast("No he podido leer tu operación: " + (err.message || "error")); }
+    try {
+      if (video) {
+        const { frames, dur } = await btFotogramas(video, 12);
+        if (dur > 180) toast("Vídeo de " + Math.round(dur / 60) + " minutos: para que el profesor vea bien la operación, mejor vídeos de 1 o 2 minutos.");
+        S.btf = await btLeerSecuencia(frames);
+      } else {
+        const fotos = files.filter((f) => /^image\//.test(f.type) || /\.(jpe?g|png|heic|webp)$/i.test(f.name || "")).sort((a, b) => a.lastModified - b.lastModified);
+        S.btf = fotos.length > 1 ? await btLeerSecuencia(fotos) : await btLeer("", fotos[0] || files[0]);
+      }
+      toast("Mira la corrección de tu profesor, revisa los datos y guarda.");
+    }
+    catch (err) { toast("No he podido leer tu operación: " + (err.message || "error") + (video ? ". Prueba con 3 o 4 capturas seguidas (entrada, mitad y final): elígelas a la vez." : "")); }
     finally { S.btBusy = false; render(); }
   }
 });

@@ -404,9 +404,10 @@ function reglas() {
   const E = est(), m = (n) => money(n).replace(",00", ""), tope = 3000 * E.consistencia / 100, grupo = E.modo === "grupo", lon = E.exModo === "londres";
   const stop = lon ? E.lonR : E.b1r;
   return [
-    lon ? ["EXÁMENES · LONDRES + NUEVA YORK", [["Londres", "Arriesgas " + m(E.lonR) + " para ganar " + m(E.lonT), "Ratio 0,5: buscas cerrar en verde antes de Nueva York"],
-      ["Al llegar a +" + m(E.lonT), "Si empuja con fuerza: stop a +" + m(E.lonT) + " y buscas +" + m(E.lonMax), "Desde ahí ya no puedes bajar de +" + m(E.lonT) + "; puedes añadir contratos a favor"],
+    lon ? ["EXÁMENES · LONDRES + NUEVA YORK", [["Londres", "Arriesgas " + m(E.lonR) + " para ganar " + m(E.lonT), E.lonT === E.lonR ? "Ratio 1:1, como en tu backtesting" : "Ratio " + String(Math.round((E.lonT / E.lonR) * 100) / 100).replace(".", ",")],
+      ...(E.lonMax > E.lonT ? [["Al llegar a +" + m(E.lonT), "Si empuja con fuerza: stop a +" + m(E.lonT) + " y buscas +" + m(E.lonMax), "Desde ahí ya no puedes bajar de +" + m(E.lonT)]] : []),
       ["Si va en contra", "Puedes promediar, pero el stop de TODA la posición es −" + m(E.lonR), "Promediar sube el tamaño: el límite de pérdida no se mueve nunca"],
+      ["Si va a favor", "Puedes añadir contratos", "Con el stop de toda la posición protegido; el objetivo del día sigue siendo el tope"],
       ["Stop en Londres", "Esa cuenta no opera Nueva York hoy", "No hay ganancias con las que jugar. Mañana toca la siguiente cuenta"],
       ["Nueva York", "Solo juegas con lo ganado en Londres", "Si Londres dio +" + m(E.lonT) + ", en Nueva York arriesgas como máximo " + m(E.lonT) + ". Si Nueva York se lo come, el día queda en 0"],
       ["Tope del día", "+" + m(tope) + " entre Londres y Nueva York", "Consistencia " + E.consistencia + " %: al llegar Jarvis te avisa para cerrar"],
@@ -753,7 +754,7 @@ async function avanzarFoco() {
 }
 function hoyHtml() {
   const E = est(), h = hoyOperas();
-  return `<div class="card" style="margin-bottom:18px;border:2px solid #22c55e"><div class="cardhead"><div><h3>🎯 Hoy operas</h3><p class="hint">${E.exModo === "londres" ? `Londres: ${money(E.lonR)} para ${money(E.lonT)}; a +${money(E.lonT)}, si empuja, stop a +${money(E.lonT)} y buscas +${money(E.lonMax)}. Nueva York solo con lo ganado en Londres, hasta el tope del día. Un stop en Londres cierra el día de esa cuenta.` : `Tu plan de 2 balas: Bala 1 ${money(E.b1r)} para ${money(E.b1t)}; si gana, Bala 2 en la misma cuenta ${money(E.b2r)} para ${money(E.b2t)}, cerrando en +${money(E.b2t)} justos (sin trailing). Si la Bala 1 pierde, esa cuenta para y la siguiente bala va ${E.modo === "grupo" ? "al siguiente grupo" : "a la siguiente cuenta"}.`}</p>
+  return `<div class="card" style="margin-bottom:18px;border:2px solid #22c55e"><div class="cardhead"><div><h3>🎯 Hoy operas</h3><p class="hint">${E.exModo === "londres" ? `Londres: ${money(E.lonR)} para ${money(E.lonT)}${E.lonMax > E.lonT ? `; a +${money(E.lonT)}, si empuja, stop a +${money(E.lonT)} y buscas +${money(E.lonMax)}` : " (1:1); promedias en contra y añades a favor, sin mover el stop total"}. Nueva York solo con lo ganado en Londres, hasta el tope del día. Un stop en Londres cierra el día de esa cuenta.` : `Tu plan de 2 balas: Bala 1 ${money(E.b1r)} para ${money(E.b1t)}; si gana, Bala 2 en la misma cuenta ${money(E.b2r)} para ${money(E.b2t)}, cerrando en +${money(E.b2t)} justos (sin trailing). Si la Bala 1 pierde, esa cuenta para y la siguiente bala va ${E.modo === "grupo" ? "al siguiente grupo" : "a la siguiente cuenta"}.`}</p>
       <div class="seg" style="margin-top:6px"><button type="button" data-ver="exModo:londres" aria-pressed="${E.exModo === "londres"}">Londres + Nueva York</button><button type="button" data-ver="exModo:balas" aria-pressed="${E.exModo !== "londres"}">2 balas</button></div></div>
     <div class="seg"><button type="button" data-modo="individual" aria-pressed="${E.modo === "individual"}">Cuenta a cuenta</button><button type="button" data-modo="grupo" aria-pressed="${E.modo === "grupo"}">Por grupos (copiadas)</button></div></div>
     ${h.lineas.map((l) => `<div class="banner ok" style="margin-bottom:8px">${esc(l)}</div>`).join("")}
@@ -817,7 +818,7 @@ root.addEventListener("click", async (e) => {
   if (d.act === "nueva-rev") { S.rev = { id: domingoHoy(), checks: {}, estados: {}, notas: "" }; render(); return; }
 });
 async function guardarEst(p) {
-  S.estrategia = { ...est(), ...p, v: 3 }; render();
+  S.estrategia = { ...est(), ...p, v: 4 }; render();
   if (S.db) try { await S.db.doc("fm/plan").collection("config").doc("estrategia").set(S.estrategia); toast("Estrategia guardada."); } catch (err) { toast("No se ha guardado: " + (err.message || "error")); }
 }
 root.addEventListener("change", (e) => {

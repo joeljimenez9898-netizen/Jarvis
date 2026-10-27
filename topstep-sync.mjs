@@ -204,21 +204,23 @@ export function vigilancia(planCuentas, cuentasTs, at, prev) {
 //   estrategia: his settings (Plan de Futuros → Hoy operas → Ajustar la estrategia)
 //   cuentas: [{ codigo, tipo, estado, tp, sl, orden, pnl, dias: { "YYYY-MM-DD": pnl }, tradesHoy: [pnl or { pnl, at }, …] }]
 //   ahora: the time of the reading (ISO), to know whether London is over; londresCerrada: true after the London session
-// Exams, London + New York (exModo "londres"): London risks lonR for lonT, and past +lonT the stop goes to +lonT to reach for
-// lonMax; averaging in never takes the whole position past −lonR. New York only plays with London's profit, up to the day's
+// Exams, London + New York (exModo "londres"): London risks lonR for lonT (1:1); with lonMax above lonT, past +lonT the stop
+// goes to +lonT to reach for lonMax. Averaging in or adding never takes the whole position past −lonR. New York only plays with London's profit, up to the day's
 // consistency cap; a London stop means no New York on that account. Exams, 2 bullets (exModo "balas"): bullet 1 risks b1r for
 // b1t; if it wins, bullet 2 in the same account closes at exactly b2t (no trailing). The day never passes the consistency cap.
 // Pause: pausaStops stops in one day end the day; a week at −pausaSemana or pausaRojos red days means a day off.
 // Funded: one account does the strong day while the ones that already won theirs do
 // minimum days (risk minimoSL for minimo, then the stop goes to +minimo). An account with margin for less than two stops
 // trades in recovery (recupR risk) until it has it again; a failed strong day hands the strong slot to the next account.
-export const ESTRATEGIA_DEF = { v: 3, modo: "individual", exModo: "londres", lonR: 1000, lonT: 500, lonMax: 1000, opsDia: 2, b1r: 1000, b1t: 1000, b2r: 1000, b2t: 500,
+export const ESTRATEGIA_DEF = { v: 4, modo: "individual", exModo: "londres", lonR: 1000, lonT: 1000, lonMax: 1000, opsDia: 2, b1r: 1000, b1t: 1000, b2r: 1000, b2t: 500,
   consistencia: 50, fuerteTP: 1000, fuerteSL: 1000, minimo: 150, minimoSL: 1000, recupR: 500, diasPayout: 5, pausaStops: 2, pausaSemana: 2000, pausaRojos: 3 };
-// Older saved settings: before v2 the funded numbers were the old ones; before v3 there was no London + New York plan.
+// Older saved settings: before v2 the funded numbers were the old ones; before v3 there was no London + New York plan;
+// before v4 London was 1.000 for 500 with trailing, now it is 1:1.
 export function estrategiaDe(guardada) {
   const g = { ...(guardada || {}) }, v = Number(g.v) || 1;
   if (v < 2) for (const k of ["fuerteTP", "fuerteSL", "minimo", "minimoSL", "recupR"]) delete g[k];
   if (v < 3) delete g.exModo;
+  if (v < 4) { delete g.lonT; delete g.lonMax; }
   delete g.v;
   return { ...ESTRATEGIA_DEF, ...g };
 }
@@ -255,8 +257,9 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
     else if (tot >= tope) { txt = "🏁 Tope del día: " + sg(tot) + ". Cierra y no operes más esta cuenta hoy.";
       av(c.codigo + ":tope", "🏁 " + c.codigo + " lleva " + sg(tot) + " hoy: es el tope del día por la consistencia (" + m(tope) + "). Cierra y no operes más esta cuenta hoy."); }
     else if (E.exModo === "londres") {
-      const r = Math.min(E.lonR, g.m0), lonTxt = "Londres: arriesga " + m(r) + " para ganar " + m(E.lonT) + ". Si llega a " + sg(E.lonT) + " y empuja con fuerza, sube el stop a " + sg(E.lonT) +
-        " y busca " + sg(E.lonMax) + ". Si promedias o añades contratos, el stop de toda la posición nunca pasa de −" + m(r) + ".";
+      const r = Math.min(E.lonR, g.m0), lonTxt = "Londres: arriesga " + m(r) + " para ganar " + m(E.lonT) + (E.lonT === E.lonR ? " (1:1)" : "") + ". " +
+        (E.lonMax > E.lonT ? "Si llega a " + sg(E.lonT) + " y empuja con fuerza, sube el stop a " + sg(E.lonT) + " y busca " + sg(E.lonMax) + ". " : "") +
+        "Si va en contra puedes promediar y si va a favor añadir contratos, pero el stop de toda la posición nunca pasa de −" + m(r) + ".";
       if (L <= -0.9 * r) { txt = "🛑 Stop en Londres (" + sg(L) + "): hoy no opera Nueva York.";
         av(c.codigo + ":lon-ko", "🛑 " + c.codigo + " ha hecho stop en Londres (" + sg(L) + "). Hoy no operes Nueva York en esta cuenta: no hay ganancias con las que jugar. Mañana toca la siguiente cuenta."); }
       else if (L > 0 && hayNY && tot <= 0) { txt = "🛑 Nueva York se ha comido lo de Londres (" + sg(tot) + "): día cerrado.";
