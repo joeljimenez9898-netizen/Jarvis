@@ -166,7 +166,7 @@ function btImportar(filas, zona, riesgo) {
 }
 
 // ── data and state
-S.bt = new Map(); S.btClases = new Map(); S.btSubida = null; S.btf = null; S.btImp = null; S.btBusy = false;
+S.bt = new Map(); S.btClases = new Map(); S.btCons = null; S.btSubida = null; S.btf = null; S.btImp = null; S.btBusy = false;
 const btLista = () => list(S.bt).sort((a, b) => ((b.fecha || "") + (b.hora || "")).localeCompare((a.fecha || "") + (a.hora || "")));
 function btSub(plan) {
   plan.collection("clases").onSnapshot((snap) => { S.btClases.clear(); for (const d of snap.docs) S.btClases.set(d.id, d.data()); if (S.tab === "backtest") render(); }, () => {});
@@ -252,13 +252,15 @@ async function btLeer(texto, imagen) {
              bien: (o.profesor.bien || []).slice(0, 6).map(String), mal: (o.profesor.mal || []).slice(0, 6).map(String), respuesta: String(o.profesor.respuesta || "") } } : {}),
            ...(imagen && texto ? { explicacion: String(texto) } : {}) };
 }
+// with the 📷 of Jarvis and «¿puedo entrar?»: the same question, answered in words
+async function btConsultar(texto, imagen) { return btConsultaTexto(await btConsulta(texto, imagen)); }
 // by voice («Jarvis, backtest: …»): straight to the journal, and Jarvis says what it wrote and what is missing
 async function btApuntar(texto, imagen) {
   const t = await btLeer(texto, imagen); await btGuardar(t);
   const r = btR(t), falta = [!t.setup && "el set up", !t.hora && "la hora", r == null && !t.resultado && "el resultado"].filter(Boolean);
   return "Apuntado en tu diario" + (t.tipo === "real" ? " (operación real)" : " de backtesting") + ": " + (t.setup ? btNombre(t.setup) : "sin set up") + ", " + (t.dir === "LONG" ? "largo" : "corto") + " el " + btDia(t.fecha).toLowerCase() + " " + t.fecha.split("-").reverse().join("/") +
     (t.hora ? " a las " + t.hora + " (Nueva York, " + btSesion(t.hora) + ")" : "") + (r != null ? ", " + (r > 0 ? "+" : "") + r + "R" : t.resultado ? ", " + t.resultado : "") +
-    (t.errores.length ? ". Errores: " + t.errores.join(", ").toLowerCase() : "") + "." + (t.profesor ? " " + BT_VERED[t.profesor.veredicto] + ". " + t.profesor.loQueVeo + " " +
+    (t.errores.length ? ". Errores: " + t.errores.join(", ").toLowerCase() : "") + "." + (t.profesor ? " " + BT_VERED[t.profesor.veredicto] + ". " + t.profesobtFin(r.loQueVeo) + " " +
       (t.profesor.veredicto !== "libro" && t.profesor.queHabriaHecho ? "Lo que yo habría hecho: " + t.profesor.queHabriaHecho + " " : "") + (t.profesor.leccion ? "Lección: " + t.profesor.leccion : "") : "") + (falta.length ? " Me falta " + falta.join(" y ") + ": complétalo en Plan de Futuros → Backtesting." : "");
 }
 const BT_VERED = { libro: "✅ De libro", dudosa: "⚠️ Dudosa", no: "❌ No era tu set up" };
@@ -283,6 +285,60 @@ async function btLeccion(tipo) {
   const txt = String(text || "").trim();
   if (S.db) await S.db.doc("fm/plan").collection("clases").doc(tipo + "-" + iso(new Date())).set({ tipo, texto: txt, operaciones: semana.length, creado: new Date().toISOString() });
   return txt;
+}
+// ── «¿Puedo entrar?»: a picture of the chart right now (M15 and/or M5) and the teacher says, by his own strategy, enter, wait
+// or don't; with the hour he is in, today's state of his rules (stops, pause) and the plan (entry, stop by his rule, 1:1 target).
+// It is an opinion, never an order: he decides. Each question is kept in fm/plan/consultas for the weekly class.
+const BT_CONS_VER = { entra: "✅ Puedes entrar", espera: "⏳ Espera", no: "❌ No entres" };
+function btAhora() {
+  const w = btNY(Date.now()), dentro = BT_HORARIO.find(([, a, z]) => w.hora >= a && w.hora < z);
+  let reglas = []; try { const m = motor(); reglas = m.avisos.map((a) => a.txt); if (m.pausa && (m.pausa.dia || m.pausa.semanal)) reglas.unshift("PAUSA ACTIVA según sus reglas."); } catch {}
+  return { ...w, sesion: btSesion(w.hora), dentro: dentro ? dentro[0] : null, reglas };
+}
+async function btConsulta(texto, imagenes) {
+  const sample = window.claude?.use ? await window.claude.use("sample") : null;
+  if (!sample) throw new Error("Abre Jarvis dentro de Claude para preguntarle al profesor.");
+  const A = btAhora(), imgs = Array.isArray(imagenes) ? imagenes : [imagenes];
+  const ask = "Eres el profesor de trading de Joel y está operando AHORA, en directo. Mira " + (imgs.length > 1 ? "estas " + imgs.length + " imágenes del gráfico (pueden ser M15 y M5 del mismo momento)" : "esta imagen del gráfico") +
+    " y dile si, según SU estrategia, puede entrar ya, debe esperar o no debe entrar.\n" +
+    "Ahora en Nueva York son las " + A.hora + " (" + A.fecha + ", " + btDia(A.fecha).toLowerCase() + "). Su horario operativo: Londres de 2:00 a 5:00 y Nueva York de 10:30 a 12:00 (hora de Nueva York). " +
+    (A.dentro ? "Está dentro de su horario de " + A.dentro + "." : "Está FUERA de su horario operativo: díselo claro.") + "\n" +
+    (A.reglas.length ? "Lo que dicen hoy sus reglas (Jarvis): " + A.reglas.join(" ") + "\n" : "") +
+    "Cómo opera y el checklist de cada modelo: " + BT_REGLAS + "\n" +
+    (texto ? "Joel te dice: «" + texto + "».\n" : "") +
+    "Sé prudente y honesto: si algo no se ve (escala de precios, hora, media móvil, niveles), dilo y no lo supongas; si la vela de entrada aún no ha cerrado, dile que espere al cierre. Es una opinión: él decide.\n" +
+    "Responde SOLO con un JSON: {\"veredicto\": \"entra\" | \"espera\" | \"no\", \"modelo\": \"L1\"/\"L2\"/\"NYR\"/\"NYV\" o null, \"reglas\": [{\"regla\": línea de su checklist, \"ok\": true/false/null si no se ve, \"por\": por qué}], " +
+    "\"loQueVeo\": 2-3 frases, \"plan\": {\"direccion\": \"LONG\"/\"SHORT\"/null, \"entrada\": dónde, \"stop\": dónde según su regla (detrás de máximos o mínimos secundarios, mínimo 100 puntos), \"objetivo\": dónde para 1:1}, " +
+    "\"queEsperar\": qué tiene que pasar para que sea entrada (si es esperar) o \"\", \"invalida\": qué lo invalidaría, \"resumen\": una frase}. De tú, en español.";
+  const { text } = await sample([{ role: "user", content: ask }], { cache: false, images: imgs });
+  const o = JSON.parse((String(text).match(/\{[\s\S]*\}/) || ["{}"])[0]) || {};
+  const r = { veredicto: ["entra", "espera", "no"].includes(o.veredicto) ? o.veredicto : "espera", modelo: btSetup(o.modelo) ? o.modelo : null,
+    reglas: (o.reglas || []).slice(0, 8).map((x) => ({ regla: String(x.regla || ""), ok: x.ok === true ? true : x.ok === false ? false : null, por: String(x.por || "") })),
+    loQueVeo: String(o.loQueVeo || ""), plan: o.plan && typeof o.plan === "object" ? { direccion: o.plan.direccion === "SHORT" ? "SHORT" : o.plan.direccion === "LONG" ? "LONG" : null,
+      entrada: String(o.plan.entrada || ""), stop: String(o.plan.stop || ""), objetivo: String(o.plan.objetivo || "") } : null,
+    queEsperar: String(o.queEsperar || ""), invalida: String(o.invalida || ""), resumen: String(o.resumen || ""), horaNY: A.hora, fechaNY: A.fecha, sesion: A.sesion, dentro: A.dentro, reglasHoy: A.reglas, texto: texto || "" };
+  if (S.db) try { await S.db.doc("fm/plan").collection("consultas").doc("c-" + Date.now().toString(36)).set({ ...r, creado: new Date().toISOString() }); } catch {}
+  return r;
+}
+const btFin = (s) => (s && !/[.!?…]$/.test(s.trim()) ? s.trim() + "." : (s || "").trim()), btSinSi = (s) => (s || "").replace(/^\s*si\s+/i, "");
+const btConsultaTexto = (r) => BT_CONS_VER[r.veredicto] + (r.modelo ? " (" + btNombre(r.modelo) + ")" : "") + ". " + (r.dentro ? "" : "Ojo: estás fuera de tu horario. ") + r.loQueVeo + " " +
+  (r.veredicto === "entra" && r.plan ? "Entrada " + r.plan.entrada + ", stop " + r.plan.stop + ", objetivo " + r.plan.objetivo + ". " : "") + (r.queEsperar ? btFin("Espera a que " + r.queEsperar.replace(/^\s*(a\s+)?que\s+/i, "")) + " " : "") +
+  (r.invalida ? btFin("Se invalida si " + btSinSi(r.invalida)) + " " : "") + "La decisión es tuya.";
+function btConsHtml() {
+  const C = S.btCons, A = btAhora(), r = C.res;
+  if (!r) return `<div class="card" style="margin-bottom:18px;border:2px solid #0ea5e9"><h3>🔎 ¿Puedo entrar?</h3>
+    <p class="hint">📎 ${C.files.length === 1 ? "1 imagen lista" : C.files.length + " imágenes listas"} · Ahora son las <b>${A.hora}</b> en Nueva York (${A.dentro ? "dentro de tu horario de " + A.dentro : "⚠️ fuera de tu horario"}).</p>
+    ${A.reglas.length ? `<div class="banner warn" style="margin-top:8px">${A.reglas.map(esc).join("<br>")}</div>` : ""}
+    <textarea data-btcons rows="3" placeholder="Opcional: qué ves tú (ej.: vela de M15 rompiendo el high de Asia con cuerpo, quiero comprar)" style="width:100%;border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:10px">${esc(C.texto || "")}</textarea>
+    <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap"><button type="button" class="btn green" data-bt="cons-enviar">🔎 Preguntar al profesor</button><button type="button" class="btn" data-bt="cons-cerrar">Cancelar</button></div></div>`;
+  return `<div class="card" style="margin-bottom:18px;border:2px solid ${r.veredicto === "entra" ? "#22c55e" : r.veredicto === "no" ? "#ef4444" : "#f59e0b"}"><h3 style="font-size:22px">${esc(BT_CONS_VER[r.veredicto])}</h3>
+    <p class="hint">${r.modelo ? esc(btNombre(r.modelo)) + " · " : ""}${esc(r.horaNY)} en Nueva York${r.dentro ? "" : " · ⚠️ fuera de tu horario"}</p>
+    ${r.resumen ? `<p style="margin:10px 0"><b>${esc(r.resumen)}</b></p>` : ""}${r.loQueVeo ? `<p style="margin:6px 0">${esc(r.loQueVeo)}</p>` : ""}
+    ${r.reglas.map((x) => `<div style="margin:3px 0">${x.ok === true ? "✅" : x.ok === false ? "❌" : "❔"} <b>${esc(x.regla)}</b> — ${esc(x.por)}</div>`).join("")}
+    ${r.plan && (r.plan.entrada || r.plan.stop) ? `<div class="banner ${r.veredicto === "entra" ? "ok" : ""}" style="margin-top:10px;font-weight:400;border-color:var(--line)">${r.plan.direccion ? "<b>" + (r.plan.direccion === "LONG" ? "Largo" : "Corto") + "</b> · " : ""}Entrada: ${esc(r.plan.entrada || "—")}<br>Stop: ${esc(r.plan.stop || "—")}<br>Objetivo (1:1): ${esc(r.plan.objetivo || "—")}</div>` : ""}
+    ${r.queEsperar ? `<p style="margin:8px 0"><b>⏳ Qué esperar:</b> ${esc(r.queEsperar)}</p>` : ""}${r.invalida ? `<p style="margin:6px 0"><b>🚫 Se invalida si:</b> ${esc(btSinSi(r.invalida))}</p>` : ""}
+    <p class="hint" style="margin-top:8px">Es la opinión de tu profesor con lo que se ve en la imagen. La decisión y el stop son tuyos.</p>
+    <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap"><button type="button" class="btn dark" data-bt="consulta">🔎 Otra foto</button><button type="button" class="btn" data-bt="cons-cerrar">Cerrar</button></div></div>`;
 }
 // the week's real trades as Topstep reports them (account, New York hour, session, result), for the class
 function btRealesTopstep(desde) {
@@ -367,7 +423,10 @@ function btImpHtml() {
 S.btVer = "todo";
 V.backtest = () => {
   const todas = btLista(), ts = S.btVer === "todo" ? todas : todas.filter((t) => (t.tipo === "real" ? "real" : "backtest") === S.btVer), sinSet = todas.filter((t) => !t.setup).length;
-  return (S.btSubida && !S.btBusy ? btSubidaHtml() : "") + (S.btf ? btFormHtml() : "") + (S.btImp ? btImpHtml() : "") +
+  return (S.btCons && !S.btConsBusy ? btConsHtml() : "") + (S.btConsBusy ? '<div class="banner warn" style="margin-bottom:18px">🔎 Tu profesor está mirando el gráfico…</div>' : "") +
+    (S.btCons ? "" : `<div class="card" style="margin-bottom:18px;border:2px solid #0ea5e9"><h3>🔎 ¿Puedo entrar?</h3><p class="hint">En mitad de la sesión, mándale una foto del gráfico (M15 y M5 si quieres, a la vez) y tu profesor te dice, según tu estrategia, si es entrada, si esperar o si no entrar.</p>
+      <button type="button" class="btn green" data-bt="consulta" style="margin-top:10px">🔎 Foto del gráfico</button></div>`) + '<input type="file" id="bt-cons" accept="image/*" multiple hidden>' +
+    (S.btSubida && !S.btBusy ? btSubidaHtml() : "") + (S.btf ? btFormHtml() : "") + (S.btImp ? btImpHtml() : "") +
   `<div class="card" style="margin-bottom:18px"><div class="cardhead"><div><h3>📒 Backtesting</h3><p class="hint">Tus pruebas de TradingView (Paper Trading y Bar Replay) y tus operaciones reales. Jarvis guarda set up, día, hora y sesión de cada entrada para decirte qué te funciona y en qué fallas.</p></div></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap"><button type="button" class="btn green" data-bt="nueva">+ Apuntar operación</button>
       <button type="button" class="btn" data-bt="foto">📷 Captura o vídeo</button><button type="button" class="btn" data-bt="csv">⬆️ Importar de TradingView</button>
@@ -407,6 +466,16 @@ root.addEventListener("click", async (e) => {
   if (d.bt === "csv") { $("#bt-csv").value = ""; $("#bt-csv").click(); return; }
   if (d.bt === "cancelar-imp") { S.btImp = null; render(); return; }
   if (d.bt === "cancelar-sub") { S.btSubida = null; render(); return; }
+  if (d.bt === "ir-consulta") { S.tab = "backtest"; try { localStorage.setItem("pf-tab", S.tab); } catch {} render(); const el = $("#bt-cons"); if (el) { el.value = ""; el.click(); } return; }
+  if (d.bt === "consulta") { const el = $("#bt-cons"); if (el) { el.value = ""; el.click(); } return; }
+  if (d.bt === "cons-cerrar") { S.btCons = null; render(); return; }
+  if (d.bt === "cons-enviar" && S.btCons) {
+    S.btConsBusy = true; render();
+    try { S.btCons.res = await btConsulta((S.btCons.texto || "").trim(), S.btCons.files); }
+    catch (err) { toast("No he podido preguntarle al profesor: " + (err.message || "error")); }
+    finally { S.btConsBusy = false; render(); }
+    return;
+  }
   if (d.bt === "enviar-prof" && S.btSubida) {
     const U = S.btSubida, files = U.files, video = files.find(btEsVideo), texto = (U.texto || "").trim();
     S.btBusy = true; render();
@@ -460,6 +529,7 @@ root.addEventListener("click", async (e) => {
 function confirmarSinSet(btn) { if (dosToques(btn, "Sin set up: toca otra vez para guardar igual")) return true; return false; }
 root.addEventListener("input", (e) => {
   const d = e.target.dataset;
+  if (d.btcons != null && S.btCons) { S.btCons.texto = e.target.value; return; }
   if (d.btsub != null && S.btSubida) { S.btSubida.texto = e.target.value; return; }
   if (d.btf != null && S.btf) {
     S.btf[d.btf] = e.target.value;
@@ -478,5 +548,6 @@ root.addEventListener("change", async (e) => {
     if (!S.btImp.trades.length) toast("No he encontrado operaciones cerradas en ese archivo. Exporta el historial de Paper Trading (órdenes o balance).");
     render(); return;
   }
+  if (t.id === "bt-cons" && t.files && t.files[0]) { S.btCons = { files: [...t.files].filter((f) => /^image\//.test(f.type) || /\.(jpe?g|png|heic|webp)$/i.test(f.name || "")).slice(0, 4), texto: "", res: null }; render(); return; }
   if (t.id === "bt-foto" && t.files && t.files[0]) { S.btSubida = { files: [...t.files], texto: "" }; S.btf = null; render(); }
 });

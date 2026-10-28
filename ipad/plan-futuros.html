@@ -758,6 +758,7 @@ function hoyHtml() {
       <div class="seg" style="margin-top:6px"><button type="button" data-ver="exModo:londres" aria-pressed="${E.exModo === "londres"}">Londres + Nueva York</button><button type="button" data-ver="exModo:balas" aria-pressed="${E.exModo !== "londres"}">2 balas</button></div></div>
     <div class="seg"><button type="button" data-modo="individual" aria-pressed="${E.modo === "individual"}">Cuenta a cuenta</button><button type="button" data-modo="grupo" aria-pressed="${E.modo === "grupo"}">Por grupos (copiadas)</button></div></div>
     ${h.lineas.map((l) => `<div class="banner ok" style="margin-bottom:8px">${esc(l)}</div>`).join("")}
+    <button type="button" class="btn" data-bt="ir-consulta" style="margin:0 0 12px">🔎 ¿Puedo entrar? Foto del gráfico al profesor</button>
     ${h.unidades.length ? `<div class="tablewrap"><table><thead><tr><th>${E.modo === "grupo" ? "GRUPO" : "CUENTA"}</th><th>HOY</th></tr></thead><tbody>${h.unidades.map(({ u, e }) => `<tr><td><b>${esc(u.nombre)}</b>${u.id === h.foco.id ? ' <span class="live">EN FOCO</span>' : ""}<br><small class="dim">${esc(u.cuentas.map((c) => c.codigo + " " + signed(pnl(c))).join(" · "))}</small></td><td style="white-space:normal">${esc(e.txt)}</td></tr>`).join("")}</tbody></table></div>` : ""}
     ${h.fondeadas.length ? `<div class="sec" style="margin-top:16px">FONDEADAS · DÍA FUERTE + DÍAS MÍNIMOS</div><p class="hint">${esc(motor().resumen)}</p>${h.fondeadas.map((f) => `<div class="rule"><b>${esc(f.cuenta)}</b><span class="v" style="grid-column:span 2">${esc(f.txt)}</span></div>`).join("")}` : ""}
     <details style="margin-top:12px"><summary class="hint" style="cursor:pointer">Ajustar la estrategia</summary><div class="filters" style="margin-top:10px">
@@ -885,7 +886,7 @@ function contexto() {
   };
 }
 // open(tab): Jarvis opens the Plan on a tab when Joel asks for it by voice.
-window.PLAN = { contexto, render, btApuntar: (texto, imagen) => btApuntar(texto, imagen), btClase: (tipo) => btLeccion(tipo), avisos: () => (S.ready ? motor().avisos : []), open: (tab) => { if (typeof tab === "string" && TABS.some(([k]) => k === tab)) { S.tab = tab; try { localStorage.setItem("pf-tab", tab); } catch {} } render(); } };
+window.PLAN = { contexto, render, btApuntar: (texto, imagen) => btApuntar(texto, imagen), btClase: (tipo) => btLeccion(tipo), btConsultar: (texto, imagen) => btConsultar(texto, imagen), avisos: () => (S.ready ? motor().avisos : []), open: (tab) => { if (typeof tab === "string" && TABS.some(([k]) => k === tab)) { S.tab = tab; try { localStorage.setItem("pf-tab", tab); } catch {} } render(); } };
 
 // The 📒 Backtesting tab lives in ipad/backtest.js; build-space.mjs copies it in here.
 /*@backtest@*/

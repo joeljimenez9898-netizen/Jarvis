@@ -263,6 +263,8 @@ async function checkIpadApps() {
         wrongSym.push("Backtesting: his own explanation must go with each screenshot or video to the teacher, be answered and kept"); }
     if (!page.includes("function htmlCal()") || !page.includes("Calendario de ganancias y pérdidas") || !page.includes("calendario: (() => { const d = diasCal()"))
       wrongSym.push("Capital propio: the calendar of gains and losses (euros and %) is missing");
+    if (!page.includes("async function btConsulta(texto, imagenes)") || !page.includes("está operando AHORA, en directo") || !page.includes('id="bt-cons"') || !page.includes("BT_ENTRO.test(f) && window.PLAN && window.PLAN.btConsultar") || !page.includes('data-bt="ir-consulta"'))
+      wrongSym.push("Backtesting: «¿Puedo entrar?» (a live chart picture judged by his strategy, from the tab, from Hoy operas and from the 📷 of Jarvis) is missing");
     if (!page.includes('id="cap-host"') || !page.includes("capitalPropio: window.CAPITAL?.contexto") || !page.includes('db.doc("fm/capital")')) wrongSym.push("Capital propio is not wired into Jarvis");
     if (!page.includes("<avisos>") || !page.includes("hacia las 11:00")) wrongSym.push("Jarvis does not know the scheduled 11:00 summary");
     if (!page.includes('db.doc("fm/mercado")') || !page.includes("no es en directo")) wrongSym.push("the MNQ price star is missing or not marked as not live");
