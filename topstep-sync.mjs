@@ -210,18 +210,19 @@ export function vigilancia(planCuentas, cuentasTs, at, prev) {
 // consistency cap; a London stop means no New York on that account. Exams, 2 bullets (exModo "balas"): bullet 1 risks b1r for
 // b1t; if it wins, bullet 2 in the same account closes at exactly b2t (no trailing). The day never passes the consistency cap.
 // Pause: pausaStops stops in one day end the day; a week at −pausaSemana or pausaRojos red days means a day off.
-// Funded: one account does the strong day while the ones that already won theirs do
-// minimum days (risk minimoSL for minimo, then the stop goes to +minimo). An account with margin for less than two stops
-// trades in recovery (recupR risk) until it has it again; a failed strong day hands the strong slot to the next account.
-export const ESTRATEGIA_DEF = { v: 4, modo: "individual", exModo: "londres", lonIni: 500, lonR: 1000, lonT: 1000, lonMax: 1000, opsDia: 2, b1r: 1000, b1t: 1000, b2r: 1000, b2t: 500,
-  consistencia: 50, fuerteTP: 1000, fuerteSL: 1000, minimo: 150, minimoSL: 1000, recupR: 500, diasPayout: 5, pausaStops: 2, pausaSemana: 2000, pausaRojos: 3 };
+// Funded: group A goes for the big day (+fuerteTP), group B (big day done) does diasPayout minimum days (risk minimoSL for
+// minimo, then the stop goes to +minimo) and asks for the payout; each group splits in two halves that never take the same
+// trade. An account with margin for less than two stops trades in recovery (recupR risk) until it has it again.
+export const ESTRATEGIA_DEF = { v: 5, modo: "individual", exModo: "londres", lonIni: 500, lonR: 1000, lonT: 1000, lonMax: 1000, opsDia: 2, b1r: 1000, b1t: 1000, b2r: 1000, b2t: 500,
+  consistencia: 50, fuerteTP: 1500, fuerteSL: 1000, minimo: 150, minimoSL: 1000, recupR: 500, diasPayout: 4, pausaStops: 2, pausaSemana: 2000, pausaRojos: 3 };
 // Older saved settings: before v2 the funded numbers were the old ones; before v3 there was no London + New York plan;
-// before v4 London was 1.000 for 500 with trailing, now it is 1:1.
+// before v4 London was 1.000 for 500 with trailing, now it is 1:1; before v5 the big day was +1.000 and the payout took 5 days.
 export function estrategiaDe(guardada) {
   const g = { ...(guardada || {}) }, v = Number(g.v) || 1;
   if (v < 2) for (const k of ["fuerteTP", "fuerteSL", "minimo", "minimoSL", "recupR"]) delete g[k];
   if (v < 3) delete g.exModo;
   if (v < 4) { delete g.lonT; delete g.lonMax; }
+  if (v < 5) { delete g.fuerteTP; delete g.diasPayout; }
   delete g.v;
   return { ...ESTRATEGIA_DEF, ...g };
 }
@@ -292,44 +293,49 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
       av(c.codigo + ":margen", "⚠️ A " + c.codigo + " solo le quedan " + m(g.ahora) + " de margen: le cabe un stop más. Su próxima bala es la última.");
     out.examenes.push({ cuenta: c.codigo, txt, hoy: tot, londres: L, pnl: Number(c.pnl) || 0, margen: g.ahora, falta: Math.max(0, obj - (Number(c.pnl) || 0)) });
   }
+  // Funded accounts in two groups, each split in two so the same trade never goes into all of them:
+  //   A (A1, A2): still need their big day (a day of +fuerteTP or more). B (B1, B2): big day done, doing diasPayout minimum
+  //   days after it, then the payout. A big day today moves the account to B tomorrow. Halves alternate by account order.
   const fs_ = cuentas.filter((x) => viva(x) && x.tipo === "Fondeada")
     .sort((a, b) => (Number(a.orden) || 0) - (Number(b.orden) || 0) || String(a.codigo).localeCompare(String(b.codigo), "es", { numeric: true }));
-  const info = fs_.map((c) => { const g = margen(c), d0 = g.antes.filter((v) => v >= E.minimo).length;
-    return { c, ...g, d0, d: d0 + (g.h >= E.minimo ? 1 : 0), fuerte0: g.antes.some((v) => v >= E.fuerteTP) }; });
-  const listo = (x) => x.d0 >= E.diasPayout, riesgo = (x, r) => (x.m0 >= 2 * r ? r : Math.max(0, Math.min(E.recupR, x.m0)));
-  const cand = info.filter((x) => !x.fuerte0 && !listo(x) && x.m0 >= 2 * E.fuerteSL && x.ahora > 0), fuerte = cand[0], sig = cand[1];
-  const tras = sig ? " y el día fuerte lo hace " + sig.c.codigo : " (no queda otra cuenta para el día fuerte)";
+  const info = fs_.map((c) => { const g = margen(c), i = g.antes.findIndex((v) => v >= E.fuerteTP), d0 = i < 0 ? 0 : g.antes.slice(i + 1).filter((v) => v >= E.minimo).length;
+    return { c, ...g, grande: i >= 0, d0, d: d0 + (i >= 0 && g.h >= E.minimo ? 1 : 0) }; });
+  const listo = (x) => x.grande && x.d0 >= E.diasPayout, riesgo = (x, r) => (x.m0 >= 2 * r ? r : Math.max(0, Math.min(E.recupR, x.m0)));
+  const mitad = {};
+  for (const L of ["A", "B"]) info.filter((x) => x.ahora > 0 && !listo(x) && (L === "B") === x.grande).forEach((x, i) => { mitad[x.c.codigo] = L + (i % 2 + 1); });
   for (const x of info) {
-    if (x.ahora <= 0) { av(x.c.codigo + ":quemada", "🔥 " + x.c.codigo + " se ha quemado. Si era la del día fuerte, lo hace la siguiente; repón la cuenta con un examen nuevo del fondo de exámenes.");
-      out.fondeadas.push({ cuenta: x.c.codigo, rol: "quemada", txt: "🔥 Cuenta quemada.", hoy: x.h, pnl: Number(x.c.pnl) || 0, margen: x.ahora, dias: x.d }); continue; }
-    const cod = x.c.codigo, rol = listo(x) ? "payout" : x === fuerte ? "fuerte" : x.fuerte0 ? "minimos" : x.m0 < 2 * E.fuerteSL ? "recuperacion" : "espera";
+    const cod = x.c.codigo, sub = mitad[cod];
+    if (x.ahora <= 0) { av(cod + ":quemada", "🔥 " + cod + " se ha quemado. Sale de su grupo; repón la cuenta con un examen nuevo del fondo de exámenes.");
+      out.fondeadas.push({ cuenta: cod, rol: "quemada", grupo: "", txt: "🔥 Cuenta quemada.", hoy: x.h, pnl: Number(x.c.pnl) || 0, margen: x.ahora, dias: x.d }); continue; }
+    const rol = listo(x) ? "payout" : x.grande ? "minimos" : x.m0 < 2 * E.fuerteSL ? "recuperacion" : "fuerte";
     const r = rol === "fuerte" ? riesgo(x, E.fuerteSL) : riesgo(x, E.minimoSL), suave = r < (rol === "fuerte" ? E.fuerteSL : E.minimoSL);
-    let txt = rol === "payout" ? "💰 Tiene " + x.d0 + " días mínimos: pide el payout."
-      : rol === "fuerte" ? "💪 Día fuerte: arriesga " + m(r) + " para ganar " + m(E.fuerteTP) + "."
-      : rol === "espera" ? (x === sig && (fuerte.h >= E.fuerteTP || fuerte.h <= -0.9 * riesgo(fuerte, E.fuerteSL)) ? "⏭ Hoy no se opera: mañana hace su día fuerte." : "⏸ Hoy no se opera: espera su turno de día fuerte" + (fuerte ? " (después de " + fuerte.c.codigo + ")." : "."))
-      : (rol === "recuperacion" || suave ? "🩹 Modo recuperación: " : "📅 Día mínimo: ") + "arriesga " + m(r) + " para ganar " + m(E.minimo) + "; al llegar a " + sg(E.minimo) +
-        " sube el stop a " + sg(E.minimo) + " y deja correr (lleva " + x.d0 + "/" + E.diasPayout + ")." +
-        (rol === "recuperacion" ? " Vuelve a la cola del día fuerte cuando tenga margen para 2 stops (le faltan " + m(2 * E.fuerteSL - x.m0) + ")." : "");
-    if (rol === "fuerte" && x.h >= E.fuerteTP) { txt = "✅ Día fuerte ganado hoy (" + sg(x.h) + "). Mañana pasa a días mínimos" + tras + ".";
-      av(cod + ":fuerte-ok", "✅ " + cod + " ha ganado su día fuerte (" + sg(x.h) + "). Cierra por hoy. Mañana " + cod + " pasa a días mínimos" + tras + "."); }
-    else if (rol === "fuerte" && r && x.h <= -0.9 * r) { txt = "🛑 Día fuerte fallado (" + sg(x.h) + "). Mañana pasa a modo recuperación" + tras + ".";
-      av(cod + ":fuerte-ko", "🛑 " + cod + " ha fallado su día fuerte (" + sg(x.h) + "). Para por hoy. Mañana " + cod + " pasa a modo recuperación (arriesga " + m(E.recupR) + " para ganar " + m(E.minimo) + ")" + tras + "."); }
-    else if ((rol === "minimos" || rol === "recuperacion") && x.h >= E.minimo) {
+    const pre = sub ? "Grupo " + sub + " · " : "";
+    let txt = rol === "payout" ? "💰 Tiene el día grande y " + x.d0 + " días mínimos: pide el payout."
+      : rol === "fuerte" ? "💪 Día grande: arriesga " + m(r) + " para ganar " + m(E.fuerteTP) + "."
+      : rol === "recuperacion" ? "🩹 Recuperación: arriesga " + m(r) + " para ganar " + m(E.minimo) + "; al llegar a " + sg(E.minimo) + " sube el stop a " + sg(E.minimo) +
+        " y deja correr. Vuelve a por el día grande cuando tenga margen para 2 stops (le faltan " + m(2 * E.fuerteSL - x.m0) + ")."
+      : (suave ? "🩹 Día mínimo suave: " : "📅 Día mínimo: ") + "arriesga " + m(r) + " para ganar " + m(E.minimo) + "; al llegar a " + sg(E.minimo) +
+        " sube el stop a " + sg(E.minimo) + " y deja correr (lleva " + x.d0 + "/" + E.diasPayout + ").";
+    if (rol !== "minimos" && rol !== "payout" && x.h >= E.fuerteTP) { txt = "✅ Día grande hecho hoy (" + sg(x.h) + "). Mañana pasa al grupo B: días mínimos.";
+      av(cod + ":fuerte-ok", "✅ " + cod + " ha hecho su día grande (" + sg(x.h) + "). Cierra por hoy. Mañana pasa al grupo B para hacer " + E.diasPayout + " días mínimos y pedir el payout."); }
+    else if (rol === "fuerte" && r && x.h <= -0.9 * r) { txt = "🛑 Día grande fallado (" + sg(x.h) + "): para por hoy.";
+      av(cod + ":fuerte-ko", "🛑 " + cod + " ha fallado el día grande (" + sg(x.h) + "). Para por hoy" + (x.ahora < 2 * E.fuerteSL ? "; mañana va en recuperación (arriesga " + m(E.recupR) + ")" : "; mañana lo vuelve a intentar") + "."); }
+    else if (rol === "minimos" && x.h >= E.minimo) {
       txt = "✅ Día mínimo hecho hoy (" + sg(x.h) + ", " + x.d + "/" + E.diasPayout + ").";
       av(cod + ":min-ok", "✅ " + cod + " ya tiene su día mínimo (" + sg(x.h) + ", lleva " + x.d + "/" + E.diasPayout + "). Si sigue abierta, el stop en " + sg(E.minimo) + " y deja correr."); }
     else if ((rol === "minimos" || rol === "recuperacion") && r && x.h <= -0.9 * r) { txt = "🛑 Stop en el día mínimo (" + sg(x.h) + "): para por hoy.";
       av(cod + ":min-ko", "🛑 " + cod + " ha hecho stop en su día mínimo (" + sg(x.h) + "): para por hoy."); }
-    if (!listo(x) && x.d >= E.diasPayout) av(cod + ":payout", "💰 " + cod + " ya tiene " + x.d + " días mínimos: puedes pedir el payout.");
-    if (x.m0 < 2 * E.fuerteSL && x.ahora >= 2 * E.fuerteSL) av(cod + ":recuperada", "💪 " + cod + " se ha recuperado: vuelve a tener margen para 2 stops y entra otra vez en la cola del día fuerte.");
-    const ko = r && x.h <= -0.9 * r && rol !== "espera" && rol !== "payout";
+    if (x.grande && !listo(x) && x.d >= E.diasPayout) av(cod + ":payout", "💰 " + cod + " ya tiene el día grande y " + x.d + " días mínimos: puedes pedir el payout.");
+    const ko = r && x.h <= -0.9 * r && rol !== "payout";
     if (!ko && x.ahora > 0 && x.ahora <= Math.max(E.fuerteSL, E.minimoSL) && x.m0 > Math.max(E.fuerteSL, E.minimoSL))
-      av(cod + ":margen", "⚠️ A " + cod + " solo le quedan " + m(x.ahora) + " de margen: le cabe un stop más. Mañana opera en modo recuperación.");
-    out.fondeadas.push({ cuenta: cod, rol, txt, hoy: x.h, pnl: Number(x.c.pnl) || 0, margen: x.ahora, dias: x.d });
+      av(cod + ":margen", "⚠️ A " + cod + " solo le quedan " + m(x.ahora) + " de margen: le cabe un stop más. Mañana opera en recuperación.");
+    out.fondeadas.push({ cuenta: cod, rol, grupo: sub || (rol === "payout" ? "Payout" : ""), txt: pre + txt, hoy: x.h, pnl: Number(x.c.pnl) || 0, margen: x.ahora, dias: x.d });
   }
-  const juntas = out.fondeadas.filter((f) => f.rol === "minimos" || f.rol === "recuperacion").map((f) => f.cuenta);
-  const partes = [juntas.length ? juntas.join(", ") + " en días mínimos" : "", fuerte ? fuerte.c.codigo + " en día fuerte" : ""].filter(Boolean);
-  out.resumen = !info.length ? "" : !partes.length ? "Fondeadas hoy: ninguna cuenta opera (mira las que esperan payout)." :
-    "Fondeadas hoy: " + partes.join(" + ") + (partes.length > 1 ? ", operadas juntas." : ".") + (fuerte ? "" : " Todas han hecho ya su día fuerte.");
+  const de = (g) => out.fondeadas.filter((f) => f.grupo === g).map((f) => f.cuenta);
+  const lado = (L, que) => (de(L + "1").length ? L + "1 (" + de(L + "1").join(", ") + ")" + (de(L + "2").length ? " y " + L + "2 (" + de(L + "2").join(", ") + ")" : "") + " " + que : "");
+  const partes = [lado("A", "a por el día grande"), lado("B", "en días mínimos"), de("Payout").length ? "listas para el payout: " + de("Payout").join(", ") : ""].filter(Boolean);
+  out.resumen = !info.length ? "" : !partes.length ? "Fondeadas hoy: ninguna cuenta opera." :
+    "Fondeadas hoy: " + partes.join(" · ") + "." + (de("A2").length || de("B2").length ? " Cada mitad lleva su propio trade, nunca el mismo en todas." : "");
   // the pause: stops today across all accounts, and the week so far (Monday to today) across all accounts
   const vivas = cuentas.filter(viva), dia = (c, d) => Number((c.dias || {})[d]) || 0;
   const stopsHoy = vivas.filter((c) => dia(c, hoy) <= -0.9 * (c.tipo === "Fondeada" ? E.fuerteSL : stopDe(c))).length;

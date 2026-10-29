@@ -141,22 +141,24 @@ async function checkTopstepReadOnly() {
   const v3 = ts.vigilancia(pc, { 1: { dias: { [d]: -1100 } }, 2: { dias: {} } }, at, v2);
   if (v1.nuevos.length !== 1 || !v1.nuevos[0].includes("85 %") || v2.nuevos.length !== 1 || !v2.nuevos[0].includes("ha pasado") || v3.nuevos.length)
     return [false, "daily limit watch: " + JSON.stringify([v1.nuevos, v2.nuevos, v3.nuevos])];
-  // Joel's rules engine: bullet 2 closes at exactly +500, the day caps at +1.500, the strong-day ladder hands on, a failed strong day
-  // goes to recovery, and the hourly watch says each warning once a day; old saved settings get the new funded numbers
+  // Joel's rules engine: bullet 2 closes at exactly +500, the day caps at +1.500, and the hourly watch says each warning once a day;
+  // funded accounts: group A goes for the big day, group B (big day done) does the minimum days, each split in two halves;
+  // old saved settings get the new numbers
   const E0 = ts.estrategiaDe({ fuerteTP: 2500, minimoSL: 300, modo: "grupo" }), E = ts.estrategiaDe({ v: 3, exModo: "balas" }), H = "2026-10-27";
-  if (E0.fuerteTP !== 1000 || E0.minimoSL !== 1000 || E0.recupR !== 500 || E0.modo !== "grupo" || E0.exModo !== "londres" || E.exModo !== "balas" || E0.lonT !== 1000 || ts.estrategiaDe({ v: 3, lonT: 500, lonMax: 1000 }).lonT !== 1000) return [false, "strategy defaults: " + JSON.stringify(E0)];
+  if (E0.fuerteTP !== 1500 || E0.diasPayout !== 4 || ts.estrategiaDe({ v: 4, fuerteTP: 1000, diasPayout: 5 }).fuerteTP !== 1500 || E0.minimoSL !== 1000 || E0.recupR !== 500 || E0.modo !== "grupo" || E0.exModo !== "londres" || E.exModo !== "balas" || E0.lonT !== 1000 || ts.estrategiaDe({ v: 3, lonT: 500, lonMax: 1000 }).lonT !== 1000) return [false, "strategy defaults: " + JSON.stringify(E0)];
   const Fd = (codigo, orden, dias) => ({ codigo, tipo: "Fondeada", estado: "ACTIVA", sl: -2000, orden, dias, pnl: Object.values(dias).reduce((a, b) => a + b, 0) });
   const Ex = (codigo, t) => ({ codigo, tipo: "Challenge", estado: "EXAM", tp: 3000, sl: -2000, dias: { [H]: t.reduce((a, b) => a + b, 0) }, tradesHoy: t, pnl: t.reduce((a, b) => a + b, 0) });
-  const mr = ts.motorReglas({ estrategia: E, hoy: H, cuentas: [Ex("E1", [1000]), Ex("E2", [1000, 500]), Ex("E3", [-1000]), Fd("A", 1, { "2026-10-26": 1000, [H]: 200 }), Fd("B", 2, { [H]: -1000 }), Fd("C", 3, {})] });
+  const mr = ts.motorReglas({ estrategia: E, hoy: H, cuentas: [Ex("E1", [1000]), Ex("E2", [1000, 500]), Ex("E3", [-1000]), Fd("A", 1, { "2026-10-20": 1600, "2026-10-21": 200, [H]: 200 }),
+    Fd("B", 2, { [H]: -1000 }), Fd("C", 3, {}), Fd("D", 4, { "2026-10-19": 1500, "2026-10-20": 200, "2026-10-21": 200, "2026-10-22": 200, "2026-10-23": 200 }), Fd("F", 5, { [H]: 1600 })] });
   const k = mr.avisos.map((a) => a.key.split(":").slice(1).join(":")).join(" ");
-  const rol = Object.fromEntries(mr.fondeadas.map((x) => [x.cuenta, x.rol]));
-  if (k !== "E1:bala2 E2:tope E3:stop A:min-ok B:fuerte-ko pausa-dia" || !mr.avisos[0].txt.includes("justos, sin trailing") || !mr.avisos[1].txt.includes("+1.500 $")
-      || rol.A !== "minimos" || rol.B !== "fuerte" || rol.C !== "espera" || !mr.avisos[4].txt.includes("modo recuperación") || !mr.avisos[4].txt.includes("lo hace C"))
-    return [false, "rules engine: " + k + " " + JSON.stringify(rol)];
-  const next = ts.motorReglas({ estrategia: E, hoy: "2026-10-28", cuentas: [Fd("A", 1, { "2026-10-26": 1000, "2026-10-27": 200 }), Fd("B", 2, { "2026-10-27": -1000 }), Fd("C", 3, {})] });
-  const fb = next.fondeadas.find((x) => x.cuenta === "B");
-  if (fb.rol !== "recuperacion" || !fb.txt.includes("arriesga 500 $") || next.fondeadas.find((x) => x.cuenta === "C").rol !== "fuerte" || !next.resumen.includes("A, B en días mínimos + C en día fuerte"))
-    return [false, "strong-day ladder next day: " + JSON.stringify(next.fondeadas)];
+  const gr = mr.fondeadas.map((x) => x.cuenta + "=" + x.grupo).join(" ");
+  if (k !== "E1:bala2 E2:tope E3:stop A:min-ok B:fuerte-ko F:fuerte-ok pausa-dia" || !mr.avisos[0].txt.includes("justos, sin trailing") || !mr.avisos[1].txt.includes("+1.500 $")
+      || gr !== "A=B1 B=A1 C=A2 D=Payout F=A1" || !mr.fondeadas[2].txt.startsWith("Grupo A2 · 💪 Día grande: arriesga 1.000 $ para ganar 1.500 $") || !mr.avisos[5].txt.includes("Mañana pasa al grupo B"))
+    return [false, "rules engine: " + k + " | " + gr];
+  const next = ts.motorReglas({ estrategia: E, hoy: "2026-10-28", cuentas: [Fd("F", 5, { "2026-10-27": 1600 }), Fd("C", 3, {}), Fd("G", 6, { "2026-10-27": 1500 }), Fd("R", 7, { "2026-10-27": -1200 })] });
+  const gn = next.fondeadas.map((x) => x.cuenta + "=" + x.grupo + ":" + x.rol).join(" ");
+  if (gn !== "C=A1:fuerte F=B1:minimos G=B2:minimos R=A2:recuperacion" || !next.resumen.includes("B1 (F) y B2 (G) en días mínimos") || !next.fondeadas[3].txt.includes("arriesga 500 $"))
+    return [false, "funded groups next day: " + gn + " | " + next.resumen];
   // London + New York: London's profit is all New York may risk; a London stop closes the account's day; 2 stops end the day
   const LO = "2026-10-27T08:00:00Z", NYt = "2026-10-27T15:00:00Z", XL = (codigo, t) => ({ ...Ex(codigo, t.map((x) => x.pnl)), tradesHoy: t });
   const ml = ts.motorReglas({ estrategia: E0, hoy: H, ahora: NYt, cuentas: [XL("L1", [{ pnl: 500, at: LO }]), XL("L2", [{ pnl: -1000, at: LO }]), XL("L3", [{ pnl: 600, at: LO }, { pnl: -600, at: NYt }]), XL("L4", [])] });
