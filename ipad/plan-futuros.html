@@ -401,21 +401,21 @@ const checksElegidos = () => (est().checks === "antes" ? CHECKS_ANTES : CHECKS);
 const eleccion = (k, a, b) => { const v = est()[k] === "antes"; return `<div class="seg" style="margin:8px 0 4px"><button type="button" data-ver="${k}:nuevas" aria-pressed="${!v}">${a}</button><button type="button" data-ver="${k}:antes" aria-pressed="${v}">${b}</button></div>`; };
 // Joel's own system, written from his strategy settings (Hoy operas → Ajustar la estrategia), so the rules and the daily plan say the same.
 function reglas() {
-  const E = est(), m = (n) => money(n).replace(",00", ""), tope = 3000 * E.consistencia / 100, grupo = E.modo === "grupo", lon = E.exModo === "londres";
-  const stop = lon ? E.lonR : E.b1r;
+  const E = est(), m = (n) => money(n).replace(",00", ""), tope = 3000 * E.consistencia / 100, grupo = E.modo === "grupo", usa = (mo) => modosEnUso().includes(mo), tit = (mo) => (quienes(mo) ? " (" + quienes(mo) + ")" : "");
+  const stop = usa("londres") ? E.lonR : E.b1r;
   return [
-    lon ? ["EXÁMENES · LONDRES + NUEVA YORK", [["Londres", "Arriesgas " + m(E.lonR) + " para ganar " + m(E.lonT), E.lonT === E.lonR ? "Ratio 1:1, como en tu backtesting" : "Ratio " + String(Math.round((E.lonT / E.lonR) * 100) / 100).replace(".", ",")],
+    ...(usa("londres") ? [["EXÁMENES · LONDRES + NUEVA YORK" + tit("londres"), [["Londres · entrada", "Entras (2–3 contratos) arriesgando " + m(E.lonIni) + " para ganar " + m(Math.round(E.lonIni * E.lonT / E.lonR)), E.lonT === E.lonR ? "Ratio 1:1, como en tu backtesting" : "Ratio " + String(Math.round((E.lonT / E.lonR) * 100) / 100).replace(".", ",")],
       ...(E.lonMax > E.lonT ? [["Al llegar a +" + m(E.lonT), "Si empuja con fuerza: stop a +" + m(E.lonT) + " y buscas +" + m(E.lonMax), "Desde ahí ya no puedes bajar de +" + m(E.lonT)]] : []),
-      ["Si va en contra", "Puedes promediar, pero el stop de TODA la posición es −" + m(E.lonR), "Promediar sube el tamaño: el límite de pérdida no se mueve nunca"],
+      ["Si retrocede", "Promedias: el riesgo total sube como máximo a " + m(E.lonR) + " y el objetivo pasa a " + m(E.lonT), "Con el mejor precio medio el objetivo llega antes. Nunca más de −" + m(E.lonR) + " en toda la posición"],
       ["Si va a favor", "Puedes añadir contratos", "Con el stop de toda la posición protegido; el objetivo del día sigue siendo el tope"],
       ["Stop en Londres", "Esa cuenta no opera Nueva York hoy", "No hay ganancias con las que jugar. Mañana toca la siguiente cuenta"],
       ["Nueva York", "Solo juegas con lo ganado en Londres", "Si Londres dio +" + m(E.lonT) + ", en Nueva York arriesgas como máximo " + m(E.lonT) + ". Si Nueva York se lo come, el día queda en 0"],
       ["Tope del día", "+" + m(tope) + " entre Londres y Nueva York", "Consistencia " + E.consistencia + " %: al llegar Jarvis te avisa para cerrar"],
-      ["Resumen de Londres", "A las 11:57 te llega al móvil y a Jarvis", "Qué has operado, cómo queda cada cuenta y qué te toca en Nueva York"]]]
-    : ["EXÁMENES · PLAN DE 2 BALAS", [["Bala 1", "Arriesgas " + m(E.b1r) + " para ganar " + m(E.b1t), "La primera operación del día en la cuenta en foco"],
+      ["Resumen de Londres", "A las 11:57 te llega al móvil y a Jarvis", "Qué has operado, cómo queda cada cuenta y qué te toca en Nueva York"]]]] : []),
+    ...(usa("balas") ? [["EXÁMENES · PLAN DE 2 BALAS" + tit("balas"), [["Bala 1", "Arriesgas " + m(E.b1r) + " para ganar " + m(E.b1t), "La primera operación del día en la cuenta en foco"],
       ["Si la Bala 1 gana", "Bala 2 en " + (grupo ? "el MISMO grupo" : "la MISMA cuenta") + ": " + m(E.b2r) + " para ganar " + m(E.b2t), "Cierras en +" + m(E.b2t) + " justos, sin trailing: así el día queda en +" + m(E.b1t + E.b2t) + " y no pasas el tope"],
       ["Si la Bala 1 pierde", "Esa cuenta para por hoy", "La siguiente bala va " + (grupo ? "al siguiente grupo" : "a la siguiente cuenta") + ", como su Bala 1"],
-      ["Tope del día", "+" + m(tope), "Consistencia " + E.consistencia + " %: al llegar Jarvis te avisa para cerrar"]]],
+      ["Tope del día", "+" + m(tope), "Consistencia " + E.consistencia + " %: al llegar Jarvis te avisa para cerrar"]]]] : []),
     ["ROTACIÓN DE CUENTAS", [["Objetivo del día", "+" + m(tope) + " y cierras", "No hay objetivo del 3 %: cada día termina en el tope, en el stop o cuando cierras tú"],
       ["Stop del día", "−" + m(stop) + " por cuenta", "Es la mitad del margen (" + m(2000) + "): dos días de stop seguidos en la misma cuenta la queman"],
       ["Día ganador o en 0", "Mañana sigue " + (grupo ? "el mismo grupo" : "la misma cuenta"), "No se cambia lo que funciona"],
@@ -697,10 +697,14 @@ async function autoRegistro() {
 // ESTRATEGIA_DEF, estrategiaDe() and motorReglas() come from topstep-sync.mjs (the hourly watch), copied in by build-space.mjs.
 /*@motor-reglas@*/
 const est = () => estrategiaDe(S.estrategia);
+// each group can play its own exam plan: Londres + Nueva York or 2 balas
+const modoG = (g) => (est().modos || {})[g] || est().exModo;
+const modosEnUso = () => { const s = [...new Set(rotan().map((g) => modoG(g.id)))]; return s.length ? s : [est().exModo]; };
+const quienes = (mo) => (modosEnUso().length > 1 ? rotan().filter((g) => modoG(g.id) === mo).map((g) => g.nombre).join(", ") : "");
 // The engine on today's accounts: the same warnings the hourly watch sends to his phone, live while the app is open.
 function motor() {
   const dia = tradingDay(Date.now()), dm = dayMap();
-  return motorReglas({ estrategia: est(), hoy: dia, cuentas: cuentas().map((c) => ({ codigo: c.codigo, tipo: c.tipo, estado: c.estado, tp: c.tp, sl: c.sl, orden: c.orden,
+  return motorReglas({ estrategia: est(), hoy: dia, cuentas: cuentas().map((c) => ({ codigo: c.codigo, tipo: c.tipo, estado: c.estado, tp: c.tp, sl: c.sl, orden: c.orden, grupo: c.grupo,
     pnl: pnl(c), dias: dm[c.id] || {}, tradesHoy: tradesDia(c, dia) })), ahora: new Date().toISOString() });
 }
 const tradesDia = (c, d) => [...(ts(c)?.trades || []).filter((x) => x.fecha === d).map((x) => ({ pnl: Number(x.pnl) || 0, at: x.cierra || "" })),
@@ -711,7 +715,7 @@ function unidades() {
   return ex.map((c) => ({ id: c.id, nombre: c.codigo, cuentas: [c] }));
 }
 function balas(c, d) {
-  if (est().exModo === "londres") {
+  if (modoG(c.grupo) === "londres") {
     const x = motor().examenes.find((y) => y.cuenta === c.codigo), tot = tradesDia(c, d).reduce((a, y) => a + y.pnl, 0), n = tradesDia(c, d).length;
     return { estado: !n ? "londres" : tot < 0 ? "stop" : "fin", tot, txt: x ? x.txt : "" };
   }
@@ -733,7 +737,7 @@ function hoyOperas() {
   const estadoU = (u) => balas(u.cuentas[0], dia), usadas = us.reduce((a, u) => a + tradesDia(u.cuentas[0], dia).length, 0);
   // a stop moves the next bullet (and tomorrow's focus) to the next unit that hasn't traded today
   let foco = us[i], e = estadoU(foco);
-  const lon = E.exModo === "londres", dueno = foco;
+  const lon = modoG(foco.cuentas[0].grupo) === "londres", dueno = foco;
   if (e.estado === "stop" || (e.estado === "fin" && e.tot < 0)) { for (let k = 1; k < us.length; k++) { const u = us[(i + k) % us.length]; if (!tradesDia(u.cuentas[0], dia).length) { foco = u; e = estadoU(u); break; } } }
   const lineas = [];
   if (lon && foco !== dueno) lineas.push("🛑 " + dueno.nombre + " ha cerrado el día en " + signed(estadoU(dueno).tot) + ": hoy no operes más. Mañana: " + foco.nombre + ".");
@@ -754,16 +758,17 @@ async function avanzarFoco() {
 }
 function hoyHtml() {
   const E = est(), h = hoyOperas();
-  return `<div class="card" style="margin-bottom:18px;border:2px solid #22c55e"><div class="cardhead"><div><h3>🎯 Hoy operas</h3><p class="hint">${E.exModo === "londres" ? `Londres: ${money(E.lonR)} para ${money(E.lonT)}${E.lonMax > E.lonT ? `; a +${money(E.lonT)}, si empuja, stop a +${money(E.lonT)} y buscas +${money(E.lonMax)}` : " (1:1); promedias en contra y añades a favor, sin mover el stop total"}. Nueva York solo con lo ganado en Londres, hasta el tope del día. Un stop en Londres cierra el día de esa cuenta.` : `Tu plan de 2 balas: Bala 1 ${money(E.b1r)} para ${money(E.b1t)}; si gana, Bala 2 en la misma cuenta ${money(E.b2r)} para ${money(E.b2t)}, cerrando en +${money(E.b2t)} justos (sin trailing). Si la Bala 1 pierde, esa cuenta para y la siguiente bala va ${E.modo === "grupo" ? "al siguiente grupo" : "a la siguiente cuenta"}.`}</p>
-      <div class="seg" style="margin-top:6px"><button type="button" data-ver="exModo:londres" aria-pressed="${E.exModo === "londres"}">Londres + Nueva York</button><button type="button" data-ver="exModo:balas" aria-pressed="${E.exModo !== "londres"}">2 balas</button></div></div>
+  return `<div class="card" style="margin-bottom:18px;border:2px solid #22c55e"><div class="cardhead"><div><h3>🎯 Hoy operas</h3><p class="hint">${modosEnUso().map((mo) => (quienes(mo) ? quienes(mo) + " → " : "") + (mo === "londres" ? `Londres: entras arriesgando ${money(E.lonIni)} para ${money(Math.round(E.lonIni * E.lonT / E.lonR))}; si retrocede promedias y el riesgo total sube como máximo a ${money(E.lonR)} para ${money(E.lonT)}${E.lonMax > E.lonT ? `; a +${money(E.lonT)}, si empuja, stop a +${money(E.lonT)} y buscas +${money(E.lonMax)}` : " (1:1)"}; a favor añades contratos. Nueva York solo con lo ganado en Londres, hasta el tope del día. Un stop en Londres cierra el día de esa cuenta.` : `Tu plan de 2 balas: Bala 1 ${money(E.b1r)} para ${money(E.b1t)}; si gana, Bala 2 en la misma cuenta ${money(E.b2r)} para ${money(E.b2t)}, cerrando en +${money(E.b2t)} justos (sin trailing). Si la Bala 1 pierde, esa cuenta para y la siguiente bala va ${E.modo === "grupo" ? "al siguiente grupo" : "a la siguiente cuenta"}.`)).join(" ")}</p>
+      ${rotan().length > 1 ? rotan().map((g) => `<div class="seg" style="margin-top:6px"><span class="hint" style="align-self:center;margin:0 8px 0 0">${esc(g.nombre)}</span><button type="button" data-gmodo="${g.id}:londres" aria-pressed="${modoG(g.id) === "londres"}">Londres + Nueva York</button><button type="button" data-gmodo="${g.id}:balas" aria-pressed="${modoG(g.id) !== "londres"}">2 balas</button></div>`).join("")
+        : `<div class="seg" style="margin-top:6px"><button type="button" data-ver="exModo:londres" aria-pressed="${E.exModo === "londres"}">Londres + Nueva York</button><button type="button" data-ver="exModo:balas" aria-pressed="${E.exModo !== "londres"}">2 balas</button></div>`}</div>
     <div class="seg"><button type="button" data-modo="individual" aria-pressed="${E.modo === "individual"}">Cuenta a cuenta</button><button type="button" data-modo="grupo" aria-pressed="${E.modo === "grupo"}">Por grupos (copiadas)</button></div></div>
     ${h.lineas.map((l) => `<div class="banner ok" style="margin-bottom:8px">${esc(l)}</div>`).join("")}
     <button type="button" class="btn" data-bt="ir-consulta" style="margin:0 0 12px">🔎 ¿Puedo entrar? Foto del gráfico al profesor</button>
     ${h.unidades.length ? `<div class="tablewrap"><table><thead><tr><th>${E.modo === "grupo" ? "GRUPO" : "CUENTA"}</th><th>HOY</th></tr></thead><tbody>${h.unidades.map(({ u, e }) => `<tr><td><b>${esc(u.nombre)}</b>${u.id === h.foco.id ? ' <span class="live">EN FOCO</span>' : ""}<br><small class="dim">${esc(u.cuentas.map((c) => c.codigo + " " + signed(pnl(c))).join(" · "))}</small></td><td style="white-space:normal">${esc(e.txt)}</td></tr>`).join("")}</tbody></table></div>` : ""}
     ${h.fondeadas.length ? `<div class="sec" style="margin-top:16px">FONDEADAS · DÍA FUERTE + DÍAS MÍNIMOS</div><p class="hint">${esc(motor().resumen)}</p>${h.fondeadas.map((f) => `<div class="rule"><b>${esc(f.cuenta)}</b><span class="v" style="grid-column:span 2">${esc(f.txt)}</span></div>`).join("")}` : ""}
     <details style="margin-top:12px"><summary class="hint" style="cursor:pointer">Ajustar la estrategia</summary><div class="filters" style="margin-top:10px">
-      ${[...(E.exModo === "londres" ? [["lonR", "Londres · riesgo"], ["lonT", "Londres · objetivo"], ["lonMax", "Londres · buscar con trailing"]]
-        : [["b1r", "Bala 1 · riesgo"], ["b1t", "Bala 1 · objetivo"], ["b2r", "Bala 2 · riesgo"], ["b2t", "Bala 2 · objetivo"], ["opsDia", "Operaciones al día"]]), ["fuerteSL", "Día fuerte · riesgo"], ["fuerteTP", "Día fuerte · objetivo"], ["minimoSL", "Día mínimo · riesgo"], ["minimo", "Día mínimo · ganar"], ["recupR", "Recuperación · riesgo"], ["diasPayout", "Días mínimos para payout"], ["pausaStops", "Pausa · stops en un día"], ["pausaSemana", "Pausa · pérdida en la semana"], ["pausaRojos", "Pausa · días en rojo"]]
+      ${[...(modosEnUso().includes("londres") ? [["lonIni", "Londres · riesgo de entrada"], ["lonR", "Londres · riesgo máximo promediando"], ["lonT", "Londres · objetivo promediando"], ["lonMax", "Londres · buscar con trailing"]] : []),
+        ...(modosEnUso().includes("balas") ? [["b1r", "Bala 1 · riesgo"], ["b1t", "Bala 1 · objetivo"], ["b2r", "Bala 2 · riesgo"], ["b2t", "Bala 2 · objetivo"], ["opsDia", "Operaciones al día"]] : []), ["fuerteSL", "Día fuerte · riesgo"], ["fuerteTP", "Día fuerte · objetivo"], ["minimoSL", "Día mínimo · riesgo"], ["minimo", "Día mínimo · ganar"], ["recupR", "Recuperación · riesgo"], ["diasPayout", "Días mínimos para payout"], ["pausaStops", "Pausa · stops en un día"], ["pausaSemana", "Pausa · pérdida en la semana"], ["pausaRojos", "Pausa · días en rojo"]]
         .map(([k, l]) => `<label style="display:grid;gap:4px;font-size:12px;color:var(--muted)">${l}<input type="number" data-est="${k}" value="${E[k]}" style="width:120px"></label>`).join("")}</div></details></div>`;
 }
 
@@ -807,6 +812,7 @@ root.addEventListener("click", async (e) => {
     toast("Revisión guardada."); return;
   }
   if (d.modo) { await guardarEst({ modo: d.modo }); return; }
+  if (d.gmodo) { const [g, v] = d.gmodo.split(":"); await guardarEst({ modos: { ...(est().modos || {}), [g]: v } }); return; }
   if (d.ver) { const [k, v] = d.ver.split(":"); await guardarEst({ [k]: v }); return; }
   if (d.act === "repartir") {
     if (!S.db) return toast("Abre el Plan dentro de Claude para guardar.");

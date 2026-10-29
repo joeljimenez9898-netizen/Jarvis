@@ -27,7 +27,7 @@ const BT_ERRORES = ["Entré antes de que cerrara la vela", "La vela no tenía el
   "Moví el stop", "Salí antes de tiempo", "Promedié de más", "Sobreoperé"];
 // how he trades all of them; the teacher judges every chart against this and the model's checklist
 const BT_REGLAS = "Opera siempre después de la línea roja de las 2:00 de Nueva York (las 8:00 en España). Entra a favor de la dirección cuando una vela con volumen, de más del 75 % de cuerpo, rompe. " +
-  "Su ratio es 1:1. Si el precio va en contra, promedia; si va a favor, añade contratos. El stop de toda la posición no se mueve nunca. Zonas que marca: AS.H/AS.L = máximo y mínimo de Asia, " +
+  "Su ratio es 1:1. Entra con 2 o 3 contratos arriesgando unos 500 $. Si retrocede, promedia en el retroceso: el riesgo total sube como máximo a 1.000 $ y el objetivo pasa a 1.000 $, que llega antes por el mejor precio medio. Si va a favor, añade contratos. Nunca más del riesgo máximo en toda la posición. Zonas que marca: AS.H/AS.L = máximo y mínimo de Asia, " +
   "LO.H/LO.L = máximo y mínimo de Londres, PDH/PDL = máximo y mínimo del día anterior, PWL = mínimo de la semana anterior. Sus modelos y su checklist: " +
   BT_SETUPS.map((s) => s.n + " (" + s.rango.join("–") + " hora NY): " + s.reglas.join("; ") + ".").join(" ");
 // outside the model's window: the form says so and the teacher counts it as a mistake
