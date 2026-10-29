@@ -174,6 +174,13 @@ async function checkTopstepReadOnly() {
     cuentas: [{ ...XL("M1", []), grupo: "g1" }, { ...XL("M2", []), grupo: "g2" }] }).examenes;
   if (!mg[0].txt.startsWith("Londres: entra") || !mg[1].txt.startsWith("Bala 1: arriesga 1.000 $ para ganar 1.000 $"))
     return [false, "one plan per group: " + JSON.stringify(mg.map((x) => x.txt))];
+  // exams near passing (+2.000 on a 50K) go to group B, apart and conservative, the day after they cross
+  const XB = (codigo, dias, tr) => ({ codigo, grupo: "g1", tipo: "Challenge", estado: "EXAM", tp: 3000, sl: -2000, dias, tradesHoy: tr || [], pnl: Object.values(dias).reduce((a, b) => a + b, 0) });
+  const cb = ts.motorReglas({ estrategia: E0, hoy: "2026-10-29", ahora: "2026-10-29T07:30:00Z", cuentas: [XB("C1", { "2026-10-27": 1000, "2026-10-28": 1150 }),
+    XB("C2", { "2026-10-28": 500 }), XB("C3", { "2026-10-27": 1000, "2026-10-29": 1100 }, [{ pnl: 1100, at: "2026-10-29T07:00:00Z" }])] });
+  if (cb.examenes.map((x) => x.fase).join("") !== "BAA" || !cb.examenes[0].txt.includes("arriesga 500 $ para ganar 850 $") || !cb.avisos.some((a) => a.key.endsWith(":C3:cerca"))
+      || !cb.resumenEx.includes("grupo B, cerca de pasar, aparte y en conservador: C1"))
+    return [false, "exams near passing: " + JSON.stringify(cb.examenes.map((x) => x.fase + " " + x.txt))];
   const sem = ts.motorReglas({ estrategia: E0, hoy: H, cuentas: [{ ...Ex("W1", [-500]), dias: { "2026-10-26": -1600, [H]: -500 }, pnl: -2100 }, Ex("W2", [-1000])] });
   if (!sem.pausa.semanal || !sem.avisos.some((a) => a.key.endsWith(":pausa-semana")) || !sem.avisos.some((a) => a.key.endsWith(":W1:quemada")))
     return [false, "weekly pause / burned account: " + JSON.stringify(sem.pausa)];

@@ -209,12 +209,15 @@ export function vigilancia(planCuentas, cuentasTs, at, prev) {
 // With lonMax above lonT, past +lonT the stop goes to +lonT to reach for lonMax. Nothing ever takes the position past −lonR. New York only plays with London's profit, up to the day's
 // consistency cap; a London stop means no New York on that account. Exams, 2 bullets (exModo "balas"): bullet 1 risks b1r for
 // b1t; if it wins, bullet 2 in the same account closes at exactly b2t (no trailing). The day never passes the consistency cap.
+// Exams that start the day at +examCerca or more (on a 3.000 target; scaled to the account's) are group B, near passing: kept
+// apart from group A, one trade a day risking cercaR for what is left. They enter group B the day after they cross.
 // Pause: pausaStops stops in one day end the day; a week at −pausaSemana or pausaRojos red days means a day off.
 // Funded: group A goes for the big day (+fuerteTP), group B (big day done) does diasPayout minimum days (risk minimoSL for
 // minimo, then the stop goes to +minimo) and asks for the payout; each group splits in two halves that never take the same
 // trade. An account with margin for less than two stops trades in recovery (recupR risk) until it has it again.
 export const ESTRATEGIA_DEF = { v: 5, modo: "individual", exModo: "londres", lonIni: 500, lonR: 1000, lonT: 1000, lonMax: 1000, opsDia: 2, b1r: 1000, b1t: 1000, b2r: 1000, b2t: 500,
-  consistencia: 50, fuerteTP: 1500, fuerteSL: 1000, minimo: 150, minimoSL: 1000, recupR: 500, diasPayout: 4, pausaStops: 2, pausaSemana: 2000, pausaRojos: 3 };
+  consistencia: 50, fuerteTP: 1500, fuerteSL: 1000, minimo: 150, minimoSL: 1000, recupR: 500, diasPayout: 4, pausaStops: 2, pausaSemana: 2000, pausaRojos: 3,
+  examCerca: 2000, cercaR: 500 };
 // Older saved settings: before v2 the funded numbers were the old ones; before v3 there was no London + New York plan;
 // before v4 London was 1.000 for 500 with trailing, now it is 1:1; before v5 the big day was +1.000 and the payout took 5 days.
 export function estrategiaDe(guardada) {
@@ -257,6 +260,7 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
     if (ops.length && ops.every((x) => x.ny)) ops = ops.map((x) => ({ ...x, ny: false }));     // no London today: the first session he trades plays London's part
     const tr = ops.map((x) => x.pnl), tot = tr.reduce((a, x) => a + x, 0), obj = Number(c.tp) || 3000, tope = obj * E.consistencia / 100, g = margen(c);
     const L = ops.filter((x) => !x.ny).reduce((a, x) => a + x.pnl, 0), hayNY = ops.some((x) => x.ny);
+    const umbral = E.examCerca * obj / 3000, cerca = g.pnl0 >= umbral, falta = obj - (Number(c.pnl) || 0);
     let txt;
     if ((Number(c.pnl) || 0) >= obj) { txt = "🏁 Examen pasado (" + sg(c.pnl) + "). No operes más en ella: revisa la consistencia y pide la fondeada.";
       av(c.codigo + ":objetivo", "🏁 " + c.codigo + " ha llegado al objetivo del examen (" + sg(c.pnl) + "). No operes más en ella: revisa la consistencia y pide la fondeada. Su sitio en la rotación lo ocupa la suplente."); }
@@ -264,6 +268,14 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
       av(c.codigo + ":quemada", "🔥 " + c.codigo + " se ha quemado. Entra la suplente en su lugar y repón la reserva comprando otro examen con el fondo de exámenes."); }
     else if (tot >= tope) { txt = "🏁 Tope del día: " + sg(tot) + ". Cierra y no operes más esta cuenta hoy.";
       av(c.codigo + ":tope", "🏁 " + c.codigo + " lleva " + sg(tot) + " hoy: es el tope del día por la consistencia (" + m(tope) + "). Cierra y no operes más esta cuenta hoy."); }
+    else if (cerca) {
+      const r = Math.min(E.cercaR, g.m0), ga = Math.min(falta, tope - tot);
+      if (!tr.length) txt = "Grupo B · cerca de pasar (" + sg(g.pnl0) + ", faltan " + m(obj - g.pnl0) + "): conservador, aparte del grupo A. Un solo trade: arriesga " + m(r) +
+        " para ganar " + m(ga) + " y pasas el examen. Si promedias, el riesgo total nunca pasa de " + m(r) + ".";
+      else if (tot <= -0.9 * r) { txt = "🛑 Grupo B · stop (" + sg(tot) + "): para por hoy. Mañana, otro trade conservador.";
+        av(c.codigo + ":cerca-ko", "🛑 " + c.codigo + " (cerca de pasar) ha hecho stop (" + sg(tot) + "). Para por hoy; " + ((Number(c.pnl) || 0) >= umbral ? "sigue en el grupo B, mañana otro trade conservador de " + m(r) + "." : "baja de +" + m(umbral) + " y mañana vuelve al grupo A.")); }
+      else txt = "Grupo B · hoy " + sg(tot) + ", le faltan " + m(falta) + ". Un trade al día: para por hoy y mañana a por lo que falta.";
+    }
     else if (modoDe(c) === "londres") {
       const r = Math.min(E.lonR, g.m0), ini = Math.min(E.lonIni || r, r), tIni = Math.round(ini * E.lonT / E.lonR), t = Math.round(r * E.lonT / E.lonR);
       const lonTxt = "Londres: entra (2–3 contratos) arriesgando " + m(ini) + " para ganar " + m(tIni) + (E.lonT === E.lonR ? " (1:1)" : "") + ". " +
@@ -291,8 +303,13 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
     else txt = tr.length ? "Día cerrado (" + sg(tot) + ")." : "Bala 1: arriesga " + m(Math.min(E.b1r, g.m0)) + " para ganar " + m(Math.min(E.b1t, obj - g.pnl0, tope)) + ".";
     if (g.ahora > 0 && g.ahora <= stopDe(c) && !((Number(c.pnl) || 0) >= obj) && !(tr.length === 1 && tr[0] < 0) && !(modoDe(c) === "londres" && L <= -0.9 * Math.min(E.lonR, g.m0)))
       av(c.codigo + ":margen", "⚠️ A " + c.codigo + " solo le quedan " + m(g.ahora) + " de margen: le cabe un stop más. Su próxima bala es la última.");
-    out.examenes.push({ cuenta: c.codigo, txt, hoy: tot, londres: L, pnl: Number(c.pnl) || 0, margen: g.ahora, falta: Math.max(0, obj - (Number(c.pnl) || 0)) });
+    if (!cerca && (Number(c.pnl) || 0) >= umbral && falta > 0)
+      av(c.codigo + ":cerca", "🎯 " + c.codigo + " ya va " + sg(c.pnl) + ": pasa al grupo B, cerca de pasar. Desde mañana va aparte del resto (no la copies con ellas) y en conservador: " +
+        "un trade de " + m(Math.min(E.cercaR, g.ahora)) + " para ganar lo que le falte (" + m(falta) + ").");
+    out.examenes.push({ cuenta: c.codigo, fase: cerca ? "B" : "A", txt, hoy: tot, londres: L, pnl: Number(c.pnl) || 0, margen: g.ahora, falta: Math.max(0, obj - (Number(c.pnl) || 0)) });
   }
+  const exB = out.examenes.filter((x) => x.fase === "B").map((x) => x.cuenta), exA = out.examenes.filter((x) => x.fase === "A").map((x) => x.cuenta);
+  out.resumenEx = exB.length ? "Exámenes: grupo B, cerca de pasar, aparte y en conservador: " + exB.join(", ") + (exA.length ? " · grupo A, el plan normal: " + exA.join(", ") : "") + "." : "";
   // Funded accounts in two groups, each split in two so the same trade never goes into all of them:
   //   A (A1, A2): still need their big day (a day of +fuerteTP or more). B (B1, B2): big day done, doing diasPayout minimum
   //   days after it, then the payout. A big day today moves the account to B tomorrow. Halves alternate by account order.
@@ -362,7 +379,7 @@ export function reglasDelDia(planCuentas, cuentasTs, estrategia, at, prev) {
   });
   const r = motorReglas({ estrategia: estrategiaDe(estrategia), cuentas, hoy, ahora: at });
   const nuevos = r.avisos.filter((a) => !ya.has(a.key));
-  return { examenes: r.examenes, fondeadas: r.fondeadas, resumen: r.resumen, avisos: r.avisos.map((a) => a.txt), avisados: [...ya, ...nuevos.map((a) => a.key)], nuevos: nuevos.map((a) => a.txt) };
+  return { examenes: r.examenes, fondeadas: r.fondeadas, resumen: [r.resumenEx, r.resumen].filter(Boolean).join("\n"), avisos: r.avisos.map((a) => a.txt), avisados: [...ya, ...nuevos.map((a) => a.key)], nuevos: nuevos.map((a) => a.txt) };
 }
 
 /**
@@ -388,6 +405,7 @@ export function resumenSesion(planCuentas, cuentasTs, estrategia, sesion, at) {
       (ex ? ", le faltan " + usd(ex.falta) + " para pasar el examen" : ", " + fo.dias + "/" + E.diasPayout + " días mínimos") + " y tiene " + usd(info.margen) + " de margen. Siguiente paso: " + info.txt);
   }
   if (L.length === 1) L.push("No hay cuentas de Topstep vinculadas en tu Plan de Futuros.");
+  if (r.resumenEx) L.push(r.resumenEx);
   if (r.resumen) L.push(r.resumen);
   if (r.pausa.dia || r.pausa.semanal) L.push(r.avisos.filter((a) => /:pausa-/.test(a.key)).map((a) => a.txt).join(" "));
   return L.join("\n");

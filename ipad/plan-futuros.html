@@ -416,6 +416,9 @@ function reglas() {
       ["Si la Bala 1 gana", "Bala 2 en " + (grupo ? "el MISMO grupo" : "la MISMA cuenta") + ": " + m(E.b2r) + " para ganar " + m(E.b2t), "Cierras en +" + m(E.b2t) + " justos, sin trailing: así el día queda en +" + m(E.b1t + E.b2t) + " y no pasas el tope"],
       ["Si la Bala 1 pierde", "Esa cuenta para por hoy", "La siguiente bala va " + (grupo ? "al siguiente grupo" : "a la siguiente cuenta") + ", como su Bala 1"],
       ["Tope del día", "+" + m(tope), "Consistencia " + E.consistencia + " %: al llegar Jarvis te avisa para cerrar"]]]] : []),
+    ["EXÁMENES · GRUPO A Y GRUPO B (CERCA DE PASAR)", [["Grupo A", "Los exámenes por debajo de +" + m(E.examCerca), "Siguen su plan normal y rotan entre ellos"],
+      ["Grupo B", "Desde +" + m(E.examCerca) + " (52.000 en una de 50K)", "Jarvis la aparta sola al día siguiente de cruzar: no se copia ni rota con el grupo A"],
+      ["En el grupo B", "Un trade al día: arriesgas " + m(E.cercaR) + " para ganar lo que falte", "Si promedias, el riesgo total nunca pasa de " + m(E.cercaR) + ". Con el examen pasado, a por la fondeada"]]],
     ["ROTACIÓN DE CUENTAS", [["Objetivo del día", "+" + m(tope) + " y cierras", "No hay objetivo del 3 %: cada día termina en el tope, en el stop o cuando cierras tú"],
       ["Stop del día", "−" + m(stop) + " por cuenta", "Es la mitad del margen (" + m(2000) + "): dos días de stop seguidos en la misma cuenta la queman"],
       ["Día ganador o en 0", "Mañana sigue " + (grupo ? "el mismo grupo" : "la misma cuenta"), "No se cambia lo que funciona"],
@@ -711,7 +714,9 @@ function motor() {
 const tradesDia = (c, d) => [...(ts(c)?.trades || []).filter((x) => x.fecha === d).map((x) => ({ pnl: Number(x.pnl) || 0, at: x.cierra || "" })),
   ...list(S.ops).filter((o) => o.cuenta === c.id && o.fecha === d).map((o) => ({ pnl: Number(o.pnl) || 0, at: o.creado || "" }))].sort((a, b) => (a.at < b.at ? -1 : 1));
 function unidades() {
-  const E = est(), gs = rotan(), ex = cuentas().filter((c) => vivaC(c) && c.tipo !== "Fondeada" && gs.some((g) => g.id === c.grupo));
+  // exams near passing (group B) go apart: they never rotate or get copied with the rest
+  const E = est(), gs = rotan(), cerca = new Set(cercaB().map((x) => x.cuenta));
+  const ex = cuentas().filter((c) => vivaC(c) && c.tipo !== "Fondeada" && gs.some((g) => g.id === c.grupo) && !cerca.has(c.codigo));
   if (E.modo === "grupo") return gs.map((g) => ({ id: g.id, nombre: g.nombre, cuentas: ex.filter((c) => c.grupo === g.id) })).filter((u) => u.cuentas.length);
   return ex.map((c) => ({ id: c.id, nombre: c.codigo, cuentas: [c] }));
 }
@@ -733,6 +738,7 @@ function balas(c, d) {
 }
 function hoyOperas() {
   const E = est(), dia = tradingDay(Date.now()), us = unidades(), R = S.rotacion || {};
+  if (!us.length && cercaB().length) return { unidades: [], foco: null, lineas: ["🎯 Foco en el grupo B, cerca de pasar: " + cercaB().map((x) => x.cuenta).join(", ") + ". Van aparte, una a una y en conservador."], fondeadas: fondeadasHoy() };
   if (!us.length) return { unidades: [], foco: null, lineas: ["No hay exámenes vivos en los grupos que rotan. Cuando compres cuentas, Jarvis las registra y aquí te dirá cuál operar."], fondeadas: fondeadasHoy() };
   let i = Math.max(0, us.findIndex((u) => u.id === R.foco)); if (us.findIndex((u) => u.id === R.foco) < 0) i = 0;
   const estadoU = (u) => balas(u.cuentas[0], dia), usadas = us.reduce((a, u) => a + tradesDia(u.cuentas[0], dia).length, 0);
@@ -745,9 +751,11 @@ function hoyOperas() {
   else if (lon) lineas.push("Opera " + (E.modo === "grupo" ? foco.nombre + " (" + foco.cuentas.map((c) => c.codigo).join(", ") + ", copiadas desde la MASTER)" : foco.nombre) + ". " + e.txt);
   else if (usadas >= E.opsDia && e.estado !== "bala2") lineas.push("Por hoy has terminado tus " + E.opsDia + " operaciones. Mañana: " + foco.nombre + ".");
   else lineas.push("Opera " + (E.modo === "grupo" ? foco.nombre + " (" + foco.cuentas.map((c) => c.codigo).join(", ") + ", copiadas desde la MASTER)" : foco.nombre) + ". " + e.txt);
+  if (cercaB().length) lineas.unshift("🎯 Grupo B, cerca de pasar: " + cercaB().map((x) => x.cuenta).join(", ") + ". Ponles el foco aparte: no las copies con el grupo A, van una a una y en conservador.");
   return { dia, foco, e, unidades: us.map((u) => ({ u, e: estadoU(u) })), lineas, fondeadas: fondeadasHoy() };
 }
 const fondeadasHoy = () => motor().fondeadas;
+const cercaB = () => motor().examenes.filter((x) => x.fase === "B");
 // The focus moves on by itself: a new trading day after a losing day, or a stop today, writes the next unit.
 async function avanzarFoco() {
   if (!S.db || !S.ready || !S.rotacionLista || S.rotBusy) return;
@@ -765,11 +773,11 @@ function hoyHtml() {
     <div class="seg"><button type="button" data-modo="individual" aria-pressed="${E.modo === "individual"}">Cuenta a cuenta</button><button type="button" data-modo="grupo" aria-pressed="${E.modo === "grupo"}">Por grupos (copiadas)</button></div></div>
     ${h.lineas.map((l) => `<div class="banner ok" style="margin-bottom:8px">${esc(l)}</div>`).join("")}
     <button type="button" class="btn" data-bt="ir-consulta" style="margin:0 0 12px">🔎 ¿Puedo entrar? Foto del gráfico al profesor</button>
-    ${h.unidades.length ? `<div class="tablewrap"><table><thead><tr><th>${E.modo === "grupo" ? "GRUPO" : "CUENTA"}</th><th>HOY</th></tr></thead><tbody>${h.unidades.map(({ u, e }) => `<tr><td><b>${esc(u.nombre)}</b>${u.id === h.foco.id ? ' <span class="live">EN FOCO</span>' : ""}<br><small class="dim">${esc(u.cuentas.map((c) => c.codigo + " " + signed(pnl(c))).join(" · "))}</small></td><td style="white-space:normal">${esc(e.txt)}</td></tr>`).join("")}</tbody></table></div>` : ""}
+    ${h.unidades.length || cercaB().length ? `<div class="tablewrap"><table><thead><tr><th>${E.modo === "grupo" ? "GRUPO" : "CUENTA"}</th><th>HOY</th></tr></thead><tbody>${cercaB().map((x) => `<tr><td><b>${esc(x.cuenta)}</b> <span class="live">GRUPO B</span><br><small class="dim">${esc(x.cuenta + " " + signed(x.pnl))}</small></td><td style="white-space:normal">${esc(x.txt)}</td></tr>`).join("")}${h.unidades.map(({ u, e }) => `<tr><td><b>${esc(u.nombre)}</b>${h.foco && u.id === h.foco.id ? ' <span class="live">EN FOCO</span>' : ""}<br><small class="dim">${esc(u.cuentas.map((c) => c.codigo + " " + signed(pnl(c))).join(" · "))}</small></td><td style="white-space:normal">${esc(e.txt)}</td></tr>`).join("")}</tbody></table></div>` : ""}
     ${h.fondeadas.length ? `<div class="sec" style="margin-top:16px">FONDEADAS · GRUPO A (DÍA GRANDE) + GRUPO B (DÍAS MÍNIMOS)</div><p class="hint">${esc(motor().resumen)}</p>${[...h.fondeadas].sort((a, b) => (a.grupo || "Z").localeCompare(b.grupo || "Z")).map((f) => `<div class="rule"><b>${esc(f.cuenta)}${f.grupo ? ` <span class="live">${esc(f.grupo)}</span>` : ""}</b><span class="v" style="grid-column:span 2">${esc(f.txt)}</span></div>`).join("")}` : ""}
     <details style="margin-top:12px"><summary class="hint" style="cursor:pointer">Ajustar la estrategia</summary><div class="filters" style="margin-top:10px">
       ${[...(modosEnUso().includes("londres") ? [["lonIni", "Londres · riesgo de entrada"], ["lonR", "Londres · riesgo máximo promediando"], ["lonT", "Londres · objetivo promediando"], ["lonMax", "Londres · buscar con trailing"]] : []),
-        ...(modosEnUso().includes("balas") ? [["b1r", "Bala 1 · riesgo"], ["b1t", "Bala 1 · objetivo"], ["b2r", "Bala 2 · riesgo"], ["b2t", "Bala 2 · objetivo"], ["opsDia", "Operaciones al día"]] : []), ["fuerteSL", "Día grande · riesgo"], ["fuerteTP", "Día grande · objetivo"], ["minimoSL", "Día mínimo · riesgo"], ["minimo", "Día mínimo · ganar"], ["recupR", "Recuperación · riesgo"], ["diasPayout", "Días mínimos tras el día grande"], ["pausaStops", "Pausa · stops en un día"], ["pausaSemana", "Pausa · pérdida en la semana"], ["pausaRojos", "Pausa · días en rojo"]]
+        ...(modosEnUso().includes("balas") ? [["b1r", "Bala 1 · riesgo"], ["b1t", "Bala 1 · objetivo"], ["b2r", "Bala 2 · riesgo"], ["b2t", "Bala 2 · objetivo"], ["opsDia", "Operaciones al día"]] : []), ["examCerca", "Examen · grupo B desde (+$)"], ["cercaR", "Grupo B · riesgo"], ["fuerteSL", "Día grande · riesgo"], ["fuerteTP", "Día grande · objetivo"], ["minimoSL", "Día mínimo · riesgo"], ["minimo", "Día mínimo · ganar"], ["recupR", "Recuperación · riesgo"], ["diasPayout", "Días mínimos tras el día grande"], ["pausaStops", "Pausa · stops en un día"], ["pausaSemana", "Pausa · pérdida en la semana"], ["pausaRojos", "Pausa · días en rojo"]]
         .map(([k, l]) => `<label style="display:grid;gap:4px;font-size:12px;color:var(--muted)">${l}<input type="number" data-est="${k}" value="${E[k]}" style="width:120px"></label>`).join("")}</div></details></div>`;
 }
 
