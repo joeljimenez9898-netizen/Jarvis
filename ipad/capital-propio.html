@@ -904,7 +904,7 @@ function planDeDinero() {
               reglas: "base " + P.riesgoBase + "%, +" + P.subePuntos + " puntos cada +" + P.cadaPct + "% de crecimiento, máximo " + P.riesgoMax + "% (y nunca más que el riesgo que aguanta su racha, " + r2(d.tope) + "%), baja un escalón si cae un " + P.bajaSiCae + "% desde el máximo" } };
 }
 window.addEventListener("error", (ev) => { if (ROOT.host && !ROOT.host.hidden) toast("Algo ha fallado: " + (ev.message || "error") + ". Mándale una captura a Claude."); });
-window.CAPITAL = { contexto, render, textoReparto, textoRepartoRetiro, dinero, comoVoy, recomendar, aplicarPropuesta };
+window.CAPITAL = { contexto, render, cambio: () => S.plan.cambio || 0.92, textoReparto, textoRepartoRetiro, dinero, comoVoy, recomendar, aplicarPropuesta };
 
 (async () => {
   render();

@@ -378,29 +378,48 @@ window.GRAPH = { nodes: [], links: [] };
     const hoy = hoyISO();
     const ask = "Extrae un movimiento para el Funding Manager de Joel (retiradas y costes de examen de prop firms) de su frase. Hoy es " + hoy + ".\n" +
       (pend ? "Ya sabías esto de antes: " + JSON.stringify(pend.mov) + ". Su frase nueva completa lo que faltaba.\n" : "") +
-      "Responde SOLO con un JSON, sin texto alrededor: {\"tipo\": \"coste\" o \"retirada\", \"empresa\": nombre o null, \"subtipo\": texto, \"importe\": número positivo en dólares o null, \"fecha\": \"AAAA-MM-DD\", \"notas\": texto o \"\"}.\n" +
+      "Responde SOLO con un JSON, sin texto alrededor: {\"tipo\": \"coste\" o \"retirada\", \"empresa\": nombre o null, \"subtipo\": texto, \"importe\": número positivo (el TOTAL pagado o cobrado) o null, \"moneda\": \"USD\" o \"EUR\" (la que diga; si no dice, USD), \"cantidad\": número de exámenes o cuentas (1 si no lo dice), \"fecha\": \"AAAA-MM-DD\", \"notas\": texto o \"\"}.\n" +
+      "Si dice el precio de cada uno y cuántos, importe es el total (precio × cantidad). Un número suelto es el importe.\n" +
       "Reglas: comprar o pagar un examen, challenge, evaluación o combine es tipo coste con subtipo Registro (Mensualidad, Reset o Activación si lo dice). Un payout, retirada o cobro es tipo retirada con subtipo Payout. " +
       "Empresas: TopStep, Lucid, Tradeify, Apex u otra que diga; una cuenta TS-… es TopStep, L-… es Lucid, T-… es Tradeify, y la cuenta va en notas. Si no dice la empresa o el importe, pon null: no lo inventes. " +
       "«Ayer» es el día anterior a hoy; si no dice fecha, hoy.\n\nFrase: " + q;
     let mov;
     try { const { text } = await sample([{ role: "user", content: ask }], { cache: false, effort: "low" }); mov = JSON.parse((text.match(/\{[\s\S]*\}/) || ["null"])[0]); } catch { mov = null; }
-    if (!mov || (mov.tipo !== "coste" && mov.tipo !== "retirada")) return pend ? (B.pendingMov = null, null) : null;
+    if ((!mov || (mov.tipo !== "coste" && mov.tipo !== "retirada")) && pend) mov = { ...pend.mov };
+    if (!mov || (mov.tipo !== "coste" && mov.tipo !== "retirada")) return null;
+    // the amount: what Claude read, else the number in his own words («49,99», «109,99 €»); euros become dollars at his rate
+    const numero = (x) => { if (typeof x === "number") return x; const t = String(x || "").replace(/[^\d.,]/g, ""); if (!t) return NaN;
+      return Number(/,\d{1,2}$/.test(t) ? t.replace(/\./g, "").replace(",", ".") : t.replace(/,/g, "")); };
+    let importe = Math.abs(numero(mov.importe)), moneda = /eur/i.test(mov.moneda || "") ? "EUR" : "USD";
+    if (!importe && pend) { const n = q.match(/\d[\d.,]*/); if (n) { importe = Math.abs(numero(n[0])); if (/€|euro/i.test(q)) moneda = "EUR"; } }
+    const cambio = (window.CAPITAL && window.CAPITAL.cambio && window.CAPITAL.cambio()) || 0.92, cantidad = Math.max(1, Math.round(Number(mov.cantidad) || (pend && pend.mov.cantidad) || 1));
+    let notas = String(mov.notas || "").replace(/\s*\(?pendiente de convertir[^)]*\)?/i, "");
+    let eur = null;
+    if (importe && moneda === "EUR") { eur = importe; importe = Math.round((importe / cambio) * 100) / 100; }
     const m = { tipo: mov.tipo, empresa: mov.empresa ? String(mov.empresa).trim() : (pend && pend.mov.empresa) || null,
-                subtipo: String(mov.subtipo || (mov.tipo === "retirada" ? "Payout" : "Registro")), importe: Math.abs(Number(mov.importe)) || (pend && pend.mov.importe) || null,
-                fecha: /^\d{4}-\d{2}-\d{2}$/.test(mov.fecha || "") ? mov.fecha : hoy, notas: String(mov.notas || "") };
+                subtipo: String(mov.subtipo || (mov.tipo === "retirada" ? "Payout" : "Registro")), importe: importe || (pend && pend.mov.importe) || null, cantidad,
+                fecha: /^\d{4}-\d{2}-\d{2}$/.test(mov.fecha || "") ? mov.fecha : hoy, notas };
     const que = m.tipo === "retirada" ? "el payout" : "el coste del examen";
+    if ((!m.importe || !m.empresa) && pend && (pend.intentos || 0) >= 1) {
+      B.pendingMov = null;
+      const ayuda = "No lo he entendido, Joel. Dímelo de una vez así: «apunta un coste de examen de Topstep de 49 dólares» (o «de 45 euros», o «2 exámenes de Topstep a 49 dólares»). También lo puedes apuntar a mano en el Funding Manager.";
+      history.push({ role: "user", content: "Pregunta: " + q }, { role: "assistant", content: ayuda }); history = history.slice(-12);
+      return { answer: ayuda, nodes: [], about_notes: false };
+    }
     if (!m.importe || !m.empresa) {
-      B.pendingMov = { mov: m, at: Date.now() };
+      B.pendingMov = { mov: m, at: Date.now(), intentos: pend ? (pend.intentos || 0) + 1 : 0 };
       const pregunta = !m.importe ? "¿De cuánto fue " + que + (m.empresa ? " de " + m.empresa : "") + ", Joel?" : "¿De qué empresa es " + que + " de " + usd(m.importe) + ", Joel?";
       history.push({ role: "user", content: "Pregunta: " + q }, { role: "assistant", content: pregunta }); history = history.slice(-12);
       return { answer: !m.importe ? "¿De cuánto fue " + que + (m.empresa ? " de " + m.empresa : "") + ", Joel?" : "¿De qué empresa es " + que + " de " + usd(m.importe) + ", Joel?", nodes: [], about_notes: false };
     }
     B.pendingMov = null;
     if (!B.db) return { answer: "No puedo guardarlo: abra Jarvis dentro de Claude.", nodes: [], about_notes: false };
-    try { await B.db.doc("fm/retiradas").collection("movs").doc().set({ ...m, creado: new Date().toISOString(), origen: "voz" }); }
+    const n = m.tipo === "coste" ? m.cantidad : 1, cada = Math.round((m.importe / n) * 100) / 100;
+    try { for (let i = 0; i < n; i++) { const x = { ...m, importe: n > 1 ? cada : m.importe, notas: [m.notas, eur ? "Pagado " + (Math.round((eur / n) * 100) / 100).toLocaleString("es-ES") + " €" : "", n > 1 ? "Examen " + (i + 1) + " de " + n : ""].filter(Boolean).join(" · ") }; delete x.cantidad; x.notas = x.notas.replace(/ · $/, "");
+      await B.db.doc("fm/retiradas").collection("movs").doc().set({ ...x, creado: new Date().toISOString(), origen: "voz" }); } }
     catch (e) { return { answer: "No se ha guardado el movimiento, Joel. Pruebe otra vez o apúntelo en el Funding Manager.", nodes: [], about_notes: false }; }
-    const answer = "Hecho, Joel: he apuntado en el Funding Manager " + (m.tipo === "retirada" ? "un payout" : "un coste de examen") + " de " + m.empresa + " (" + m.subtipo + ") de " +
-      usd(m.importe) + ", con fecha " + m.fecha.split("-").reverse().join("/") + (m.notas ? " · " + m.notas : "") + ". Si algo no está bien, lo puede cambiar o borrar allí." +
+    const answer = "Hecho, Joel: he apuntado en el Funding Manager " + (m.tipo === "retirada" ? "un payout" : n > 1 ? n + " costes de examen (" + usd(cada) + " cada uno)" : "un coste de examen") + " de " + m.empresa + " (" + m.subtipo + ") de " +
+      usd(m.importe) + (eur ? " (pagaste " + eur.toLocaleString("es-ES") + " €)" : "") + ", con fecha " + m.fecha.split("-").reverse().join("/") + (m.notas ? " · " + m.notas : "") + ". Si algo no está bien, lo puede cambiar o borrar allí." +
       (m.tipo === "retirada" && window.CAPITAL && window.CAPITAL.textoReparto ? " " + window.CAPITAL.textoReparto(m.importe) : "");
     history.push({ role: "user", content: "Pregunta: " + q }, { role: "assistant", content: answer }); history = history.slice(-12);
     return { answer, nodes: [], about_notes: false };
