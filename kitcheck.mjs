@@ -163,6 +163,10 @@ async function checkTopstepReadOnly() {
   const kl = ml.avisos.map((a) => a.key.split(":").slice(1).join(":")).join(" "), l1 = ml.examenes.find((x) => x.cuenta === "L1").txt, l4 = ml.examenes.find((x) => x.cuenta === "L4").txt;
   if (kl !== "L1:lon-ok L2:lon-ko L3:ny-cero" || !ml.avisos[0].txt.includes("arriesga como máximo 500 $") || !l1.includes("+1.000 $ más") || !l4.includes("nunca pasa de −1.000 $"))
     return [false, "London + New York: " + kl + " | " + l1];
+  // his London hours are 2:00–5:00 New York time: past them with no London entry, the focus is New York (with Spain's hours)
+  const sinLon = (at) => ts.motorReglas({ estrategia: E0, hoy: "2026-10-29", ahora: at, cuentas: [XL("N1", [])] }).examenes[0].txt;
+  if (!sinLon("2026-10-29T08:30:00Z").startsWith("Londres: arriesga") || !sinLon("2026-10-29T10:30:00Z").includes("Foco en Nueva York (10:30–12:00 de Nueva York, 15:30–17:00 en España)"))
+    return [false, "London over with no entry: " + sinLon("2026-10-29T10:30:00Z")];
   const sem = ts.motorReglas({ estrategia: E0, hoy: H, cuentas: [{ ...Ex("W1", [-500]), dias: { "2026-10-26": -1600, [H]: -500 }, pnl: -2100 }, Ex("W2", [-1000])] });
   if (!sem.pausa.semanal || !sem.avisos.some((a) => a.key.endsWith(":pausa-semana")) || !sem.avisos.some((a) => a.key.endsWith(":W1:quemada")))
     return [false, "weekly pause / burned account: " + JSON.stringify(sem.pausa)];

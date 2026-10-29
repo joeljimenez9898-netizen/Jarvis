@@ -239,10 +239,15 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
     const suelo = Math.min(pico - dd, 0);
     return { h, pnl0, antes: prev.map((d) => Number(dias[d]) || 0), m0: pnl0 - suelo, ahora: (Number(c.pnl) || 0) - suelo };
   };
-  // Chicago minutes of a time: London is before 8:00 (and the evening session from 17:00), New York from 8:00 to 17:00
-  const chi = (t) => { const [h, mi] = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Chicago", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+  // Joel's hours are New York time: London 2:00–5:00, New York 10:30–12:00. Past 5:00 (until the evening session at 18:00)
+  // London is over and anything he trades belongs to New York.
+  const hm = (t, tz) => { const [h, mi] = new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
     .format(new Date(t)).split(":").map(Number); return h * 60 + mi; };
-  const enNY = (t) => { const x = chi(t); return x >= 480 && x < 1020; }, nyYa = !!londresCerrada || (!!ahora && enNY(ahora));
+  const enNY = (t) => { const x = hm(t, "America/New_York"); return x >= 300 && x < 1080; }, nyYa = !!londresCerrada || (!!ahora && enNY(ahora));
+  // New York's 10:30–12:00 in Spain's time on this day (the gap is 5 or 6 hours depending on the clock changes)
+  const dif = ((hm(ahora || Date.now(), "Europe/Madrid") - hm(ahora || Date.now(), "America/New_York")) + 1440) % 1440;
+  const hh = (n) => String(Math.floor(n / 60) % 24).padStart(2, "0") + ":" + String(n % 60).padStart(2, "0");
+  const nyHora = "10:30–12:00 de Nueva York, " + hh(630 + dif) + "–" + hh(720 + dif) + " en España";
   const stopDia = E.exModo === "londres" ? E.lonR : E.b1r;
   for (const c of cuentas.filter((x) => viva(x) && x.tipo !== "Fondeada")) {
     let ops = (c.tradesHoy || []).map((x, i) => (typeof x === "number" ? { pnl: x, ny: i > 0 } : { pnl: Number(x.pnl) || 0, ny: x.at ? enNY(x.at) : i > 0 }));
@@ -267,10 +272,10 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
       else if (L > 0 && (hayNY || nyYa)) { txt = "🗽 Nueva York: juega solo con lo de Londres. Arriesga como máximo " + m(tot) + " y busca " + sg(tope - tot) + " más (día a " + sg(tope) + ").";
         av(c.codigo + ":lon-ok", "✅ " + c.codigo + " ha cerrado Londres en " + sg(L) + ". En Nueva York juegas solo con esas ganancias: arriesga como máximo " + m(L) + " y busca " + sg(tope - L) +
           " más para dejar el día en " + sg(tope) + ". Si Nueva York se lo come, cierras el día en 0."); }
-      else if (L > 0) txt = "Londres en " + sg(L) + ". En Nueva York (desde las 15:00, hora de España) juegas solo con estas ganancias.";
+      else if (L > 0) txt = "Londres en " + sg(L) + ". En Nueva York (" + nyHora + ") juegas solo con estas ganancias.";
       else if (tr.length && (hayNY || nyYa)) txt = "Londres en " + sg(L) + ": sin ganancias, hoy no hay Nueva York en esta cuenta.";
       else if (tr.length) txt = "Londres en " + sg(L) + ". Si sigues, el stop de todo lo de hoy no pasa de −" + m(r) + ".";
-      else txt = (nyYa ? "Hoy no has operado Londres: si operas Nueva York, hazlo con el plan de Londres. " : "") + lonTxt;
+      else txt = nyYa ? "Londres ya pasó sin entrada. 🗽 Foco en Nueva York (" + nyHora + "): " + lonTxt.replace(/^Londres: a/, "a") : lonTxt;
     }
     else if (tr.length === 1 && tr[0] > 0) { const ga = Math.min(E.b2t, tope - tot), r = Math.min(E.b2r, g.ahora);
       txt = "✅ Bala 1 ganada. Bala 2: arriesga " + m(r) + " para ganar " + m(ga) + " y cierra en " + sg(ga) + " justos, sin trailing.";
