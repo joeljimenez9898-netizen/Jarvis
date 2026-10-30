@@ -257,7 +257,9 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
   const modoDe = (c) => (E.modos && E.modos[c.grupo]) || E.exModo, stopDe = (c) => (modoDe(c) === "londres" ? E.lonR : E.b1r);
   for (const c of cuentas.filter((x) => viva(x) && x.tipo !== "Fondeada")) {
     let ops = (c.tradesHoy || []).map((x, i) => (typeof x === "number" ? { pnl: x, ny: i > 0 } : { pnl: Number(x.pnl) || 0, ny: x.at ? enNY(x.at) : i > 0 }));
-    if (ops.length && ops.every((x) => x.ny)) ops = ops.map((x) => ({ ...x, ny: false }));     // no London today: the first session he trades plays London's part
+    // no London today: New York plays London's part (same plan), but it is still called New York
+    const soloNY = ops.length > 0 && ops.every((x) => x.ny);
+    if (soloNY) ops = ops.map((x) => ({ ...x, ny: false }));
     const tr = ops.map((x) => x.pnl), tot = tr.reduce((a, x) => a + x, 0), obj = Number(c.tp) || 3000, tope = obj * E.consistencia / 100, g = margen(c);
     const L = ops.filter((x) => !x.ny).reduce((a, x) => a + x.pnl, 0), hayNY = ops.some((x) => x.ny);
     const umbral = E.examCerca * obj / 3000, cerca = g.pnl0 >= umbral, falta = obj - (Number(c.pnl) || 0);
@@ -283,7 +285,14 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
         "Si va a favor, puedes añadir contratos. " +
         (E.lonMax > E.lonT ? "Si llega a " + sg(t) + " y empuja con fuerza, sube el stop a " + sg(t) + " y busca " + sg(E.lonMax) + ". " : "") +
         "Nunca más de −" + m(r) + " en toda la posición.";
-      if (L <= -0.9 * r) { txt = "🛑 Stop en Londres (" + sg(L) + "): hoy no opera Nueva York.";
+      if (soloNY) {
+        if (L <= -0.9 * r) { txt = "🛑 Stop en Nueva York (" + sg(L) + "), hoy sin Londres: día cerrado en esta cuenta.";
+          av(c.codigo + ":ny-ko", "🛑 " + c.codigo + " ha hecho stop en Nueva York (" + sg(L) + "); hoy no hubo entrada en Londres. Día cerrado en esta cuenta."); }
+        else if (L > 0) { txt = "✅ Nueva York en " + sg(L) + " (hoy no hubo entrada en Londres). Día en verde: mañana sigue esta cuenta.";
+          av(c.codigo + ":ny-ok", "✅ " + c.codigo + " ha cerrado Nueva York en " + sg(L) + " (hoy no hubo entrada en Londres). Día en verde: mañana sigue esta cuenta."); }
+        else txt = "Nueva York en " + sg(L) + " (hoy sin Londres). Si sigues, el stop de todo lo de hoy no pasa de −" + m(r) + ".";
+      }
+      else if (L <= -0.9 * r) { txt = "🛑 Stop en Londres (" + sg(L) + "): hoy no opera Nueva York.";
         av(c.codigo + ":lon-ko", "🛑 " + c.codigo + " ha hecho stop en Londres (" + sg(L) + "). Hoy no operes Nueva York en esta cuenta: no hay ganancias con las que jugar. Mañana toca la siguiente cuenta."); }
       else if (L > 0 && hayNY && tot <= 0) { txt = "🛑 Nueva York se ha comido lo de Londres (" + sg(tot) + "): día cerrado.";
         av(c.codigo + ":ny-cero", "🛑 En " + c.codigo + " Nueva York se ha comido las ganancias de Londres (día en " + sg(tot) + "). Cierra el día en esta cuenta."); }

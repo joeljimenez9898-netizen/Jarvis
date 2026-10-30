@@ -169,6 +169,10 @@ async function checkTopstepReadOnly() {
   const sinLon = (at) => ts.motorReglas({ estrategia: E0, hoy: "2026-10-29", ahora: at, cuentas: [XL("N1", [])] }).examenes[0].txt;
   if (!sinLon("2026-10-29T08:30:00Z").startsWith("Londres: entra") || !sinLon("2026-10-29T10:30:00Z").includes("Foco en Nueva York (10:30–12:00 de Nueva York, 15:30–17:00 en España)"))
     return [false, "London over with no entry: " + sinLon("2026-10-29T10:30:00Z")];
+  // a New York trade with no London entry is called New York, never London
+  const sn = ts.motorReglas({ estrategia: E0, hoy: "2026-10-30", ahora: "2026-10-30T15:06:00Z", cuentas: [XL("N2", [{ pnl: -57, at: "2026-10-30T13:31:38Z" }, { pnl: 492, at: "2026-10-30T14:23:32Z" }])] });
+  if (!sn.examenes[0].txt.startsWith("✅ Nueva York en +435 $") || sn.avisos.some((a) => /Londres en \+/.test(a.txt)) || !sn.avisos.some((a) => a.key.endsWith(":N2:ny-ok")))
+    return [false, "New York with no London: " + sn.examenes[0].txt];
   // each group can play its own exam plan: here G1 plays London + New York and G2 the 2 bullets
   const mg = ts.motorReglas({ estrategia: { ...E0, modos: { g1: "londres", g2: "balas" } }, hoy: "2026-10-29", ahora: "2026-10-29T07:30:00Z",
     cuentas: [{ ...XL("M1", []), grupo: "g1" }, { ...XL("M2", []), grupo: "g2" }] }).examenes;
