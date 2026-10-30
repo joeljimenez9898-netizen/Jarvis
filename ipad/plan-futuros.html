@@ -785,6 +785,19 @@ function hoyHtml() {
 function render() {
   $("#pf-tabs").innerHTML = TABS.map(([k, n]) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${S.tab === k}">${n}</button>`).join("");
   $("#pf-view").innerHTML = !S.ready ? '<p class="empty">Cargando tu plan…</p>' : V[S.tab]();
+  oyentes.forEach((f) => { try { f(); } catch {} });
+}
+// Caminoalmillon (the squad panel) shows this same plan: the same engine, accounts, groups and settings, live.
+const oyentes = new Set();
+function vista() {
+  if (!S.ready) return null;
+  const E = est(), m = motor(), h = hoyOperas(), deC = (cod) => cuentas().find((c) => c.codigo === cod);
+  const ref = (cod) => { const c = deC(cod), n = c && ts(c)?.nombre; return n ? "…" + String(n).slice(-4) : ""; };
+  return { E, lineas: h.lineas, resumen: m.resumen, resumenEx: m.resumenEx, avisos: m.avisos.map((a) => a.txt),
+    modos: rotan().map((g) => ({ id: g.id, nombre: g.nombre, modo: modoG(g.id) })),
+    examenes: m.examenes.map((x) => { const c = deC(x.cuenta);
+      return { ...x, ref: ref(x.cuenta), grupo: c ? gName(c.grupo) : "", modo: x.fase === "B" ? "cerca" : modoG(c && c.grupo), foco: !!(h.foco && h.foco.cuentas.some((y) => y.codigo === x.cuenta)) }; }),
+    fondeadas: m.fondeadas.map((f) => ({ ...f, ref: ref(f.cuenta) })) };
 }
 const root = $("#pf");
 root.addEventListener("click", async (e) => {
@@ -901,7 +914,8 @@ function contexto() {
   };
 }
 // open(tab): Jarvis opens the Plan on a tab when Joel asks for it by voice.
-window.PLAN = { contexto, render, btApuntar: (texto, imagen) => btApuntar(texto, imagen), btClase: (tipo) => btLeccion(tipo), btConsultar: (texto, imagen) => btConsultar(texto, imagen), avisos: () => (S.ready ? motor().avisos : []), open: (tab) => { if (typeof tab === "string" && TABS.some(([k]) => k === tab)) { S.tab = tab; try { localStorage.setItem("pf-tab", tab); } catch {} } render(); } };
+window.PLAN = { contexto, render, vista, onCambio: (f) => { oyentes.add(f); return () => oyentes.delete(f); }, setEst: (p) => guardarEst(p),
+  setModo: (g, v) => guardarEst({ modos: { ...(est().modos || {}), [g]: v } }), btApuntar: (texto, imagen) => btApuntar(texto, imagen), btClase: (tipo) => btLeccion(tipo), btConsultar: (texto, imagen) => btConsultar(texto, imagen), avisos: () => (S.ready ? motor().avisos : []), open: (tab) => { if (typeof tab === "string" && TABS.some(([k]) => k === tab)) { S.tab = tab; try { localStorage.setItem("pf-tab", tab); } catch {} } render(); } };
 
 // The 📒 Backtesting tab lives in ipad/backtest.js; build-space.mjs copies it in here.
 /*@backtest@*/

@@ -3,7 +3,7 @@
 <script>
 (() => {
 "use strict";
-// TopStep Squad Manager dentro de Jarvis: mismo sistema que el de la app suelta, pero con las cuentas de fm/topstep en vivo.
+// Caminoalmillon (antes TopStep Squad Manager) dentro de Jarvis: mismo sistema que el de la app suelta, pero con las cuentas de fm/topstep en vivo.
 const HOST = document.getElementById("sq-host");
 HOST.style.cssText = "position:fixed;inset:0;z-index:50;overflow-y:auto;background:#000;-webkit-overflow-scrolling:touch";
 const ROOT = HOST.attachShadow({ mode: "open" });
@@ -464,7 +464,7 @@ function TopStepSquad() {
                         " C/U"),
                     React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 10 } },
                         React.createElement(Shield, { size: 20, color: C.green }),
-                        React.createElement("h1", { style: { fontSize: 22, fontWeight: 700, margin: 0, letterSpacing: '-0.01em' } }, "SQUAD MANAGER"))),
+                        React.createElement("h1", { style: { fontSize: 22, fontWeight: 700, margin: 0, letterSpacing: '-0.01em' } }, "CAMINOALMILLON"))),
                 React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 10 } },
                     React.createElement("div", { style: { textAlign: 'right' } },
                         React.createElement("div", { style: { fontSize: 10, color: C.textFaint } }, "TOTAL"),
@@ -488,8 +488,8 @@ function TopStepSquad() {
                     padding: '10px 16px', background: 'transparent', border: 'none', fontSize: 13.5, fontWeight: 600,
                     color: tab === t.v ? C.green : C.textMuted, borderBottom: `2px solid ${tab === t.v ? C.green : 'transparent'}`
                 } }, t.label)))),
-            accounts.length === 0 && (React.createElement("div", { style: { textAlign: 'center', padding: '50px 20px', color: C.textFaint } }, "No hay cuentas todav\u00EDa. Ve a la pesta\u00F1a Gestionar y a\u00F1ade tus cuentas.")),
-            tab === 'plan' && accounts.length > 0 && (React.createElement(PlanView, { plan: planHoy(accounts, cfg, estadoDe), cfg: cfg, setCfg: setCfg, onRol: (id, rol) => updateAccount(id, { rol }), currentGroup: currentGroup, setCurrentGroup: setCurrentGroup })),
+            tab !== 'plan' && accounts.length === 0 && (React.createElement("div", { style: { textAlign: 'center', padding: '50px 20px', color: C.textFaint } }, "No hay cuentas todav\u00EDa. Ve a la pesta\u00F1a Gestionar y a\u00F1ade tus cuentas.")),
+            tab === 'plan' && React.createElement(PlanView, null),
             tab === 'cuentas' && accounts.length > 0 && (React.createElement("div", { style: { display: 'flex', flexDirection: 'column', gap: 24 } }, [0, 1, 2].map(g => groups[g].length > 0 && (React.createElement(GroupBlock, { key: g, nombre: cfg.groupNames[g], cuentas: groups[g], enFoco: g === currentGroup, target: target, lossFloor: lossFloor, maxDD: cfg.maxDrawdown, accountSize: cfg.accountSize, riesgoBase: cfg.riesgoBase, estadoDe: estadoDe, onTrade: registrarTrade, onUndo: deshacerUltimo, onManual: marcarManual }))))),
             tab === 'gestion' && (React.createElement(GestionView, { accounts: accounts, cfg: cfg, groupNames: cfg.groupNames, estadoDe: estadoDe, onAdd: addAccount, onRemove: removeAccount, onUpdate: updateAccount, onFondeada: pasarAFondeada, onReagrupar: reagruparTodo, onImport: importarSync, syncInfo: syncInfo })),
             tab === 'protocolo' && (React.createElement(ProtocoloView, { cfg: cfg, groups: groups, currentGroup: currentGroup, rotationLog: rotationLog })),
@@ -896,167 +896,66 @@ function Seg({ value, options, onChange, color }) {
             background: value === o.v ? (color || C.green) : 'transparent', color: value === o.v ? '#00140D' : C.textMuted
         } }, o.label)))));
 }
-function PlanView({ plan, cfg, setCfg, onRol, currentGroup, setCurrentGroup }) {
-    const [ajustes, setAjustes] = useState(false);
-    const set = (patch) => setCfg({ ...cfg, ...patch });
-    const card = { background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 16 };
+// Plan de hoy: the same plan as the Plan de Futuros (window.PLAN), live: the same engine, accounts, groups and settings.
+function PlanView() {
+    const [, tick] = useState(0);
+    useEffect(() => (window.PLAN && window.PLAN.onCambio ? window.PLAN.onCambio(() => tick((t) => t + 1)) : undefined), []);
+    const h = React.createElement, P = window.PLAN, v = P && P.vista ? P.vista() : null;
+    const card = { background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 12 };
     const lbl = { fontSize: 10.5, color: C.textFaint, letterSpacing: '0.05em', marginBottom: 4 };
-    const inp = { background: C.raised, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '9px 10px', fontSize: 13, outline: 'none', width: '100%' };
-    const modoColor = plan.modo === 'agresivo' ? C.coral : C.gold;
-    const num = (label, get, put) => (React.createElement("div", null,
-        React.createElement("div", { style: lbl }, label),
-        React.createElement("input", { type: "number", value: get(), onChange: e => put(Number(e.target.value) || 0), style: inp })));
-    const exFoco = plan.exams.filter(x => x.enFoco), exEspera = plan.exams.filter(x => !x.enFoco);
-    const listos = plan.fonds.filter(f => f.listoPayout);
-    const tag = (txt, col) => React.createElement("span", { style: { fontSize: 10.5, fontWeight: 700, color: col, background: `${col}22`, borderRadius: 6, padding: '2px 7px' } }, txt);
-    return (React.createElement("div", null,
-        React.createElement("div", { style: card },
-            React.createElement("div", { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 } },
-                React.createElement("div", null,
-                    React.createElement("div", { style: lbl }, "QUI\u00C9N DECIDE HOY"),
-                    React.createElement(Seg, { value: plan.auto ? 'auto' : 'manual', onChange: v => set({ control: v }), options: [{ v: 'auto', label: 'Auto (Jarvis)' }, { v: 'manual', label: 'Manual (yo)' }] })),
-                React.createElement("div", null,
-                    React.createElement("div", { style: lbl }, "MODO DE RIESGO"),
-                    plan.auto
-                        ? React.createElement("div", { style: { display: 'flex', gap: 6, alignItems: 'center' } },
-                            tag(plan.modo.toUpperCase(), modoColor),
-                            React.createElement("span", { style: { fontSize: 11.5, color: C.textMuted } },
-                                plan.nVivas,
-                                " cuentas vivas ",
-                                plan.modo === 'conservador' ? '≤' : '>',
-                                " ",
-                                cfg.umbralConservador))
-                        : React.createElement(Seg, { value: cfg.riesgoManual, color: modoColor, onChange: v => set({ riesgoManual: v }), options: [{ v: 'agresivo', label: 'Agresivo' }, { v: 'conservador', label: 'Conservador' }] }))),
-            React.createElement("div", { style: { fontSize: 12.5, color: C.textMuted, lineHeight: 1.55 } },
-                "Riesgo por d\u00EDa: ",
-                React.createElement("b", { style: { color: C.text } },
-                    "SL ",
-                    usd(plan.R.sl)),
-                " \u00B7 ",
-                React.createElement("b", { style: { color: C.text } },
-                    "TP ",
-                    usd(plan.R.tp)),
-                ".",
-                ' ',
-                plan.auto
-                    ? 'La app elige el modo según cuántas cuentas vivas tienes y reparte los roles de las fondeadas. Puedes fijar una cuenta concreta con los botones de abajo y el resto sigue en auto.'
-                    : 'Modo manual: eliges tú el riesgo, el grupo en foco y el rol de cada fondeada (las que no toques operan como Mínimos).'),
-            !plan.auto && (React.createElement("div", { style: { marginTop: 12 } },
-                React.createElement("div", { style: lbl }, "GRUPO DE EX\u00C1MENES EN FOCO"),
-                React.createElement(Seg, { value: currentGroup, onChange: setCurrentGroup, options: [0, 1, 2].map(g => ({ v: g, label: `${String.fromCharCode(65 + g)} · ${cfg.groupNames[g]}` })) })))),
-        listos.length > 0 && (React.createElement("div", { style: { ...card, borderColor: C.green, background: C.greenSoft } },
-            React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.green } }, "Listas para pedir retiro"),
-            React.createElement("div", { style: { fontSize: 12.5, color: C.textMuted, marginTop: 4 } },
-                listos.map(f => f.a.name).join(', '),
-                " \u2014 ya tienen ",
-                cfg.diasPayout,
-                "+ d\u00EDas de ",
-                usd(cfg.minDayPnl),
-                " o m\u00E1s."))),
-        React.createElement("div", { style: { fontSize: 13, fontWeight: 700, margin: '4px 0 10px' } }, "EX\u00C1MENES"),
-        plan.exams.length === 0 && React.createElement("div", { style: { fontSize: 12.5, color: C.textFaint, marginBottom: 16 } }, "No hay ex\u00E1menes vivos."),
-        exFoco.map(x => {
-            const pct = x.profit > 0 ? Math.round(x.best / x.profit * 100) : 0;
-            return (React.createElement("div", { key: x.a.id, style: card },
-                React.createElement("div", { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 } },
-                    React.createElement("div", { style: { fontSize: 14, fontWeight: 700 } },
-                        x.a.name,
-                        " ",
-                        tag('OPERA HOY', C.green)),
-                    React.createElement("div", { style: { fontSize: 12, color: x.profit >= 0 ? C.green : C.coral, fontWeight: 700 } }, usd(x.profit))),
-                React.createElement("div", { style: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 8 } },
-                    React.createElement("div", null,
-                        React.createElement("div", { style: lbl }, "STOP HOY"),
-                        React.createElement("div", { style: { fontSize: 15, fontWeight: 700, color: C.coral } }, usd(x.sl))),
-                    React.createElement("div", null,
-                        React.createElement("div", { style: lbl }, "TP HOY"),
-                        React.createElement("div", { style: { fontSize: 15, fontWeight: 700, color: C.green } }, usd(x.tp))),
-                    React.createElement("div", null,
-                        React.createElement("div", { style: lbl }, "FALTAN"),
-                        React.createElement("div", { style: { fontSize: 15, fontWeight: 700 } }, usd(x.falta)))),
-                React.createElement("div", { style: { fontSize: 11.5, color: C.textMuted, lineHeight: 1.5 } },
-                    plan.R.tp > plan.capDia && React.createElement(React.Fragment, null,
-                        "Tu TP de ",
-                        usd(plan.R.tp),
-                        " pasa del tope de consistencia: ",
-                        React.createElement("b", { style: { color: C.gold } },
-                            "m\u00E1ximo ",
-                            usd(plan.capDia),
-                            " en un d\u00EDa"),
-                        " (",
-                        cfg.consistenciaPct,
-                        "% de ",
-                        usd(cfg.accountSize * cfg.targetPct / 100),
-                        "). "),
-                    x.tp >= x.falta && x.falta > 0 && React.createElement("b", { style: { color: C.green } }, "Con ese TP la pasas hoy. "),
-                    "Mejor d\u00EDa: ",
-                    usd(x.best),
-                    x.profit > 0 ? ` (${pct}% del beneficio, límite ${cfg.consistenciaPct}%)` : '',
-                    " \u00B7 colch\u00F3n de drawdown ",
-                    usd(x.cushion),
-                    ".")));
-        }),
-        exEspera.length > 0 && (React.createElement("div", { style: { fontSize: 12, color: C.textFaint, marginBottom: 16 } },
-            "En espera (otro grupo en foco): ",
-            exEspera.map(x => `${x.a.name} ${usd(x.profit)}`).join(' · '))),
-        React.createElement("div", { style: { fontSize: 13, fontWeight: 700, margin: '4px 0 10px' } }, "FONDEADAS \u00B7 D\u00CDA FUERTE + D\u00CDAS M\u00CDNIMOS"),
-        plan.fonds.length === 0 && React.createElement("div", { style: { fontSize: 12.5, color: C.textFaint, marginBottom: 16 } }, "No tienes fondeadas vivas todav\u00EDa. Cuando pases un examen, usa \u00ABPas\u00F3 \u2192 fondeada\u00BB en Gestionar."),
-        plan.fonds.map(f => (React.createElement("div", { key: f.a.id, style: { ...card, borderColor: f.rol === 'fuerte' ? C.violet : C.border } },
-            React.createElement("div", { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 } },
-                React.createElement("div", { style: { fontSize: 14, fontWeight: 700 } },
-                    f.a.name,
-                    " ",
-                    f.rol === 'fuerte' ? tag('DÍA FUERTE', C.violet) : tag('DÍAS MÍNIMOS', C.green),
-                    " ",
-                    f.pin ? tag('FIJADA', C.gold) : tag(plan.auto ? 'AUTO' : 'MANUAL', C.textMuted)),
-                React.createElement(Seg, { value: f.a.rol || 'auto', onChange: v => onRol(f.a.id, v === 'auto' ? null : v), options: [{ v: 'auto', label: 'Auto' }, { v: 'fuerte', label: 'Fuerte' }, { v: 'minimos', label: 'Mínimos' }], color: C.violet })),
-            React.createElement("div", { style: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 8 } },
-                React.createElement("div", null,
-                    React.createElement("div", { style: lbl }, "STOP HOY"),
-                    React.createElement("div", { style: { fontSize: 15, fontWeight: 700, color: C.coral } }, usd(f.sl))),
-                React.createElement("div", null,
-                    React.createElement("div", { style: lbl }, f.rol === 'fuerte' ? 'OBJETIVO DÍA FUERTE' : 'OBJETIVO MÍNIMO'),
-                    React.createElement("div", { style: { fontSize: 15, fontWeight: 700, color: C.green } }, f.rol === 'fuerte' ? usd(f.tp) : '≥ ' + usd(f.tp))),
-                React.createElement("div", null,
-                    React.createElement("div", { style: lbl }, "D\u00CDAS M\u00CDNIMOS"),
-                    React.createElement("div", { style: { fontSize: 15, fontWeight: 700, color: f.listoPayout ? C.green : C.text } },
-                        Math.min(f.dias150, cfg.diasPayout),
-                        " / ",
-                        cfg.diasPayout))),
-            React.createElement("div", { style: { fontSize: 11.5, color: C.textMuted, lineHeight: 1.5 } },
-                f.fuerteHecho ? `Día fuerte hecho (${usd(f.best)}). ` : 'Día fuerte pendiente. ',
-                f.listoPayout ? 'Ya puedes pedir el retiro. ' : `Te faltan ${cfg.diasPayout - f.dias150} día(s) de ${usd(cfg.minDayPnl)}+. `,
-                "Colch\u00F3n ",
-                usd(f.cushion),
-                f.cushion < plan.R.sl && f.rol !== 'fuerte' && !f.pin ? ' (menos que tu stop de modo: no entra como fuerte)' : '',
-                ".")))),
-        React.createElement("button", { onClick: () => setAjustes(!ajustes), style: { background: 'transparent', border: `1px solid ${C.border}`, color: C.textMuted, borderRadius: 9, padding: '9px 14px', fontSize: 12.5, fontWeight: 600, marginBottom: 12 } },
-            ajustes ? '▾' : '▸',
-            " Ajustes de estrategia (todo editable)"),
-        ajustes && (React.createElement("div", { style: card },
-            React.createElement("div", { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } },
-                num('AGRESIVO · STOP ($)', () => cfg.agr.sl, v => set({ agr: { ...cfg.agr, sl: v } })),
-                num('AGRESIVO · TP ($)', () => cfg.agr.tp, v => set({ agr: { ...cfg.agr, tp: v } })),
-                num('CONSERVADOR · STOP ($)', () => cfg.con.sl, v => set({ con: { ...cfg.con, sl: v } })),
-                num('CONSERVADOR · TP ($)', () => cfg.con.tp, v => set({ con: { ...cfg.con, tp: v } })),
-                num('AUTO: CONSERVADOR SI HAY ≤ N CUENTAS', () => cfg.umbralConservador, v => set({ umbralConservador: v })),
-                num('FONDEADAS CON DÍA FUERTE A LA VEZ', () => cfg.numFuertes, v => set({ numFuertes: v })),
-                num('OBJETIVO DÍA FUERTE ($)', () => cfg.diaFuerteTP, v => set({ diaFuerteTP: v })),
-                num('CUENTA COMO DÍA FUERTE DESDE ($)', () => cfg.diaFuerteMin, v => set({ diaFuerteMin: v })),
-                num('DÍA MÍNIMO = GANAR AL MENOS ($)', () => cfg.minDayPnl, v => set({ minDayPnl: v })),
-                num('DÍAS MÍNIMOS PARA RETIRO', () => cfg.diasPayout, v => set({ diasPayout: v })),
-                num('STOP EN CUENTAS DE DÍAS MÍNIMOS ($)', () => cfg.minimosSL, v => set({ minimosSL: v })),
-                num('CONSISTENCIA EXAMEN (%)', () => cfg.consistenciaPct, v => set({ consistenciaPct: v }))),
-            React.createElement("div", { style: { fontSize: 11.5, color: C.textFaint, marginTop: 10, lineHeight: 1.5 } },
-                "Tope de un d\u00EDa en examen = ",
-                cfg.consistenciaPct,
-                "% \u00D7 objetivo (",
-                usd(cfg.accountSize * cfg.targetPct / 100),
-                ") = ",
-                usd(plan.capDia),
-                ". El d\u00EDa fuerte cuenta como uno de los d\u00EDas m\u00EDnimos si llega a ",
-                usd(cfg.minDayPnl),
-                ".")))));
+    const sec = (t) => h("div", { style: { fontSize: 13, fontWeight: 700, margin: '18px 0 10px' } }, t);
+    const tag = (txt, col) => h("span", { style: { fontSize: 10.5, fontWeight: 700, color: col, background: `${col}22`, borderRadius: 6, padding: '2px 7px', marginLeft: 6 } }, txt);
+    const [ajustes, setAjustes] = useState(false);
+    if (!v) return h("div", { style: { ...card, color: C.textMuted, fontSize: 13 } }, "Cargando tu plan…");
+    const E = v.E, nombreModo = { londres: 'Londres + Nueva York', balas: '2 balas', cerca: 'Cerca de pasar' };
+    const colModo = { londres: C.green, balas: C.violet, cerca: C.gold };
+    const fila = (x, extra) => h("div", { key: x.cuenta, style: { ...card, borderColor: x.foco || x.fase === 'B' ? colModo[x.modo] || C.border : C.border } },
+        h("div", { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 } },
+            h("div", { style: { fontSize: 14, fontWeight: 700 } }, x.cuenta, x.ref ? h("span", { style: { fontSize: 11, color: C.textFaint, fontWeight: 500, marginLeft: 6 } }, x.ref) : null, extra),
+            h("div", { style: { fontSize: 12.5, fontWeight: 700, color: x.pnl >= 0 ? C.green : C.coral } }, usd(x.pnl), x.falta != null && x.falta > 0 ? h("span", { style: { color: C.textMuted, fontWeight: 500 } }, ` · faltan ${usd(x.falta)}`) : null)),
+        h("div", { style: { fontSize: 12.5, color: C.text, lineHeight: 1.55 } }, x.txt));
+    const exB = v.examenes.filter((x) => x.fase === 'B'), exA = v.examenes.filter((x) => x.fase !== 'B');
+    const grupos = [...new Set(exA.map((x) => x.grupo))];
+    const num = (k, label) => h("div", { key: k },
+        h("div", { style: lbl }, label),
+        h("input", { type: "number", defaultValue: E[k], onBlur: (e) => { const n = Number(e.target.value); if (Number.isFinite(n) && n >= 0 && n !== E[k]) P.setEst({ [k]: n }); },
+            style: { background: C.raised, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '9px 10px', fontSize: 13, outline: 'none', width: '100%' } }));
+    return h("div", null,
+        h("div", { style: card },
+            h("div", { style: lbl }, "ESTRATEGIA DE EXÁMENES · CADA GRUPO LA SUYA"),
+            v.modos.length ? v.modos.map((g) => h("div", { key: g.id, style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', margin: '6px 0' } },
+                h("span", { style: { fontSize: 12.5, fontWeight: 700, minWidth: 70 } }, g.nombre),
+                h(Seg, { value: g.modo, color: colModo[g.modo], onChange: (m) => P.setModo(g.id, m), options: [{ v: 'londres', label: 'Londres + Nueva York' }, { v: 'balas', label: '2 balas' }] })))
+              : h(Seg, { value: E.exModo, onChange: (m) => P.setEst({ exModo: m }), options: [{ v: 'londres', label: 'Londres + Nueva York' }, { v: 'balas', label: '2 balas' }] }),
+            h("div", { style: { fontSize: 12, color: C.textMuted, lineHeight: 1.6, marginTop: 10 } },
+                h("b", { style: { color: C.green } }, "Londres + Nueva York (tu estrategia principal): "),
+                `entras con 2–3 contratos arriesgando ${usd(E.lonIni)} para ganar ${usd(Math.round(E.lonIni * E.lonT / E.lonR))}. Si retrocede, promedias: el riesgo total sube como máximo a ${usd(E.lonR)} y el objetivo pasa a ${usd(E.lonT)}, que con el mejor precio medio llega antes. Nueva York solo con lo ganado en Londres.`,
+                h("br"), h("b", { style: { color: C.violet } }, "2 balas: "),
+                `bala 1 arriesga ${usd(E.b1r)} para ganar ${usd(E.b1t)}; si gana, bala 2 arriesga ${usd(E.b2r)} para ganar ${usd(E.b2t)}. Un día bueno = ${usd(E.b1t + E.b2t)}, la mitad del examen: en dos días lo pasas.`,
+                h("br"), h("b", { style: { color: C.gold } }, "Cerca de pasar: "),
+                `desde +${usd(E.examCerca)} (52.000 en una de 50K) Jarvis aparta el examen: un trade al día de ${usd(E.cercaR)} para ganar lo que le falte, sin copiarlo con los demás.`)),
+        v.lineas.map((l, i) => h("div", { key: i, style: { ...card, borderColor: C.green, background: C.greenSoft, fontSize: 12.5, lineHeight: 1.5 } }, l)),
+        exB.length > 0 && sec("EXÁMENES · GRUPO B · CERCA DE PASAR (APARTE)"),
+        exB.map((x) => fila(x, tag('GRUPO B', C.gold))),
+        sec("EXÁMENES · GRUPO A"),
+        exA.length === 0 && h("div", { style: { fontSize: 12.5, color: C.textFaint } }, "No hay exámenes vivos."),
+        grupos.map((g) => h("div", { key: g },
+            h("div", { style: { ...lbl, margin: '8px 0 6px' } }, `${g} · ${nombreModo[(exA.find((x) => x.grupo === g) || {}).modo] || ''}`),
+            exA.filter((x) => x.grupo === g).map((x) => fila(x, x.foco ? tag('EN FOCO', colModo[x.modo] || C.green) : null)))),
+        sec("FONDEADAS · GRUPO A (DÍA GRANDE) + GRUPO B (DÍAS MÍNIMOS)"),
+        v.fondeadas.length === 0 ? h("div", { style: { fontSize: 12.5, color: C.textFaint, marginBottom: 12 } }, `Aún no tienes fondeadas. Cuando pases un examen, Jarvis la pone en el grupo A (a por el día grande de +${usd(E.fuerteTP)}) y después en el B (${E.diasPayout} días mínimos y payout), cada grupo partido en dos mitades con trades distintos.`)
+            : [h("div", { key: 'r', style: { fontSize: 12, color: C.textMuted, marginBottom: 10, lineHeight: 1.5 } }, v.resumen),
+               ...[...v.fondeadas].sort((a, b) => (a.grupo || 'Z').localeCompare(b.grupo || 'Z')).map((f) => fila({ ...f, falta: null }, f.grupo ? tag(f.grupo, f.grupo[0] === 'A' ? C.violet : C.green) : null))],
+        h("button", { onClick: () => setAjustes(!ajustes), style: { background: 'transparent', border: `1px solid ${C.border}`, color: C.textMuted, borderRadius: 9, padding: '9px 14px', fontSize: 12.5, fontWeight: 600, margin: '8px 0 12px' } },
+            ajustes ? '▾' : '▸', " Ajustes de estrategia (los mismos que en Plan de Futuros)"),
+        ajustes && h("div", { style: card },
+            h("div", { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } },
+                num('lonIni', 'LONDRES · RIESGO DE ENTRADA'), num('lonR', 'LONDRES · RIESGO MÁX. PROMEDIANDO'), num('lonT', 'LONDRES · OBJETIVO PROMEDIANDO'),
+                num('b1r', 'BALA 1 · RIESGO'), num('b1t', 'BALA 1 · OBJETIVO'), num('b2r', 'BALA 2 · RIESGO'), num('b2t', 'BALA 2 · OBJETIVO'),
+                num('examCerca', 'EXAMEN · CERCA DE PASAR DESDE (+$)'), num('cercaR', 'CERCA DE PASAR · RIESGO'), num('consistencia', 'CONSISTENCIA EXAMEN (%)'),
+                num('fuerteSL', 'DÍA GRANDE · RIESGO'), num('fuerteTP', 'DÍA GRANDE · OBJETIVO'), num('minimoSL', 'DÍA MÍNIMO · RIESGO'), num('minimo', 'DÍA MÍNIMO · GANAR'),
+                num('diasPayout', 'DÍAS MÍNIMOS TRAS EL DÍA GRANDE'), num('recupR', 'RECUPERACIÓN · RIESGO')),
+            h("div", { style: { fontSize: 11.5, color: C.textFaint, marginTop: 10 } }, "Lo que cambies aquí cambia también en el Plan de Futuros y en los avisos del móvil.")));
 }
       return TopStepSquad;
     })();

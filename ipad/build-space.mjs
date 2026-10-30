@@ -22,7 +22,7 @@ for (const [a, b] of [
   ["<title>Knowledge Galaxy</title>", "<title>Jarvis</title>"],
   ["<h3>CONNECTED</h3>", "<h3>CONECTADO CON</h3>"],
   ['<div id="title"><h1>KNOWLEDGE GALAXY</h1><p id="stats"></p></div>',
-   '<div id="title"><h1>JARVIS</h1><p id="stats"></p><button type="button" id="fm-open">Plan de Futuros</button><button type="button" id="cap-open">Capital propio</button><button type="button" id="fr-open">Funding Manager</button><button type="button" id="sq-open" style="margin-top:8px;border:1px solid rgba(139,124,246,.55);background:rgba(10,14,24,.75);color:#8B7CF6;font:600 13px/1 system-ui,sans-serif;letter-spacing:.06em;padding:9px 14px;border-radius:999px;cursor:pointer;pointer-events:auto;width:100%">TopStep Squad</button></div>'],
+   '<div id="title"><h1>JARVIS</h1><p id="stats"></p><button type="button" id="fm-open">Plan de Futuros</button><button type="button" id="cap-open">Capital propio</button><button type="button" id="fr-open">Funding Manager</button><button type="button" id="sq-open" style="margin-top:8px;border:1px solid rgba(139,124,246,.55);background:rgba(10,14,24,.75);color:#8B7CF6;font:600 13px/1 system-ui,sans-serif;letter-spacing:.06em;padding:9px 14px;border-radius:999px;cursor:pointer;pointer-events:auto;width:100%">Caminoalmillon</button></div>'],
   ["${nodes.length} notes indexed · ${links.length} connections · ${groups.length} groups", "${nodes.length} recuerdos · ${links.length} conexiones · ${groups.length} grupos"],
   ["`${greeting} ${nodes.length} notes indexed.`", "`${greeting} ${nodes.length} recuerdos en tu segundo cerebro.`"],
   ["`${nodes.length} notes indexed.`", "`${nodes.length} recuerdos en tu segundo cerebro.`"],
