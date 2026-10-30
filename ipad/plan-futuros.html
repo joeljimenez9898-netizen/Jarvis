@@ -741,6 +741,10 @@ function hoyOperas() {
   if (!us.length && cercaB().length) return { unidades: [], foco: null, lineas: ["🎯 Foco en el grupo B, cerca de pasar: " + cercaB().map((x) => x.cuenta).join(", ") + ". Van aparte, una a una y en conservador."], fondeadas: fondeadasHoy() };
   if (!us.length) return { unidades: [], foco: null, lineas: ["No hay exámenes vivos en los grupos que rotan. Cuando compres cuentas, Jarvis las registra y aquí te dirá cuál operar."], fondeadas: fondeadasHoy() };
   let i = Math.max(0, us.findIndex((u) => u.id === R.foco)); if (us.findIndex((u) => u.id === R.foco) < 0) i = 0;
+  // the last day he traded: if the focus account sat it out and another one won, that one is today's focus (he follows the one he trades)
+  { const dm = dayMap(), de = (u, d) => u.cuentas.filter((c) => (dm[c.id] || {})[d] != null), suma = (u, d) => de(u, d).reduce((t, c) => t + (Number(dm[c.id][d]) || 0), 0);
+    const ult = us.flatMap((u) => u.cuentas.flatMap((c) => Object.keys(dm[c.id] || {}))).filter((d) => d < dia).sort().pop();
+    if (ult && us[i] && !de(us[i], ult).length) { const k = us.findIndex((u) => de(u, ult).length && suma(u, ult) > 0); if (k >= 0) i = k; } }
   const estadoU = (u) => balas(u.cuentas[0], dia), usadas = us.reduce((a, u) => a + tradesDia(u.cuentas[0], dia).length, 0);
   // a stop moves the next bullet (and tomorrow's focus) to the next unit that hasn't traded today
   let foco = us[i], e = estadoU(foco);
