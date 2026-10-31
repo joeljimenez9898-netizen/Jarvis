@@ -213,19 +213,21 @@ export function vigilancia(planCuentas, cuentasTs, at, prev) {
 // apart from group A, one trade a day risking cercaR for what is left. They enter group B the day after they cross.
 // Pause: pausaStops stops in one day end the day; a week at −pausaSemana or pausaRojos red days means a day off.
 // Funded: group A goes for the big day (+fuerteTP), group B (big day done) does diasPayout minimum days (risk minimoSL for
-// minimo, then the stop goes to +minimo) and asks for the payout; each group splits in two halves that never take the same
+// minimo, 1:1, averaging in against or in favor without passing −minimoSL) and asks for the payout; each group splits in two halves that never take the same
 // trade. An account with margin for less than two stops trades in recovery (recupR risk) until it has it again.
-export const ESTRATEGIA_DEF = { v: 5, modo: "individual", exModo: "londres", lonIni: 500, lonR: 1000, lonT: 1000, lonMax: 1000, opsDia: 2, b1r: 1000, b1t: 1000, b2r: 1000, b2t: 500,
-  consistencia: 50, fuerteTP: 1500, fuerteSL: 1000, minimo: 150, minimoSL: 1000, recupR: 500, diasPayout: 4, pausaStops: 2, pausaSemana: 2000, pausaRojos: 3,
+export const ESTRATEGIA_DEF = { v: 6, modo: "individual", exModo: "londres", lonIni: 500, lonR: 1000, lonT: 1000, lonMax: 1000, opsDia: 2, b1r: 1000, b1t: 1000, b2r: 1000, b2t: 500,
+  consistencia: 50, fuerteTP: 1500, fuerteSL: 1000, minimo: 150, minimoSL: 150, recupR: 500, diasPayout: 4, pausaStops: 2, pausaSemana: 2000, pausaRojos: 3,
   examCerca: 2000, cercaR: 500 };
 // Older saved settings: before v2 the funded numbers were the old ones; before v3 there was no London + New York plan;
-// before v4 London was 1.000 for 500 with trailing, now it is 1:1; before v5 the big day was +1.000 and the payout took 5 days.
+// before v4 London was 1.000 for 500 with trailing, now it is 1:1; before v5 the big day was +1.000 and the payout took 5 days;
+// before v6 a minimum day risked 1.000 for 150, now 150 for 150.
 export function estrategiaDe(guardada) {
   const g = { ...(guardada || {}) }, v = Number(g.v) || 1;
   if (v < 2) for (const k of ["fuerteTP", "fuerteSL", "minimo", "minimoSL", "recupR"]) delete g[k];
   if (v < 3) delete g.exModo;
   if (v < 4) { delete g.lonT; delete g.lonMax; }
   if (v < 5) { delete g.fuerteTP; delete g.diasPayout; }
+  if (v < 6) delete g.minimoSL;
   delete g.v;
   return { ...ESTRATEGIA_DEF, ...g };
 }
@@ -340,15 +342,15 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
       : rol === "fuerte" ? "💪 Día grande: arriesga " + m(r) + " para ganar " + m(E.fuerteTP) + "."
       : rol === "recuperacion" ? "🩹 Recuperación: arriesga " + m(r) + " para ganar " + m(E.minimo) + "; al llegar a " + sg(E.minimo) + " sube el stop a " + sg(E.minimo) +
         " y deja correr. Vuelve a por el día grande cuando tenga margen para 2 stops (le faltan " + m(2 * E.fuerteSL - x.m0) + ")."
-      : (suave ? "🩹 Día mínimo suave: " : "📅 Día mínimo: ") + "arriesga " + m(r) + " para ganar " + m(E.minimo) + "; al llegar a " + sg(E.minimo) +
-        " sube el stop a " + sg(E.minimo) + " y deja correr (lleva " + x.d0 + "/" + E.diasPayout + ").";
+      : (suave ? "🩹 Día mínimo suave: " : "📅 Día mínimo: ") + "arriesga " + m(r) + " para ganar " + m(E.minimo) + (r === E.minimo ? " (1:1)" : "") +
+        ". Si va en contra puedes promediar y si va a favor también, pero toda la posición nunca pierde más de " + m(r) + " (lleva " + x.d0 + "/" + E.diasPayout + ").";
     if (rol !== "minimos" && rol !== "payout" && x.h >= E.fuerteTP) { txt = "✅ Día grande hecho hoy (" + sg(x.h) + "). Mañana pasa al grupo B: días mínimos.";
       av(cod + ":fuerte-ok", "✅ " + cod + " ha hecho su día grande (" + sg(x.h) + "). Cierra por hoy. Mañana pasa al grupo B para hacer " + E.diasPayout + " días mínimos y pedir el payout."); }
     else if (rol === "fuerte" && r && x.h <= -0.9 * r) { txt = "🛑 Día grande fallado (" + sg(x.h) + "): para por hoy.";
       av(cod + ":fuerte-ko", "🛑 " + cod + " ha fallado el día grande (" + sg(x.h) + "). Para por hoy" + (x.ahora < 2 * E.fuerteSL ? "; mañana va en recuperación (arriesga " + m(E.recupR) + ")" : "; mañana lo vuelve a intentar") + "."); }
     else if (rol === "minimos" && x.h >= E.minimo) {
       txt = "✅ Día mínimo hecho hoy (" + sg(x.h) + ", " + x.d + "/" + E.diasPayout + ").";
-      av(cod + ":min-ok", "✅ " + cod + " ya tiene su día mínimo (" + sg(x.h) + ", lleva " + x.d + "/" + E.diasPayout + "). Si sigue abierta, el stop en " + sg(E.minimo) + " y deja correr."); }
+      av(cod + ":min-ok", "✅ " + cod + " ya tiene su día mínimo (" + sg(x.h) + ", lleva " + x.d + "/" + E.diasPayout + "). Cierra por hoy en esta cuenta."); }
     else if ((rol === "minimos" || rol === "recuperacion") && r && x.h <= -0.9 * r) { txt = "🛑 Stop en el día mínimo (" + sg(x.h) + "): para por hoy.";
       av(cod + ":min-ko", "🛑 " + cod + " ha hecho stop en su día mínimo (" + sg(x.h) + "): para por hoy."); }
     if (x.grande && !listo(x) && x.d >= E.diasPayout) av(cod + ":payout", "💰 " + cod + " ya tiene el día grande y " + x.d + " días mínimos: puedes pedir el payout.");

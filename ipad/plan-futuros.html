@@ -428,7 +428,7 @@ function reglas() {
     ["FONDEADAS · GRUPO A (DÍA GRANDE) Y GRUPO B (DÍAS MÍNIMOS)", [["Grupo A · día grande", "Arriesgas " + m(E.fuerteSL) + " para ganar " + m(E.fuerteTP), "Todas las que aún no tienen un día de +" + m(E.fuerteTP) + " o más"],
       ["A1 y A2, B1 y B2", "Cada grupo se parte en dos mitades", "Jarvis las reparte solo, alternando por orden: cada mitad lleva su propio trade, nunca el mismo en todas"],
       ["Si hace el día grande", "Mañana pasa al grupo B", "Jarvis la cambia de grupo solo y te avisa"],
-      ["Grupo B · días mínimos", "Arriesgas " + m(E.minimoSL) + " para ganar " + m(E.minimo), "Al llegar a +" + m(E.minimo) + " subes el stop a +" + m(E.minimo) + " y dejas correr"],
+      ["Grupo B · días mínimos", "Arriesgas " + m(E.minimoSL) + " para ganar " + m(E.minimo), "Si va en contra promedias y si va a favor también, pero toda la posición nunca pierde más de " + m(E.minimoSL)],
       ["Si le queda poco margen", "Recuperación: arriesgas " + m(E.recupR) + " para ganar " + m(E.minimo), "Vuelve a por el día grande cuando tenga margen para 2 stops"],
       ["Payout", "Día grande + " + E.diasPayout + " días mínimos → pides el retiro", "Jarvis te avisa cuando una cuenta está lista y la saca del grupo B"],
       ["Al cobrar", "Díctaselo a Jarvis", "Lo apunta en el Funding Manager y lo reparte: Hacienda, exámenes, capital propio y tú"]]],
