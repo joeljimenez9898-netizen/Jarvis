@@ -183,6 +183,20 @@
 .pf .vsc b { color: var(--ink); font-size: 15px; } .pf .vsc .vv { font-size: 28px; font-weight: 800; letter-spacing: -.02em; }
 .pf .rachab { display: flex; width: 100%; text-align: left; cursor: pointer; margin-bottom: 12px; font: inherit; font-weight: 700; }
 .pf .rachab span { margin-left: auto; opacity: .8; }
+/* Análisis: explanations and the week map */
+.pf .kpi .lab { align-items: center; } .pf details.exp { position: relative; letter-spacing: 0; }
+.pf details.exp summary { list-style: none; cursor: pointer; color: var(--faint); font-size: 14px; } .pf details.exp summary::-webkit-details-marker { display: none; }
+.pf details.exp p { position: absolute; right: 0; top: 22px; z-index: 3; width: 240px; margin: 0; background: var(--navy); color: #e2e8f0; border-radius: 10px; padding: 10px 12px; font-size: 13px; font-weight: 500; line-height: 1.45; text-transform: none; box-shadow: 0 8px 24px rgba(15,23,42,.25); }
+.pf .heat { display: grid; gap: 3px; margin-top: 12px; } .pf .heat span { font-size: 11px; color: var(--muted); text-align: center; }
+.pf .heat .hd { align-self: center; font-weight: 700; } .pf .heat .hc { height: 26px; border-radius: 6px; background: #f1f5f9; }
+/* Repetición */
+.pf .rp-now { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; color: var(--muted); } .pf .rp-px { margin-left: auto; font-size: 28px; font-weight: 800; color: var(--ink); letter-spacing: -.02em; }
+.pf .rp-pos { margin-top: 8px; border-radius: 12px; padding: 10px 14px; border: 1px solid var(--line); } .pf .rp-pos.ok { background: #f0fdf4; } .pf .rp-pos.ko { background: #fef2f2; }
+.pf .rp-dia { margin-top: 6px; color: var(--muted); font-size: 14px; }
+.pf .rp-chart { margin-top: 10px; border: 1px solid var(--line); border-radius: 14px; background: #fff; padding: 6px; }
+.pf .rp-ctl, .pf .rp-trade { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; margin-top: 12px; }
+.pf .rp-trade label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); } .pf .rp-trade input { width: 110px; border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; }
+.pf .btn.red { background: #ef4444; border-color: #ef4444; color: #fff; } .pf .btn[disabled] { opacity: .4; cursor: not-allowed; }
 </style>
 <div class="pf" id="pf">
   <div class="bar">
@@ -225,11 +239,11 @@ const ESTADO_COLOR = { ACTIVA: "#22c55e", EXAM: "#eab308", STANDBY: "#94a3b8", P
 const GRUPO_ESTADOS = { MAESTRA: "👑 MAESTRA", ACTIVO: "🔄 ACTIVO", PAUSADO: "⏸️ PAUSADO", RESERVA: "⚪ RESERVA" };
 const ICONO = (g, i) => (g.estado === "MAESTRA" ? "🥇" : i === 1 ? "🥈" : "📊");
 const ACCIONES = ["Liquidar", "Cerrar y bloquear", "Solo alertar"];
-const TABS = [["dashboard", "Dashboard"], ["analisis", "📊 Análisis"], ["grupos", "Grupos"], ["cuentas", "Cuentas"], ["operaciones", "Operaciones"], ["semanas", "Semanas"],
+const TABS = [["dashboard", "Dashboard"], ["analisis", "📊 Análisis"], ["replay", "⏪ Repetición"], ["grupos", "Grupos"], ["cuentas", "Cuentas"], ["operaciones", "Operaciones"], ["semanas", "Semanas"],
               ["reglas", "Reglas"], ["backtest", "📒 Backtesting"], ["domingo", "📋 Domingo"], ["riesgo", "⚙️ Riesgo"], ["calendario", "📅 Calendario"]];
 
 const S = { tab: "dashboard", grupos: new Map(), cuentas: new Map(), ops: new Map(), semanas: new Map(), revisiones: new Map(), topstep: null,
-            ready: false, db: null, page: { cuentas: 0, ops: 0 }, f: { chip: "todos", cg: "", ct: "", ce: "", og: "", oc: "", or: "", oq: "", rq: "", rg: "" },
+            ready: false, db: null, rpSes: new Map(), replayIdx: null, rp: null, rpT: 0, page: { cuentas: 0, ops: 0 }, f: { chip: "todos", cg: "", ct: "", ce: "", og: "", oc: "", or: "", oq: "", rq: "", rg: "" },
             cal: { y: new Date().getFullYear(), m: new Date().getMonth(), modo: "pct", g: "", c: "", anual: false }, risk: {}, sel: new Set(), rev: null };
 try { S.tab = localStorage.getItem("pf-tab") || "dashboard"; } catch {}
 if (!TABS.some(([k]) => k === S.tab)) S.tab = "dashboard";
@@ -976,7 +990,10 @@ function estadisticas(tr) {
   let eq = 0, pico = 0, dd = 0, rw = 0, rl = 0, mw = 0, ml = 0;
   for (const t of tr) { eq += t.pnl; pico = Math.max(pico, eq); dd = Math.max(dd, pico - eq);
     if (t.pnl > 0) { rw++; rl = 0; } else if (t.pnl < 0) { rl++; rw = 0; } mw = Math.max(mw, rw); ml = Math.max(ml, rl); }
-  return { n: tr.length, total: eq, wr: tr.length ? w.length / tr.length : null, pf: gl ? gw / gl : gw ? Infinity : null, medG: w.length ? gw / w.length : 0, medP: l.length ? -gl / l.length : 0,
+  const pd = {}; for (const t of tr) pd[t.fecha] = (pd[t.fecha] || 0) + t.pnl;
+  const media = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null), du = (a) => media(a.filter((t) => t.dur != null).map((t) => Number(t.dur)));
+  return { ddAct: pico - eq, be: tr.filter((t) => !t.pnl).length, rr: l.length && w.length ? (gw / w.length) / (gl / l.length) : null, dVerdes: Object.values(pd).filter((v) => v > 0).length, dRojos: Object.values(pd).filter((v) => v < 0).length,
+           durG: du(w), durP: du(l), n: tr.length, total: eq, wr: tr.length ? w.length / tr.length : null, pf: gl ? gw / gl : gw ? Infinity : null, medG: w.length ? gw / w.length : 0, medP: l.length ? -gl / l.length : 0,
            esp: tr.length ? eq / tr.length : 0, mejor: tr.length ? Math.max(...tr.map((t) => t.pnl)) : 0, peor: tr.length ? Math.min(...tr.map((t) => t.pnl)) : 0, dd, mw, ml };
 }
 // ── ¿Cumpliste el plan? Each day of each account is checked against his strategy (the plan of that account's group) ──
@@ -1038,6 +1055,49 @@ function conclusiones(tr) {
   const grandes = tr.filter((t) => t.pnl <= -1900); if (grandes.length) out.push(`${grandes.length} ${grandes.length === 1 ? "trade se llevó" : "trades se llevaron"} la cuenta casi entera (−2.000 $): ${usd(grandes.reduce((a, t) => a + t.pnl, 0))} en total. Con tu stop de −${usd(est().lonR)} no habría pasado.`);
   return out;
 }
+// What each number means and how it is worked out, one tap away
+const EXPLICA = {
+  "RESULTADO": "Lo que has ganado o perdido en total en el periodo. Suma del resultado neto (con comisiones) de cada trade.",
+  "ACIERTO": "De cada 10 trades, cuántos cierras en positivo. Trades ganadores ÷ trades cerrados.",
+  "PROFIT FACTOR": "Cuánto ganas por cada dólar que pierdes. Por encima de 1 ganas dinero. Ganancia bruta ÷ pérdida bruta.",
+  "POR TRADE": "Lo que ganas o pierdes de media en cada trade (la esperanza). Acierto × ganancia media − fallo × pérdida media.",
+  "CAÍDA MÁXIMA": "La mayor bajada desde un punto alto de tu curva hasta el punto más bajo que vino después.",
+  "CAÍDA ACTUAL": "Cuánto estás ahora por debajo del punto más alto de tu curva. Si es 0, estás en máximos.",
+  "RIESGO / BENEFICIO": "Cuánto vale de media un trade ganador comparado con uno perdedor. Ganancia media ÷ pérdida media.",
+  "DÍAS": "Días que cerraste en verde contra días en rojo, sumando todos los trades del día.",
+  "RACHA GANADORA": "El mayor número de trades seguidos en positivo.",
+  "RACHA PERDEDORA": "El mayor número de trades seguidos en negativo.",
+  "DURACIÓN": "Cuánto tiempo aguantas de media un trade ganador y uno perdedor, desde que entras hasta que sales.",
+  "SESIONES": "Cuántos trades has hecho en Londres (antes de las 5:00 de Nueva York) y en Nueva York.",
+};
+const durTxt = (m) => (m == null ? "—" : m < 60 ? Math.round(m) + " min" : Math.floor(m / 60) + " h " + String(Math.round(m % 60)).padStart(2, "0"));
+// Days of the week against hours in Spain: each cell is green if he wins there and red if he loses, darker the bigger
+function mapaSemana(tr) {
+  const dias = ["L", "M", "X", "J", "V"], con = tr.filter((t) => t.at), hs = [...new Set(con.map((t) => horaES(t.at)))].sort((a, b) => a - b);
+  if (!hs.length) return '<p class="empty">Sin horas todavía.</p>';
+  const H = []; for (let h = hs[0]; h <= hs[hs.length - 1]; h++) H.push(h);
+  const celda = {}; for (const t of con) { const d = new Date(t.fecha + "T12:00:00Z").getUTCDay(), k = d + ":" + horaES(t.at); (celda[k] ||= { s: 0, n: 0 }); celda[k].s += t.pnl; celda[k].n++; }
+  const max = Math.max(1, ...Object.values(celda).map((c) => Math.abs(c.s)));
+  const vals = Object.entries(celda).filter(([k]) => Number(k.split(":")[0]) >= 1 && Number(k.split(":")[0]) <= 5);
+  const best = vals.sort((a, b) => b[1].s - a[1].s)[0], worst = vals.sort((a, b) => a[1].s - b[1].s)[0];
+  const nom = (k) => ["", "lunes", "martes", "miércoles", "jueves", "viernes"][Number(k.split(":")[0])] + " a las " + k.split(":")[1] + "h";
+  return `<div class="heat" style="grid-template-columns:28px repeat(${H.length},1fr)"><span></span>${H.map((h) => `<span class="hh">${h}</span>`).join("")}
+    ${dias.map((d, i) => `<span class="hd">${d}</span>${H.map((h) => { const c = celda[i + 1 + ":" + h]; if (!c) return '<span class="hc"></span>';
+      const a = 0.15 + 0.85 * Math.min(1, Math.abs(c.s) / max); return `<span class="hc" style="background:${c.s >= 0 ? `rgba(34,197,94,${a.toFixed(2)})` : `rgba(239,68,68,${a.toFixed(2)})`}" title="${esc(d + " " + h + "h: " + sgn(c.s) + " en " + c.n + " trades")}"></span>`; }).join("")}`).join("")}</div>
+    <p class="hint">${best && best[1].s > 0 ? `Mejor franja: <b class="pos">${nom(best[0])} (${sgn(best[1].s)})</b>. ` : ""}${worst && worst[1].s < 0 ? `Peor franja: <b class="neg">${nom(worst[0])} (${sgn(worst[1].s)})</b>.` : ""}</p>`;
+}
+// Winners against losers: width is how often, height is how much each one is worth; the bigger block drives the result
+function anatomia(g, n) {
+  if (!n) return '<p class="empty">Sin trades.</p>';
+  const nw = Math.round((g.wr || 0) * n), nl = n - nw - (g.be || 0), ag = g.medG, ap = Math.abs(g.medP), mh = Math.max(ag, ap, 1), W = 560, H = 170;
+  const ww = Math.max(40, (nw / n) * W), wl = Math.max(40, (nl / n) * W), hw = (ag / mh) * H, hl = (ap / mh) * H;
+  return `<svg viewBox="0 0 ${W + 100} ${H + 70}" width="100%" role="img" aria-label="Ganadores contra perdedores">
+    <rect x="20" y="${10 + H - hw}" width="${ww}" height="${hw}" rx="8" fill="#22c55e" opacity=".85"/><text x="${20 + ww / 2}" y="${H + 34}" text-anchor="middle" font-size="14" font-weight="700" fill="#15803d">${nw} ganadores</text>
+    <text x="${20 + ww / 2}" y="${H + 54}" text-anchor="middle" font-size="13" fill="#64748b">+${usd(ag)} de media</text>
+    <rect x="${40 + ww}" y="${10 + H - hl}" width="${wl}" height="${hl}" rx="8" fill="#ef4444" opacity=".85"/><text x="${40 + ww + wl / 2}" y="${H + 34}" text-anchor="middle" font-size="14" font-weight="700" fill="#b91c1c">${nl} perdedores</text>
+    <text x="${40 + ww + wl / 2}" y="${H + 54}" text-anchor="middle" font-size="13" fill="#64748b">−${usd(ap)} de media</text></svg>
+    <p class="hint">El ancho es cuántas veces pasa; el alto, cuánto vale cada una. ${nw * ag >= nl * ap ? "Pesa más el bloque verde: ganas." : "Pesa más el bloque rojo: lo que pierdes en los malos se come lo bueno."}</p>`;
+}
 const AN_PER = [["7", "7 días"], ["30", "30 días"], ["90", "90 días"]];
 V.analisis = () => {
   const todos = tradesAnalisis(), f = S.f.an || "todas", per = S.f.anp || "90";
@@ -1049,7 +1109,7 @@ V.analisis = () => {
   const ses = [["lon", "🇬🇧 Londres"], ["ny", "🗽 Nueva York"]].map(([k, n]) => [n, estadisticas(tr.filter((t) => sesionDe(t.at) === k))]);
   const dsem = ["L", "M", "X", "J", "V"], porDS = dsem.map((_, i) => tr.filter((t) => new Date(t.fecha + "T12:00:00Z").getUTCDay() === i + 1).reduce((a, t) => a + t.pnl, 0));
   const horas = [...new Set(tr.filter((t) => t.at).map((t) => horaES(t.at)))].sort((a, b) => a - b), porH = horas.map((h) => tr.filter((t) => t.at && horaES(t.at) === h).reduce((a, t) => a + t.pnl, 0));
-  const kpi = (lab, val, c = "", sub = "") => `<div class="card kpi"><div class="lab">${lab}</div><div class="val ${c}">${val}</div>${sub ? `<p class="hint" style="margin-top:6px">${sub}</p>` : ""}</div>`;
+  const kpi = (lab, val, c = "", sub = "") => `<div class="card kpi"><div class="lab">${lab}${EXPLICA[lab] ? `<details class="exp"><summary title="¿Qué es?">ⓘ</summary><p>${esc(EXPLICA[lab])}</p></details>` : ""}</div><div class="val ${c}">${val}</div>${sub ? `<p class="hint" style="margin-top:6px">${sub}</p>` : ""}</div>`;
   const chips = (key, cur, opts) => `<div class="chips" style="margin-bottom:10px">${opts.map(([k, n]) => `<button type="button" data-${key}="${esc(k)}" aria-pressed="${cur === k}">${esc(n)}</button>`).join("")}</div>`;
   return `${chips("an", f, [["todas", "Todas"], ["examenes", "Exámenes"], ["practica", "Práctica (MASTER)"], ...cuentasAn.map((c) => [c, c])])}${chips("anp", per, AN_PER)}
   <div class="card plan-ok"><div class="cardhead"><div><h3>✅ ¿Cumples el plan?</h3><p class="hint">Cada día de cada examen, comparado con tu estrategia: stop, Nueva York solo con lo de Londres, nada después de un stop y el tope de consistencia.</p></div></div>
@@ -1058,12 +1118,15 @@ V.analisis = () => {
       <div><span class="big2">${rp.dias ? Math.round((rp.buenos / rp.dias) * 100) + " %" : "—"}</span><span class="lab">días con el plan cumplido (${rp.buenos}/${rp.dias}) · mejor racha ${rp.mejor}</span></div></div>
     <div class="diasplan">${cu.slice(0, 12).map((d) => `<div class="dp ${d.ok ? "ok" : "ko"}"><b>${d.ok ? "✅" : "❌"} ${d.fecha.split("-").reverse().slice(0, 2).join("/")}</b><span>${esc(d.cuenta)} · ${d.n} ${d.n === 1 ? "trade" : "trades"} · <span class="${cls(d.tot)}">${sgn(d.tot)}</span></span>${d.ok ? "" : `<small>${esc(d.fallos.join(" · "))}</small>`}</div>`).join("") || '<p class="empty">Aún no hay días operados en los exámenes.</p>'}</div></div>
   <div class="grid4">${kpi("RESULTADO", sgn(g.total), cls(g.total), g.n + " trades")}${kpi("ACIERTO", pctTxt(g.wr), "blue", `ganancia media +${usd(g.medG)} · pérdida media ${usd(g.medP)}`)}${kpi("PROFIT FACTOR", pfTxt(g.pf), g.pf != null && g.pf >= 1 ? "pos" : "neg", "lo ganado ÷ lo perdido")}${kpi("POR TRADE", sgn(g.esp), cls(g.esp), `mejor ${sgn(g.mejor)} · peor ${sgn(g.peor)}`)}</div>
-  <div class="grid4">${kpi("CAÍDA MÁXIMA", usd(-g.dd), "neg", "desde el punto más alto")}${kpi("RACHA GANADORA", g.mw, "pos", "trades seguidos")}${kpi("RACHA PERDEDORA", g.ml, "neg", "trades seguidos")}${kpi("SESIONES", ses.map(([n, s]) => n.split(" ")[0] + " " + s.n).join(" · "), "", "trades por sesión")}</div>
+  <div class="grid4">${kpi("CAÍDA MÁXIMA", usd(-g.dd), "neg", "desde el punto más alto")}${kpi("CAÍDA ACTUAL", g.ddAct ? usd(-g.ddAct) : "0 $", g.ddAct ? "neg" : "pos", g.ddAct ? "por debajo de tu máximo" : "estás en máximos")}${kpi("RIESGO / BENEFICIO", g.rr == null ? "—" : "1:" + g.rr.toFixed(2).replace(".", ","), g.rr != null && g.rr >= 1 ? "pos" : "neg", "ganancia media ÷ pérdida media")}${kpi("DÍAS", `<span class="pos">${g.dVerdes}</span> · <span class="neg">${g.dRojos}</span>`, "", "en verde · en rojo")}</div>
+  <div class="grid4">${kpi("RACHA GANADORA", g.mw, "pos", "trades seguidos")}${kpi("RACHA PERDEDORA", g.ml, "neg", "trades seguidos")}${kpi("DURACIÓN", durTxt(g.durG) + " · " + durTxt(g.durP), "", "ganadores · perdedores")}${kpi("SESIONES", ses.map(([n, s]) => n.split(" ")[0] + " " + s.n).join(" · "), "", "trades por sesión")}</div>
   ${conclusiones(tr).length ? `<div class="card" style="margin-top:18px"><h3>🧠 Lo que dicen tus números</h3>${conclusiones(tr).map((x) => `<p class="concl">${esc(x)}</p>`).join("")}</div>` : ""}
   <div class="grid2">
     <div class="card"><h3>Curva de resultados</h3><p class="hint">Suma de tus trades, uno tras otro</p>${linea(eq)}</div>
     <div class="card"><h3>Londres contra Nueva York</h3><p class="hint">Cada trade según la hora de Nueva York a la que entró</p>
       <div class="vs">${ses.map(([n, s]) => `<div class="vsc"><b>${n}</b><span class="vv ${cls(s.total)}">${sgn(s.total)}</span><span>${s.n} trades · acierto ${pctTxt(s.wr)}</span><span>por trade ${sgn(s.esp)} · PF ${pfTxt(s.pf)}</span></div>`).join("")}</div></div>
+    <div class="card"><h3>Mapa de tu semana</h3><p class="hint">Cada casilla es un día a una hora (España): verde si ganas ahí, rojo si pierdes</p>${mapaSemana(tr)}</div>
+    <div class="card"><h3>Ganadores contra perdedores</h3><p class="hint">De dónde sale tu resultado</p>${anatomia(g, g.n)}</div>
     <div class="card"><h3>Por día de la semana</h3>${bars([{ name: "Resultado", color: "#22c55e", values: porDS }], dsem)}</div>
     <div class="card"><h3>Por hora de entrada (España)</h3>${horas.length ? bars([{ name: "Resultado", color: "#3b82f6", values: porH }], horas.map((h) => h + "h")) : '<p class="empty">Sin horas todavía.</p>'}</div>
   </div>`;
@@ -1073,6 +1136,147 @@ function rachaHtml() {
   const rp = rachaPlan(cumplimiento(tradesAnalisis()));
   if (!rp.dias) return "";
   return `<button type="button" class="banner ${rp.racha ? "ok" : "bad"} rachab" data-tab="analisis">${rp.racha ? "✅" : "❌"} Plan cumplido: ${rp.racha} ${rp.racha === 1 ? "día seguido" : "días seguidos"} · ${rp.racha >= 5 ? "ya llevas 5" : "faltan " + (5 - rp.racha) + " para copiar 2 cuentas"} <span>Ver análisis →</span></button>`;
+}
+// ── ⏪ Repetición: a past MNQ day replayed bar by bar (1-minute bars Topstep read, fm/replay/dias), traded with his plan ──
+// MNQ: 2 $ per point per contract. Stop and target are set in dollars for the whole position, as he thinks of them.
+// The plan blocks him like his rules say: past −lonR on the day, or at the consistency cap, no new trades.
+const RP_PUNTO = 2;
+const rpE = () => est();
+function rpEstado() {
+  if (!S.rp) { const E = rpE(); S.rp = { fecha: "", dia: null, i: 0, play: false, vel: 4, pos: null, trades: [], n: 3, riesgo: E.lonIni, obj: Math.round(E.lonIni * E.lonT / E.lonR) }; }
+  return S.rp;
+}
+const rpHora = (R, k) => { const t = Date.parse(R.dia.inicio) + R.dia.m[k] * 60000; return new Intl.DateTimeFormat("es-ES", { timeZone: "Europe/Madrid", hour: "2-digit", minute: "2-digit" }).format(new Date(t)); };
+const rpHoraNY = (R, k) => String(Math.floor(R.dia.m[k] / 60)).padStart(2, "0") + ":" + String(R.dia.m[k] % 60).padStart(2, "0");
+const rpTot = (R) => R.trades.reduce((a, t) => a + t.pnl, 0);
+const rpAbierto = (R) => { const p = R.pos; if (!p) return 0; return (R.dia.c[R.i] - p.entrada) * (p.dir === "LONG" ? 1 : -1) * p.n * RP_PUNTO; };
+function rpBloqueo(R) {
+  const E = rpE(), tot = rpTot(R), tope = 3000 * E.consistencia / 100;
+  if (tot <= -0.9 * E.lonR) return "🔒 Bloqueado por tu plan: llevas " + sgn(tot) + " hoy, el stop del día es −" + usd(E.lonR) + ".";
+  if (tot >= tope) return "🔒 Tope del día: " + sgn(tot) + ". Por la consistencia, hoy no se opera más.";
+  return "";
+}
+function rpCerrar(R, precio, motivo) {
+  const p = R.pos; if (!p) return;
+  const pnl = Math.round((precio - p.entrada) * (p.dir === "LONG" ? 1 : -1) * p.n * RP_PUNTO * 100) / 100;
+  R.trades.push({ dir: p.dir, n: p.n, entrada: p.entrada, salida: precio, pnl, abre: rpHora(R, p.k), cierra: rpHora(R, R.i), motivo, ses: R.dia.m[p.k] >= 300 ? "ny" : "lon", dur: R.dia.m[R.i] - R.dia.m[p.k], ka: p.k, kc: R.i });
+  R.pos = null;
+}
+// a new bar: the stop is checked before the target (the cautious reading when one bar touches both)
+function rpPaso(R) {
+  if (!R.dia || R.i >= R.dia.c.length - 1) { R.play = false; return; }
+  R.i++;
+  const p = R.pos; if (!p) return;
+  const h = R.dia.h[R.i], l = R.dia.l[R.i];
+  if (p.dir === "LONG") { if (l <= p.stop) rpCerrar(R, p.stop, "stop"); else if (h >= p.obj) rpCerrar(R, p.obj, "objetivo"); }
+  else { if (h >= p.stop) rpCerrar(R, p.stop, "stop"); else if (l <= p.obj) rpCerrar(R, p.obj, "objetivo"); }
+}
+function rpEntrar(R, dir) {
+  if (rpBloqueo(R) || !R.dia) return;
+  const c = R.dia.c[R.i], n = Math.max(1, Number(R.n) || 1), sp = R.riesgo / (n * RP_PUNTO), op = R.obj / (n * RP_PUNTO), s = dir === "LONG" ? 1 : -1;
+  const r4 = (x) => Math.round(x * 4) / 4;
+  R.pos = { dir, n, n0: n, entrada: c, k: R.i, stop: r4(c - s * sp), obj: r4(c + s * op) };
+}
+// averaging: more contracts at this price, the stop stays where it was; the target moves so the whole position makes lonT
+function rpPromediar(R) {
+  const p = R.pos; if (!p || !R.dia) return;
+  const E = rpE(), c = R.dia.c[R.i], add = Math.max(1, Number(R.n) || 1), n = p.n + add, s = p.dir === "LONG" ? 1 : -1;
+  p.entrada = Math.round(((p.entrada * p.n + c * add) / n) * 100) / 100; p.n = n;
+  p.obj = Math.round((p.entrada + s * E.lonT / (n * RP_PUNTO)) * 4) / 4;
+}
+function rpRiesgo(R) { const p = R.pos; return p ? Math.abs(p.entrada - p.stop) * p.n * RP_PUNTO : 0; }
+function rpVelas(R) {
+  const d = R.dia, N = 100, a = Math.max(0, R.i - N + 1), idx = []; for (let k = a; k <= R.i; k++) idx.push(k);
+  const p = R.pos, extra = p ? [p.stop, p.obj, p.entrada] : [];
+  const hi = Math.max(...idx.map((k) => d.h[k]), ...extra), lo = Math.min(...idx.map((k) => d.l[k]), ...extra), rg = hi - lo || 1;
+  const W = 1000, H = 380, pr = 70, top = 10, ch = H - 30, cw = (W - pr) / N, Y = (v) => top + ((hi - v) / rg) * (ch - top);
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Velas de 1 minuto">`;
+  // sessions: London 2:00–5:00 and New York 9:30–12:00 (New York time)
+  for (const [m0, m1, col] of [[120, 300, "rgba(59,130,246,.06)"], [570, 720, "rgba(34,197,94,.07)"]]) {
+    const ks = idx.filter((k) => d.m[k] >= m0 && d.m[k] < m1); if (ks.length) s += `<rect x="${(ks[0] - a) * cw}" y="0" width="${ks.length * cw}" height="${ch}" fill="${col}"/>`; }
+  for (let g = 0; g <= 4; g++) { const v = hi - (g * rg) / 4, y = Y(v); s += `<line x1="0" x2="${W - pr}" y1="${y}" y2="${y}" stroke="#eef2f7"/><text x="${W - pr + 6}" y="${y + 4}" font-size="12" fill="#64748b">${v.toFixed(2)}</text>`; }
+  idx.forEach((k, j) => { const up = d.c[k] >= d.o[k], col = up ? "#16a34a" : "#dc2626", x = j * cw + cw / 2, yb = Y(Math.max(d.o[k], d.c[k])), hb = Math.max(1, Math.abs(Y(d.o[k]) - Y(d.c[k])));
+    s += `<line x1="${x}" x2="${x}" y1="${Y(d.h[k])}" y2="${Y(d.l[k])}" stroke="${col}"/><rect x="${x - cw * 0.35}" y="${yb}" width="${cw * 0.7}" height="${hb}" fill="${col}"/>`;
+    if (j % 15 === 0) s += `<text x="${x}" y="${H - 8}" font-size="11" fill="#94a3b8" text-anchor="middle">${rpHora(R, k)}</text>`; });
+  // his trades on this stretch: ▲/▼ where he went in, ● where he came out
+  for (const t of R.trades) for (const [k, v, ent] of [[t.ka, t.entrada, true], [t.kc, t.salida, false]]) { if (k == null || k < a) continue; const x = (k - a) * cw + cw / 2, y = Y(v);
+    s += ent ? `<path d="M ${x - 6} ${t.dir === "LONG" ? y + 12 : y - 12} L ${x + 6} ${t.dir === "LONG" ? y + 12 : y - 12} L ${x} ${y + (t.dir === "LONG" ? 2 : -2)} Z" fill="#2563eb"/>` : `<circle cx="${x}" cy="${y}" r="5" fill="${t.pnl >= 0 ? "#16a34a" : "#dc2626"}" stroke="#fff" stroke-width="2"/>`; }
+  if (p) for (const [v, col, lab] of [[p.entrada, "#0f172a", "entrada"], [p.stop, "#dc2626", "stop"], [p.obj, "#16a34a", "objetivo"]])
+    s += `<line x1="0" x2="${W - pr}" y1="${Y(v)}" y2="${Y(v)}" stroke="${col}" stroke-dasharray="6 4" stroke-width="1.5"/><text x="6" y="${Y(v) - 4}" font-size="12" font-weight="700" fill="${col}">${lab} ${v.toFixed(2)}</text>`;
+  return s + "</svg>";
+}
+function rpInfo(R) {
+  const p = R.pos, E = rpE(), b = rpBloqueo(R), ab = rpAbierto(R), rs = rpRiesgo(R);
+  return `<div class="rp-now"><span><b>${rpHora(R, R.i)}</b> en España · ${rpHoraNY(R, R.i)} Nueva York · ${R.dia.m[R.i] >= 300 ? "🗽 Nueva York" : "🇬🇧 Londres"}</span><span class="rp-px">${R.dia.c[R.i].toFixed(2)}</span></div>
+    ${p ? `<div class="rp-pos ${ab >= 0 ? "ok" : "ko"}"><b>${p.dir === "LONG" ? "Largo" : "Corto"} ${p.n} MNQ</b> a ${p.entrada.toFixed(2)} · abierto <b class="${cls(ab)}">${sgn(ab)}</b> · riesgo <b class="${rs > E.lonR * 1.001 ? "neg" : ""}">${usd(rs)}</b>${rs > E.lonR * 1.001 ? " ⚠️ pasa de tu máximo de " + usd(E.lonR) : ""}</div>` : ""}
+    <div class="rp-dia">Hoy en la repetición: <b class="${cls(rpTot(R))}">${sgn(rpTot(R))}</b> en ${R.trades.length} ${R.trades.length === 1 ? "trade" : "trades"}</div>
+    ${b ? `<div class="banner bad" style="margin-top:8px">${esc(b)}</div>` : ""}`;
+}
+// the chart and the numbers are repainted alone while it plays, so the inputs keep their values
+function rpPintar() {
+  const R = S.rp, root = $("#pf"); if (!R || !R.dia || S.tab !== "replay") return;
+  const g = root.querySelector("#rp-chart"), f = root.querySelector("#rp-info"), t = root.querySelector("#rp-trades");
+  if (g) g.innerHTML = rpVelas(R); if (f) f.innerHTML = rpInfo(R); if (t) t.innerHTML = rpTabla(R);
+  root.querySelectorAll("[data-rp=long],[data-rp=short]").forEach((x) => { x.disabled = !!(R.pos || rpBloqueo(R)); });
+  root.querySelectorAll("[data-rp=cerrar],[data-rp=promediar]").forEach((x) => { x.disabled = !R.pos; });
+  const pl = root.querySelector("[data-rp=play]"); if (pl) pl.textContent = R.play ? "⏸ Pausa" : "▶ Reproducir";
+}
+function rpTabla(R) {
+  if (!R.trades.length) return '<p class="hint">Aún no has operado este día.</p>';
+  const g = estadisticas(R.trades);
+  return `<div class="tablewrap"><table><thead><tr><th>#</th><th>DIR</th><th>CONTR.</th><th>ENTRA</th><th>SALE</th><th>HORA</th><th>MOTIVO</th><th>P&amp;L</th></tr></thead><tbody>
+    ${R.trades.map((t, k) => `<tr><td>${k + 1}</td><td><span class="pill dir ${t.dir}">${t.dir === "LONG" ? "Largo" : "Corto"}</span></td><td>${t.n}</td><td>${t.entrada.toFixed(2)}</td><td>${t.salida.toFixed(2)}</td><td>${t.abre}–${t.cierra}</td><td>${t.motivo}</td><td class="${cls(t.pnl)}"><b>${sgn(t.pnl)}</b></td></tr>`).join("")}</tbody></table></div>
+    <p class="hint">Acierto ${pctTxt(g.wr)} · profit factor ${pfTxt(g.pf)} · caída máxima ${usd(-g.dd)} · sin comisiones</p>`;
+}
+function rpCargar(fecha) {
+  const R = rpEstado(); R.fecha = fecha; R.dia = null; R.trades = []; R.pos = null; R.play = false; render();
+  if (!S.db || !fecha) return;
+  const off = S.db.doc("fm/replay").collection("dias").doc(fecha).onSnapshot((snap) => {
+    if (R.fecha !== fecha || R.dia) return;
+    R.dia = snap.exists ? snap.data() : null; R.i = R.dia ? Math.max(0, R.dia.m.findIndex((m) => m >= 120)) : 0; render(); try { off && off(); } catch {} }, () => {});
+}
+function rpTick() {
+  clearTimeout(S.rpT); const R = S.rp; if (!R || !R.play) return;
+  if (S.tab !== "replay") { R.play = false; return; }
+  rpPaso(R); rpPintar(); if (R.play) S.rpT = setTimeout(rpTick, Math.max(40, 1000 / R.vel));
+}
+V.replay = () => {
+  const R = rpEstado(), E = rpE(), fechas = [...(S.replayIdx?.dias || [])].sort().reverse(), ses = [...S.rpSes.values()].sort((a, b) => (a.guardada < b.guardada ? 1 : -1));
+  if (!R.fecha && fechas.length) setTimeout(() => rpCargar(fechas[0]), 0);
+  const dl = (f) => new Date(f + "T12:00:00Z").toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+  return `<div class="card"><div class="cardhead"><div><h3>⏪ Repetición de mercado · MNQ 1 minuto</h3><p class="hint">Elige un día pasado, avanza vela a vela y opera tu plan como si fuera en directo. Sin dinero real. Velas de Topstep, de las 0:00 a las 12:00 de Nueva York.</p></div></div>
+    ${fechas.length ? `<div class="filters"><select data-rpf="fecha">${fechas.map((f) => `<option value="${f}" ${f === R.fecha ? "selected" : ""}>${dl(f)}</option>`).join("")}</select>
+      <span class="seg mini"><button type="button" data-rp="ir:120">🇬🇧 Ir a Londres (2:00 NY)</button><button type="button" data-rp="ir:570">🗽 Ir a Nueva York (9:30 NY)</button></span></div>` : '<p class="empty">Aún no hay días guardados para repetir.</p>'}
+    ${R.dia ? `<div id="rp-info">${rpInfo(R)}</div><div id="rp-chart" class="rp-chart">${rpVelas(R)}</div>
+      <div class="rp-ctl"><button type="button" class="btn dark" data-rp="play">${R.play ? "⏸ Pausa" : "▶ Reproducir"}</button>
+        <span class="seg mini">${[1, 4, 15, 60].map((v) => `<button type="button" data-rp="vel:${v}" aria-pressed="${R.vel === v}">${v}×</button>`).join("")}</span>
+        <button type="button" class="btn small" data-rp="mas:1">+1 vela</button><button type="button" class="btn small" data-rp="mas:5">+5</button><button type="button" class="btn small" data-rp="mas:15">+15</button></div>
+      <div class="rp-trade"><label>Contratos<input type="number" min="1" data-rpv="n" value="${R.n}"></label><label>Riesgo $<input type="number" min="10" step="10" data-rpv="riesgo" value="${R.riesgo}"></label><label>Objetivo $<input type="number" min="10" step="10" data-rpv="obj" value="${R.obj}"></label>
+        <button type="button" class="btn green" data-rp="long" ${R.pos || rpBloqueo(R) ? "disabled" : ""}>Comprar</button><button type="button" class="btn red" data-rp="short" ${R.pos || rpBloqueo(R) ? "disabled" : ""}>Vender</button>
+        <button type="button" class="btn" data-rp="promediar" ${R.pos ? "" : "disabled"}>Promediar (+contratos)</button><button type="button" class="btn dark" data-rp="cerrar" ${R.pos ? "" : "disabled"}>Cerrar</button></div>
+      <p class="hint">Tu plan: entrada −${usd(E.lonIni)} / +${usd(Math.round(E.lonIni * E.lonT / E.lonR))}; si promedias, el stop se queda donde estaba y el objetivo pasa a +${usd(E.lonT)} para toda la posición. Nunca más de −${usd(E.lonR)}.</p>
+      <div id="rp-trades">${rpTabla(R)}</div>
+      ${R.trades.length ? `<button type="button" class="btn green" data-rp="guardar" style="margin-top:10px">💾 Guardar la sesión</button>` : ""}` : R.fecha ? '<p class="empty">Cargando las velas…</p>' : ""}</div>
+  ${ses.length ? `<div class="card" style="margin-top:18px"><h3>Tus sesiones de repetición</h3><div class="tablewrap"><table><thead><tr><th>DÍA</th><th>TRADES</th><th>ACIERTO</th><th>RESULTADO</th><th>PLAN</th></tr></thead><tbody>
+    ${ses.slice(0, 20).map((x) => `<tr><td>${esc(dl(x.fecha))}</td><td>${x.n}</td><td>${pctTxt(x.wr)}</td><td class="${cls(x.pnl)}"><b>${sgn(x.pnl)}</b></td><td>${x.bloqueado ? "🔒 llegó al límite" : "✅"}</td></tr>`).join("")}</tbody></table></div>
+    <p class="hint">En total: ${sgn(ses.reduce((a, x) => a + (Number(x.pnl) || 0), 0))} en ${ses.length} ${ses.length === 1 ? "sesión" : "sesiones"}.</p></div>` : ""}`;
+};
+async function rpAccion(d, t) {
+  const R = rpEstado(), [k, v] = String(d.rp).split(":");
+  if (k === "play") { R.play = !R.play; if (R.play) rpTick(); else clearTimeout(S.rpT); rpPintar(); return; }
+  if (k === "vel") { R.vel = Number(v); render(); return; }
+  if (k === "mas") { R.play = false; for (let j = 0; j < Number(v); j++) rpPaso(R); rpPintar(); return; }
+  if (k === "ir") { R.play = false; const j = R.dia ? R.dia.m.findIndex((m) => m >= Number(v)) : -1; if (j >= 0 && !R.pos) R.i = j; render(); return; }
+  if (k === "long" || k === "short") { rpEntrar(R, k === "long" ? "LONG" : "SHORT"); rpPintar(); return; }
+  if (k === "promediar") { rpPromediar(R); rpPintar(); return; }
+  if (k === "cerrar") { rpCerrar(R, R.dia.c[R.i], "manual"); render(); return; }
+  if (k === "guardar") {
+    if (!S.db) return toast("Abre el Plan dentro de Claude para guardar.");
+    const g = estadisticas(R.trades), id = R.fecha + "-" + Date.now().toString(36);
+    await S.db.doc("fm/replay").collection("sesiones").doc(id).set({ fecha: R.fecha, n: R.trades.length, pnl: Math.round(g.total * 100) / 100, wr: g.wr, pf: g.pf === Infinity ? null : g.pf,
+      bloqueado: !!rpBloqueo(R), trades: R.trades, guardada: new Date().toISOString() });
+    toast("Sesión guardada: " + sgn(g.total) + "."); return;
+  }
 }
 // ── render & events ────────────────────────────────────────────
 function render() {
@@ -1099,6 +1303,7 @@ root.addEventListener("click", async (e) => {
   if (d.tab) { S.tab = d.tab; try { localStorage.setItem("pf-tab", S.tab); } catch {} render(); return; }
   if (d.chip) { S.f.chip = d.chip; render(); return; }
   if (d.an) { S.f.an = d.an; render(); return; }
+  if (d.rp) return rpAccion(d, t);
   if (d.anp) { S.f.anp = d.anp; render(); return; }
   if (d.new) return openForm(d.new);
   if (d.edit) return openForm(d.edit, d.id);
@@ -1158,6 +1363,8 @@ root.addEventListener("change", (e) => {
   if (d.rev != null) { const r = S.revisiones.get(t.value); S.rev = { id: t.value, checks: { ...(r?.checks || {}) }, estados: { ...(r?.estados || {}) }, notas: r?.notas || "" }; render(); return; }
 });
 // A risk value typed in the table saves itself a moment later, even if the field is never left (iPad keeps the keyboard up).
+root.addEventListener("input", (e) => { const v = e.target.dataset.rpv; if (v && S.rp && e.target.value !== "") S.rp[v] = Math.max(1, Number(e.target.value) || 1); });
+root.addEventListener("change", (e) => { if (e.target.dataset.rpf === "fecha") rpCargar(e.target.value); });
 root.addEventListener("input", (e) => { const r = e.target.dataset.r; if (r && e.target.type === "number" && e.target.value !== "") { const [id, k] = r.split("."); S.risk[id] = { ...(S.risk[id] || {}), [k]: Number(e.target.value) }; guardarRiesgo(); } });
 root.addEventListener("input", (e) => { if (e.target.dataset.notas != null) revActual().notas = e.target.value; if (e.target.dataset.f === "oq" || e.target.dataset.f === "rq") { S.f[e.target.dataset.f] = e.target.value; const pos = e.target.selectionStart; render(); const el = $(`[data-f="${e.target.dataset.f}"]`); el.focus(); try { el.setSelectionRange(pos, pos); } catch {} } });
 $("#pf-form").addEventListener("submit", saveForm);
@@ -1228,6 +1435,8 @@ window.PLAN = { contexto, render, vista, onCambio: (f) => { oyentes.add(f); retu
   const sub = (col, map) => plan.collection(col).onSnapshot((snap) => { map.clear(); for (const d of snap.docs) map.set(d.id, d.data()); if (col === "revisiones" && S.rev && !S.revisiones.has(S.rev.id)) {} done(col); }, () => done(col));
   btSub(plan);
   sub("grupos", S.grupos); sub("cuentas", S.cuentas); sub("operaciones", S.ops); sub("semanas", S.semanas); sub("revisiones", S.revisiones);
+  db.doc("fm/replay").onSnapshot((snap) => { S.replayIdx = snap.exists ? snap.data() : null; if (S.tab === "replay") render(); }, () => {});
+  db.doc("fm/replay").collection("sesiones").onSnapshot((snap) => { S.rpSes.clear(); for (const d of snap.docs) S.rpSes.set(d.id, d.data()); if (S.tab === "replay") render(); }, () => {});
   db.doc("fm/topstep").onSnapshot((snap) => { S.topstep = snap.exists ? snap.data() : null; done("topstep"); }, () => done("topstep"));
   plan.collection("config").doc("estrategia").onSnapshot((snap) => { S.estrategia = snap.exists ? snap.data() : null; render(); }, () => {});
   plan.collection("config").doc("rotacion").onSnapshot((snap) => { S.rotacion = snap.exists ? snap.data() : null; S.rotacionLista = true; setTimeout(avanzarFoco, 300); render(); }, () => {});

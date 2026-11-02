@@ -116,6 +116,21 @@ async function checkSnapshotContainment() {
 }
 
 /** The Topstep sync may only read: login, account list, trade history, contracts and price bars. Never orders or positions. */
+// The market replay: its Topstep reader can only log in, find the contract and read price bars; New York midnight follows the
+// clock change; a day is packed as minutes since that midnight; the Plan page replays it and blocks like his plan does.
+async function checkReplay() {
+  const rp = await import("./replay-sync.mjs");
+  const allowed = [...rp.READ_ONLY_ENDPOINTS].sort(), want = ["/api/Auth/loginKey", "/api/Contract/search", "/api/History/retrieveBars"];
+  if (JSON.stringify(allowed) !== JSON.stringify(want)) return [false, "replay reader endpoints: " + allowed.join(", ")];
+  const verano = rp.medianocheNY("2026-10-30").toISOString(), invierno = rp.medianocheNY("2026-11-02").toISOString();
+  if (verano !== "2026-10-30T04:00:00.000Z" || invierno !== "2026-11-02T05:00:00.000Z") return [false, "New York midnight: " + verano + " / " + invierno];
+  const d = rp.empaquetar("2026-11-02", "MNQZ6", [{ t: "2026-11-02T14:31:00Z", o: 2, h: 3, l: 1, c: 2.5, v: 9 }, { t: "2026-11-02T14:30:00Z", o: 1, h: 2, l: 0.5, c: 2, v: 5 }]);
+  if (JSON.stringify(d.m) !== "[570,571]" || d.c[0] !== 2 || d.c[1] !== 2.5) return [false, "packed day: " + JSON.stringify(d).slice(0, 160)];
+  const page = fs.readFileSync(new URL("./ipad/plan-futuros.html", import.meta.url), "utf8");
+  for (const s of ['["replay", "⏪ Repetición"]', "V.replay = () =>", "function rpBloqueo(", "Bloqueado por tu plan", "the stop is checked before the target", 'collection("sesiones")'])
+    if (!page.includes(s)) return [false, "replay tab is missing: " + s];
+  return [true, "only login, contract search and bars; NY midnight 04:00Z in summer time, 05:00Z after the change; 9:30 NY is minute 570; the replay tab blocks new trades at the day stop and the consistency cap"];
+}
 async function checkTopstepReadOnly() {
   const ts = await import("./topstep-sync.mjs");
   const allowed = [...ts.READ_ONLY_ENDPOINTS].sort();
@@ -330,6 +345,7 @@ export const CHECKS = [["spoken addresses parse", checkAddresses],
                        ["every digest line names its source", checkDigestAttribution],
                        ["snapshots can't leave the teardowns folder", checkSnapshotContainment],
                        ["Topstep sync is read-only", checkTopstepReadOnly],
+                       ["Market replay reads bars only", checkReplay],
                        ["iPad Jarvis: app stars, Miro read-only", checkIpadApps]];
 
 export async function run() {
