@@ -170,6 +170,12 @@ async function checkTopstepReadOnly() {
   const sinLon = (at) => ts.motorReglas({ estrategia: E0, hoy: "2026-10-29", ahora: at, cuentas: [XL("N1", [])] }).examenes[0].txt;
   if (!sinLon("2026-10-29T08:30:00Z").startsWith("Londres: entra") || !sinLon("2026-10-29T10:30:00Z").includes("Foco en Nueva York (10:30–12:00 de Nueva York, 15:30–17:00 en España)"))
     return [false, "London over with no entry: " + sinLon("2026-10-29T10:30:00Z")];
+  // copied by groups: the MASTER plays no part, and one copied stop counts once for the day and the week
+  const XG = (codigo, grupo, d) => ({ codigo, grupo, tipo: "Challenge", estado: "EXAM", tp: 3000, sl: -2000, dias: { "2026-10-27": d }, tradesHoy: [{ pnl: d, at: "2026-10-27T08:00:00Z" }], pnl: d });
+  const cg = ts.motorReglas({ estrategia: { ...E0, modo: "grupo" }, hoy: "2026-10-27", ahora: "2026-10-27T15:00:00Z",
+    cuentas: [{ ...XG("TS-MASTER", "maestra", -1000), estado: "ACTIVA" }, XG("G1a", "g1", -1000), XG("G1b", "g1", -1000)] });
+  if (cg.examenes.some((x) => x.cuenta === "TS-MASTER") || cg.pausa.stopsHoy !== 1 || cg.pausa.dia || cg.pausa.semana !== -1000)
+    return [false, "copied groups: " + JSON.stringify(cg.pausa) + " " + cg.examenes.map((x) => x.cuenta)];
   // a New York trade with no London entry is called New York, never London
   const sn = ts.motorReglas({ estrategia: E0, hoy: "2026-10-30", ahora: "2026-10-30T15:06:00Z", cuentas: [XL("N2", [{ pnl: -57, at: "2026-10-30T13:31:38Z" }, { pnl: 492, at: "2026-10-30T14:23:32Z" }])] });
   if (!sn.examenes[0].txt.startsWith("✅ Nueva York en +435 $") || sn.avisos.some((a) => /Londres en \+/.test(a.txt)) || !sn.avisos.some((a) => a.key.endsWith(":N2:ny-ok")))

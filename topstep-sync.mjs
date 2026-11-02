@@ -235,6 +235,7 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
   const m = (n) => Math.round(Math.abs(n)).toLocaleString("es-ES", { useGrouping: "always" }) + " $";
   const sg = (n) => (Math.round(n) === 0 ? "" : n < 0 ? "−" : "+") + m(n);
   const viva = (c) => c.estado === "ACTIVA" || c.estado === "EXAM";
+  cuentas = cuentas.filter((c) => c.grupo !== "maestra");        // the MASTER only sends the trade to the copies: it plays no part in the plan
   const out = { examenes: [], fondeadas: [], avisos: [], resumen: "" };
   const av = (k, txt) => out.avisos.push({ key: hoy + ":" + k, txt });
   // margin to the end-of-day trailing floor (Topstep): the floor follows the best closing balance, never above the start
@@ -365,11 +366,17 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
   out.resumen = !info.length ? "" : !partes.length ? "Fondeadas hoy: ninguna cuenta opera." :
     "Fondeadas hoy: " + partes.join(" · ") + "." + (de("A2").length || de("B2").length ? " Cada mitad lleva su propio trade, nunca el mismo en todas." : "");
   // the pause: stops today across all accounts, and the week so far (Monday to today) across all accounts
+  // copied by groups (modo "grupo"), one trade lands in every account of the group: it counts once (a stop, and the group's average P&L)
   const vivas = cuentas.filter(viva), dia = (c, d) => Number((c.dias || {})[d]) || 0;
-  const stopsHoy = vivas.filter((c) => dia(c, hoy) <= -0.9 * (c.tipo === "Fondeada" ? E.fuerteSL : stopDe(c))).length;
+  const unidad = (c) => (E.modo === "grupo" && c.grupo ? "g:" + c.grupo + (c.tipo === "Fondeada" ? ":f" : "") : "c:" + c.codigo);
+  const stopsHoy = new Set(vivas.filter((c) => dia(c, hoy) <= -0.9 * (c.tipo === "Fondeada" ? E.fuerteSL : stopDe(c))).map(unidad)).size;
   const t0 = Date.parse(hoy + "T12:00:00Z"), lunes = new Date(t0 - ((new Date(t0).getUTCDay() + 6) % 7) * 86400000).toISOString().slice(0, 10);
-  const porDia = {};
-  for (const c of vivas) for (const [d, v] of Object.entries(c.dias || {})) if (d >= lunes && d <= hoy) porDia[d] = (porDia[d] || 0) + (Number(v) || 0);
+  const porDia = {}, uds = {};
+  for (const c of vivas) (uds[unidad(c)] ||= []).push(c);
+  for (const cs of Object.values(uds)) {
+    const dias = new Set(cs.flatMap((c) => Object.keys(c.dias || {})).filter((d) => d >= lunes && d <= hoy));
+    for (const d of dias) porDia[d] = (porDia[d] || 0) + cs.reduce((a, c) => a + dia(c, d), 0) / cs.length;
+  }
   const semana = Object.values(porDia).reduce((a, v) => a + v, 0), rojos = Object.values(porDia).filter((v) => v < 0).length;
   out.pausa = { stopsHoy, semana: Math.round(semana), rojos, dia: stopsHoy >= E.pausaStops, semanal: semana <= -E.pausaSemana || rojos >= E.pausaRojos };
   if (out.pausa.dia) av("pausa-dia", "🛑 Hoy llevas " + stopsHoy + " stops entre todas tus cuentas: se acabó el día. No operes Nueva York ni ninguna otra cuenta hasta mañana.");
