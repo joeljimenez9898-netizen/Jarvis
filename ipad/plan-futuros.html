@@ -117,6 +117,53 @@
 .pf .empty { color: var(--faint); padding: 20px 0; text-align: center; }
 .pf .live { font-size: 11px; font-weight: 800; color: #15803d; background: var(--green-bg); border-radius: 6px; padding: 1px 6px; margin-left: 6px; letter-spacing: .06em; }
 .pf svg text { font-family: inherit; }
+/* Hoy operas: one focus card with the numbers, then the groups with their accounts inside */
+.pf .hoy { margin-bottom: 18px; border: 2px solid #22c55e; }
+.pf .hoy-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.pf .hoy-ctl { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.pf .seg.mini button { padding: 6px 11px; font-size: 13px; }
+.pf .seg .seglab { align-self: center; padding: 0 9px; font-size: 11px; font-weight: 800; letter-spacing: .08em; color: var(--muted); background: var(--soft); border-right: 1px solid var(--line); }
+.pf .hero { display: grid; grid-template-columns: minmax(260px, 1fr) 2fr; gap: 18px; background: linear-gradient(135deg, #0f172a, #1e293b); color: #f8fafc; border-radius: 16px; padding: 20px 22px; }
+@media (max-width: 900px) { .pf .hero { grid-template-columns: 1fr; } }
+.pf .eyebrow { font-size: 11px; font-weight: 800; letter-spacing: .16em; color: #86efac; }
+.pf .hero-acc { font-size: 46px; font-weight: 800; letter-spacing: -.03em; line-height: 1.05; margin-top: 4px; }
+.pf .hero-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.pf .tagg, .pf .tagm { font-size: 12px; font-weight: 700; border-radius: 999px; padding: 3px 10px; }
+.pf .tagg { background: #22c55e; color: #052e16; }
+.pf .tagm { background: rgba(148,163,184,.18); color: inherit; border: 1px solid rgba(148,163,184,.35); }
+.pf .hero-st { margin-top: 12px; font-size: 15px; color: #e2e8f0; font-weight: 600; }
+.pf .steps { display: flex; align-items: stretch; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.pf .step { display: grid; gap: 1px; padding: 8px 12px; border-radius: 12px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); min-width: 120px; }
+.pf .step b { font-size: 14px; } .pf .step small { color: #94a3b8; font-size: 12px; } .pf .step em { font-style: normal; font-size: 13px; color: #cbd5e1; }
+.pf .step.now { border-color: #22c55e; box-shadow: 0 0 0 2px rgba(34,197,94,.35); } .pf .step.now em { color: #86efac; font-weight: 800; }
+.pf .step.skip { opacity: .55; } .pf .step.ok em { color: #4ade80; font-weight: 800; } .pf .step.ko em { color: #f87171; font-weight: 800; }
+.pf .arrow { align-self: center; color: #64748b; font-weight: 800; }
+.pf .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; align-content: start; }
+.pf .tile { display: grid; gap: 4px; background: rgba(255,255,255,.96); color: var(--ink); border-radius: 14px; padding: 12px 14px; }
+.pf .tile .tl { font-size: 11px; font-weight: 800; letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
+.pf .tile .tv { font-size: 22px; font-weight: 800; letter-spacing: -.02em; display: flex; flex-wrap: wrap; align-items: baseline; }
+.pf .tile .sl { color: var(--faint); margin: 0 4px; font-weight: 400; }
+.pf .tile .tn { font-size: 12px; color: var(--muted); }
+.pf details.full { margin-top: 8px; } .pf details.full summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.pf details.full p { margin: 8px 0 0; color: var(--ink); font-size: 14px; line-height: 1.5; }
+.pf .gboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; margin-top: 12px; }
+.pf .gbox { border: 1px solid var(--line); background: var(--soft); border-radius: 16px; padding: 14px 16px; }
+.pf .gbox.b { border-color: #fde68a; background: #fffbeb; }
+.pf .gbox-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .pf .gbox-h b { font-size: 16px; letter-spacing: .02em; }
+.pf .gbox-h .tagm { color: var(--muted); } .pf .gbox-h .acts { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.pf .gplan { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+.pf .gstats { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; font-size: 13px; color: var(--muted); } .pf .gstats b { color: var(--ink); }
+.pf .accs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 10px; }
+.pf .acc { display: grid; gap: 5px; text-align: left; border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 10px 12px; cursor: pointer; }
+.pf .acc.foco { border: 2px solid #22c55e; box-shadow: 0 2px 10px rgba(34,197,94,.18); }
+.pf .acc.muerta { opacity: .6; background: #fafafa; }
+.pf .acc.prox { border-style: dashed; background: transparent; cursor: default; color: var(--muted); }
+.pf .acc-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; } .pf .acc-top b { font-size: 16px; }
+.pf .acc-top .live { margin-left: 0; } .pf .acc-top .pill { padding: 1px 7px; font-size: 11px; }
+.pf .acc-pnl { margin-left: auto; font-weight: 800; font-size: 13px; }
+.pf .acc-bar { height: 6px; border-radius: 99px; background: #e2e8f0; overflow: hidden; } .pf .acc-bar i { display: block; height: 100%; border-radius: 99px; }
+.pf .acc-bar i.g { background: #22c55e; } .pf .acc-bar i.r { background: #ef4444; }
+.pf .acc-meta { font-size: 12px; color: var(--faint); } .pf .acc-st { font-size: 13px; font-weight: 700; color: var(--ink); } .pf .acc-when { font-size: 12px; color: var(--muted); }
 </style>
 <div class="pf" id="pf">
   <div class="bar">
@@ -276,32 +323,45 @@ V.dashboard = () => {
     <div class="card"><h3>Resumen de Grupos</h3><p class="hint">Estado actual de cada grupo activo</p>
       ${gs.map((g, i) => { const s = grupoStats(g, days); return `<div class="gcard"><div class="top"><span>${ICONO(g, i)} ${esc(g.nombre)} — ${esc(g.empresa)}</span><span class="${cls(s.total)}">${signed(s.total)}</span></div>
         <div class="meta"><span>Estado <b>${GRUPO_ESTADOS[g.estado] || esc(g.estado)}</b></span><span>Cuentas <b>${s.cs.length}</b></span><span>Verdes <b>${s.verdes}</b></span><span>Rojas <b>${s.rojas}</b></span></div>
-        <div class="meta"><span>Challenge <b>${s.examen ? s.examen + " en examen" : "—"}</b></span></div></div>`; }).join("")}</div>
+        <div class="meta"><span>Challenge <b>${s.examen ? s.examen + " en examen" : "—"}</b></span></div><div class="meta">${s.cs.map((c) => `<span class="pill st-${esc(c.estado)}">${esc(c.codigo)} ${signed(pnl(c))}</span>`).join("") || "Sin cuentas"}</div></div>`; }).join("")}</div>
     <div class="card"><h3>Distribución de cuentas</h3><p class="hint">Por estado actual</p>
       ${donut(ESTADOS.map((e) => ({ name: e, v: cs.filter((c) => c.estado === e).length, color: ESTADO_COLOR[e] })))}</div>
     <div class="card"><h3>P&amp;L acumulado por cuenta</h3><p class="hint">Top cuentas por resultado</p>
       ${top.length ? bars([{ name: "P&L", color: "#22c55e", values: top.map(([, v]) => v) }], top.map(([c]) => c.codigo)) : '<p class="empty">Aún no hay resultados.</p>'}</div>
   </div>`;
 };
+// What each group is for, in a few words
+const papelG = (g) => (g.estado === "MAESTRA" ? "Opera aquí y el copiador manda el trade a las copias" : g.estado === "RESERVA" ? "Reserva: entran cuando una cuenta se quema o pasa"
+  : g.estado === "ACTIVO" ? planCorto(modoG(g.id), est()) : "En pausa");
+// Groups as boxes with their accounts inside: live ones first, then the burned or passed ones, then the ones booked to buy
+function grupoBox(g, days) {
+  const s = grupoStats(g, days), dia = tradingDay(Date.now()), h = g.estado === "ACTIVO" ? hoyOperas() : null;
+  const cs = [...s.cs].sort((a, b) => Number(!vivaC(a)) - Number(!vivaC(b)) || (Number(a.orden) || 0) - (Number(b.orden) || 0));
+  const prox = (S.autoreg?.proximas || []).filter((x) => x && x.grupo === g.id && !cuentas().some((c) => c.codigo === x.codigo));
+  return `<div class="gbox"><div class="gbox-h"><b>${esc(g.nombre)}</b><span class="tagm">${g.estado === "ACTIVO" ? (modoG(g.id) === "londres" ? "Londres + NY" : "2 balas") : GRUPO_ESTADOS[g.estado] || esc(g.estado)}</span>
+      <span class="acts"><span class="${cls(s.total)}" style="font-weight:800">${sgn(s.total)}</span><button class="ico" type="button" data-edit="grupo" data-id="${g.id}" title="Editar grupo">✏️</button></span></div>
+    <p class="gplan">${esc(papelG(g))}</p>
+    <div class="gstats"><span>Vivas <b>${s.activas}</b></span><span>Esta semana <b class="${cls(s.semana)}">${sgn(s.semana)}</b></span><span>Verdes <b>${s.verdes}</b></span><span>Rojas <b>${s.rojas}</b></span>${s.dd ? `<span>Drawdown <b>${s.dd} %</b></span>` : ""}${g.ratio ? `<span>Copia <b>${esc(g.ratio)}</b></span>` : ""}</div>
+    <div class="accs">${cs.map((c) => { const foco = !!(h && h.foco && h.foco.cuentas.some((y) => y.id === c.id)), n = vivaC(c) ? tradesDia(c, dia).length : 0;
+        return cuentaChip(c, { foco, estado: !h || !vivaC(c) ? "" : foco ? "▶ Hoy en foco" : n ? sgn(tradesDia(c, dia).reduce((a, y) => a + y.pnl, 0)) + " hoy" : "En espera",
+          cuando: c.quemada ? "quemada el " + c.quemada.split("-").reverse().join("/") : "" }); }).join("")}
+      ${prox.map((x) => `<div class="acc prox"><span class="acc-top"><b>${esc(x.codigo)}</b></span><span class="acc-meta">por comprar${x.estado ? " · " + esc(x.estado) : ""}</span><span class="acc-when">Jarvis la registra aquí sola</span></div>`).join("")}
+      ${!cs.length && !prox.length ? '<p class="hint" style="margin:0">Sin cuentas.</p>' : ""}</div></div>`;
+}
 V.grupos = () => {
-  const days = dayMap(), gs = grupos().filter((g) => S.f.chip === "todos" || g.id === S.f.chip);
+  const days = dayMap(), rk = { ACTIVO: 0, MAESTRA: 1, PAUSADO: 2, RESERVA: 3 }, gs = grupos().filter((g) => S.f.chip === "todos" || g.id === S.f.chip).sort((a, b) => (rk[a.estado] ?? 2) - (rk[b.estado] ?? 2));
   return `<div class="chips">${[["todos", "Todos"], ...grupos().map((g) => [g.id, g.nombre])].map(([k, n]) => `<button type="button" data-chip="${esc(k)}" aria-pressed="${S.f.chip === k}">${esc(n)}</button>`).join("")}</div>
-  ${hoyHtml()}
-  ${repartoHtml()}
-  <div class="card"><div class="cardhead"><div><h3>Grupos</h3><p class="hint">Máximo 2 grupos activos simultáneos.</p></div><button class="btn green" type="button" data-new="grupo">+ Nuevo grupo</button></div>
-  <div class="tablewrap"><table><thead><tr><th>GRUPO</th><th>EMPRESA</th><th>CUENTAS ACT.</th><th>SUPLENTE</th><th>CUENTAS VERDES</th><th>CUENTAS ROJAS</th><th>P&amp;L SEMANA</th><th>P&amp;L TOTAL</th><th>% DRAWDOWN</th><th>ESTADO</th><th></th></tr></thead><tbody>
-  ${gs.map((g) => { const s = grupoStats(g, days); return `<tr><td><b>${esc(g.nombre)}</b></td><td>${esc(g.empresa)}</td><td>${s.activas}</td><td class="dim">${esc(g.suplente ? cCode(g.suplente) : "—")}</td>
-    <td class="pos"><b>${s.verdes}</b></td><td class="dim">${s.rojas}</td><td class="${cls(s.semana)}"><b>${money(s.semana)}</b></td><td class="${cls(s.total)}"><b>${money(s.total)}</b></td><td>${s.dd}%</td>
-    <td>${GRUPO_ESTADOS[g.estado] || esc(g.estado)}</td><td><button class="ico" type="button" data-edit="grupo" data-id="${g.id}" title="Editar">✏️</button></td></tr>`; }).join("") || '<tr><td colspan="11" class="empty">Sin grupos todavía.</td></tr>'}
-  </tbody></table></div></div>`;
+  <div class="card" style="margin-bottom:18px"><div class="cardhead"><div><h3>Grupos y sus cuentas</h3><p class="hint">Máximo 2 grupos activos simultáneos. Toca una cuenta para editarla o cambiarla de grupo.</p></div><button class="btn green" type="button" data-new="grupo">+ Nuevo grupo</button></div>
+  <div class="gboard" style="margin-top:0">${gs.map((g) => grupoBox(g, days)).join("") || '<p class="empty">Sin grupos todavía.</p>'}</div></div>
+  ${repartoHtml()}`;
 };
 function repartoHtml() {
   const cambios = reparto(), gs = rotan();
-  return `<div class="card" style="margin-bottom:18px"><div class="cardhead"><div><h3>🔀 Grupos automáticos (como en TopStep Squad)</h3>
-    <p class="hint">Jarvis reparte las cuentas vivas entre los grupos que rotan (${esc(gs.map((g) => g.nombre).join(" y ") || "ninguno en ACTIVO")}): primero separa las fondeadas para que un mal día no pille a todas, y luego pone cada examen en el grupo con menos cuentas vivas, mezclando los avanzados con los más frágiles. MAESTRA y SUPLENTES no se tocan. Las cuentas nuevas de Topstep entran solas en el grupo que toca.</p></div>
+  return `<div class="card" style="margin-bottom:18px"><div class="cardhead"><div><h3>🔀 Reparto automático</h3>
+    <p class="hint">Tú eliges en qué grupo va cada cuenta (cada grupo juega su plan). Jarvis solo te propone mover una si un grupo se queda con 2 cuentas más que el otro, y las cuentas nuevas de Topstep entran solas donde las reservaste.</p></div>
     ${cambios.length ? `<button class="btn green" type="button" data-act="repartir">Aplicar el reparto</button>` : ""}</div>
     ${cambios.length ? cambios.map((x) => `<div class="rule"><b>${esc(cCode(x.id))}</b><span class="v">${esc(gName(x.de))} → ${esc(gName(x.a))}</span><span class="n">${esc(S.cuentas.get(x.id)?.tipo || "")} · ${esc(S.cuentas.get(x.id)?.estado || "")}</span></div>`).join("")
-      : '<p class="hint" style="margin:0">✅ Tus grupos ya están repartidos así. Cuando compres cuentas nuevas, Jarvis las coloca solo.</p>'}</div>`;
+      : '<p class="hint" style="margin:0">✅ Tus grupos están equilibrados: no hay nada que mover.</p>'}</div>`;
 }
 function pendientesHtml() {
   const l = sinRegistrar().filter((a) => (S.autoreg?.conocidas || []).includes(a.id));
@@ -640,12 +700,21 @@ function grupoPara(c) {
   return menor(ids, (g) => { const cs = vivas.filter((x) => x.grupo === g); return [c.tipo === "Fondeada" ? cs.filter((x) => x.tipo === "Fondeada").length : 0, cs.length, cs.reduce((a, x) => a + progreso(x), 0)]; });
 }
 function reparto() {
-  const ids = rotan().map((g) => g.id); if (!ids.length) return [];
-  const mov = cuentas().filter((c) => vivaC(c) && ids.includes(c.grupo));
-  const cnt = {}, fond = {}, prog = {}, out = new Map(); ids.forEach((g) => { cnt[g] = fond[g] = prog[g] = 0; });
-  mov.filter((c) => c.tipo === "Fondeada").sort((x, y) => colchon(y) - colchon(x)).forEach((c) => { const g = menor(ids, (g) => [fond[g], cnt[g]]); out.set(c.id, g); fond[g]++; cnt[g]++; });
-  mov.filter((c) => c.tipo !== "Fondeada").sort((x, y) => progreso(y) - progreso(x)).forEach((c) => { const g = menor(ids, (g) => [cnt[g], prog[g]]); out.set(c.id, g); cnt[g]++; prog[g] += progreso(c); });
-  return [...out].filter(([id, g]) => S.cuentas.get(id)?.grupo !== g).map(([id, g]) => ({ id, de: S.cuentas.get(id)?.grupo, a: g }));
+  // Joel chooses his groups (each one plays its own plan): Jarvis only proposes a move when one group has two or more
+  // accounts more than another, first for the funded ones, then for all. It moves the least advanced account, never swaps.
+  const ids = rotan().map((g) => g.id); if (ids.length < 2) return [];
+  const viv = cuentas().filter((c) => vivaC(c) && ids.includes(c.grupo)), pos = new Map(viv.map((c) => [c.id, c.grupo]));
+  const igualar = (cuenta, mueve) => {
+    for (let k = 0; k < 40; k++) {
+      const n = (g) => viv.filter((c) => cuenta(c) && pos.get(c.id) === g).length, s = ids.slice().sort((a, b) => n(b) - n(a)), hi = s[0], lo = s[s.length - 1];
+      if (n(hi) - n(lo) <= 1) return;
+      const c = viv.filter((x) => mueve(x) && pos.get(x.id) === hi).sort((a, b) => progreso(a) - progreso(b) || colchon(a) - colchon(b))[0];
+      if (!c) return; pos.set(c.id, lo);
+    }
+  };
+  igualar((c) => c.tipo === "Fondeada", (c) => c.tipo === "Fondeada");
+  igualar(() => true, (c) => c.tipo !== "Fondeada");
+  return [...pos].filter(([id, g]) => S.cuentas.get(id)?.grupo !== g).map(([id, g]) => ({ id, de: S.cuentas.get(id)?.grupo, a: g }));
 }
 // Topstep: every active account the hourly read finds that isn't in the plan yet. Practice accounts never count.
 const tsTam = (n) => { const m = String(n || "").match(/^(\d+)K/i); return m ? Number(m[1]) * 1000 : 50000; };
@@ -760,7 +829,7 @@ function hoyOperas() {
     const sig = [...resto.filter((u) => u.cuentas[0].grupo === g0), ...resto.filter((u) => u.cuentas[0].grupo !== g0)].find((u) => !tradesDia(u.cuentas[0], dia).length);
     if (sig) { foco = sig; e = estadoU(sig); } }
   const lineas = [];
-  if (lon && foco !== dueno) lineas.push("🛑 " + dueno.nombre + " ha cerrado el día en " + signed(estadoU(dueno).tot) + ": hoy no operes más. Mañana: " + foco.nombre + ".");
+  if (lon && foco !== dueno) lineas.push("🛑 " + dueno.nombre + " ha cerrado el día en " + signed(estadoU(dueno).tot) + ": no operes más en ella hoy. " + (foco.cuentas[0].grupo === dueno.cuentas[0].grupo ? "En Nueva York pasa a " + foco.nombre + ", la otra de su grupo, con el mismo plan." : "Mañana: " + foco.nombre + "."));
   else if (lon) lineas.push("Opera " + (E.modo === "grupo" ? foco.nombre + " (" + foco.cuentas.map((c) => c.codigo).join(", ") + ", copiadas desde la MASTER)" : foco.nombre) + ". " + e.txt);
   else if (usadas >= E.opsDia && e.estado !== "bala2") lineas.push("Por hoy has terminado tus " + E.opsDia + " operaciones. Mañana: " + foco.nombre + ".");
   else lineas.push("Opera " + (E.modo === "grupo" ? foco.nombre + " (" + foco.cuentas.map((c) => c.codigo).join(", ") + ", copiadas desde la MASTER)" : foco.nombre) + ". " + e.txt);
@@ -778,17 +847,90 @@ async function avanzarFoco() {
   try { await S.db.doc("fm/plan").collection("config").doc("rotacion").set({ foco: h.foco.id, dia: h.dia, historial: [...(R.historial || []).slice(-40), { dia: h.dia, de: R.foco || null, a: h.foco.id }] }); }
   catch {} finally { S.rotBusy = false; }
 }
+// The first sentence of an engine line, for the small account cards (the full instruction is shown once, on the focus card).
+const usd = (n) => (n < 0 ? "−" : "") + Math.round(Math.abs(Number(n) || 0)).toLocaleString("es-ES", { useGrouping: "always" }) + " $";
+const sgn = (n) => (Math.round(n) > 0 ? "+" : "") + usd(n);
+const cabeza = (t) => String(t || "").split(/[:.](?=\s|$)/)[0].trim();
+// New York time decides the session: London 2:00–5:00, New York 10:30–12:00 (hours in Spain on this day)
+function sesiones() {
+  const hm = (tz) => { const [h, mi] = new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date()).split(":").map(Number); return h * 60 + mi; };
+  const ny = hm("America/New_York"), dif = (hm("Europe/Madrid") - ny + 1440) % 1440;
+  const hh = (n) => String(Math.floor(n / 60) % 24).padStart(2, "0") + ":" + String(n % 60).padStart(2, "0");
+  return { nyYa: ny >= 300 && ny < 1080, lon: hh(120 + dif) + "–" + hh(300 + dif), ny: hh(630 + dif) + "–" + hh(720 + dif) };
+}
+// One account as a small card: where it stands against its target and what it does today, in a few words
+function cuentaChip(c, { foco = false, estado = "", cuando = "" } = {}) {
+  const p = pnl(c), tp = Number(c.tp) || 0, sl = Math.abs(Number(c.sl) || 0), muerta = !vivaC(c);
+  const w = p >= 0 ? (tp ? Math.min(100, (p / tp) * 100) : 0) : (sl ? Math.min(100, (-p / sl) * 100) : 0);
+  return `<button type="button" class="acc${foco ? " foco" : ""}${muerta ? " muerta" : ""}" data-edit="cuenta" data-id="${esc(c.id)}" title="Editar ${esc(c.codigo)}">
+    <span class="acc-top"><b>${esc(c.codigo)}</b>${foco ? '<span class="live">EN FOCO</span>' : ""}${muerta ? `<span class="pill st-${esc(c.estado)}">${c.estado === "PERDIDA" ? "🔥 quemada" : esc(c.estado)}</span>` : ""}<span class="acc-pnl ${cls(p)}">${sgn(p)}</span></span>
+    <span class="acc-bar"><i class="${p < 0 ? "r" : "g"}" style="width:${w.toFixed(1)}%"></i></span>
+    <span class="acc-meta">${muerta ? "" : tp && c.tipo !== "Fondeada" ? `${p >= 0 ? "faltan " + usd(Math.max(0, tp - p)) : "drawdown " + Math.round(w) + " %"}` : esc(c.tipo || "")}</span>
+    ${estado ? `<span class="acc-st">${esc(estado)}</span>` : ""}${cuando ? `<span class="acc-when">${esc(cuando)}</span>` : ""}</button>`;
+}
+// What the plan of a group is, in one line of numbers
+function planCorto(mo, E) {
+  return mo === "londres" ? `Entra −${usd(E.lonIni)} / +${usd(Math.round(E.lonIni * E.lonT / E.lonR))} · promedia hasta −${usd(E.lonR)} / +${usd(E.lonT)} · NY solo con lo de Londres`
+    : `Bala 1 −${usd(E.b1r)} / +${usd(E.b1t)} · si gana, Bala 2 −${usd(E.b2r)} / +${usd(E.b2t)} justos`;
+}
 function hoyHtml() {
-  const E = est(), h = hoyOperas();
-  return `<div class="card" style="margin-bottom:18px;border:2px solid #22c55e"><div class="cardhead"><div><h3>🎯 Hoy operas</h3><p class="hint">${modosEnUso().map((mo) => (quienes(mo) ? quienes(mo) + " → " : "") + (mo === "londres" ? `Londres: entras arriesgando ${money(E.lonIni)} para ${money(Math.round(E.lonIni * E.lonT / E.lonR))}; si retrocede promedias y el riesgo total sube como máximo a ${money(E.lonR)} para ${money(E.lonT)}${E.lonMax > E.lonT ? `; a +${money(E.lonT)}, si empuja, stop a +${money(E.lonT)} y buscas +${money(E.lonMax)}` : " (1:1)"}; a favor añades contratos. Nueva York solo con lo ganado en Londres, hasta el tope del día. Un stop en Londres cierra el día de esa cuenta.` : `Tu plan de 2 balas: Bala 1 ${money(E.b1r)} para ${money(E.b1t)}; si gana, Bala 2 en la misma cuenta ${money(E.b2r)} para ${money(E.b2t)}, cerrando en +${money(E.b2t)} justos (sin trailing). Si la Bala 1 pierde, esa cuenta para y la siguiente bala va ${E.modo === "grupo" ? "al siguiente grupo" : "a la siguiente cuenta"}.`)).join(" ")}</p>
-      ${rotan().length > 1 ? rotan().map((g) => `<div class="seg" style="margin-top:6px"><span class="hint" style="align-self:center;margin:0 8px 0 0">${esc(g.nombre)}</span><button type="button" data-gmodo="${g.id}:londres" aria-pressed="${modoG(g.id) === "londres"}">Londres + Nueva York</button><button type="button" data-gmodo="${g.id}:balas" aria-pressed="${modoG(g.id) !== "londres"}">2 balas</button></div>`).join("")
-        : `<div class="seg" style="margin-top:6px"><button type="button" data-ver="exModo:londres" aria-pressed="${E.exModo === "londres"}">Londres + Nueva York</button><button type="button" data-ver="exModo:balas" aria-pressed="${E.exModo !== "londres"}">2 balas</button></div>`}</div>
-    <div class="seg"><button type="button" data-modo="individual" aria-pressed="${E.modo === "individual"}">Cuenta a cuenta</button><button type="button" data-modo="grupo" aria-pressed="${E.modo === "grupo"}">Por grupos (copiadas)</button></div></div>
-    ${h.lineas.map((l) => `<div class="banner ok" style="margin-bottom:8px">${esc(l)}</div>`).join("")}
-    <button type="button" class="btn" data-bt="ir-consulta" style="margin:0 0 12px">🔎 ¿Puedo entrar? Foto del gráfico al profesor</button>
-    ${h.unidades.length || cercaB().length ? `<div class="tablewrap"><table><thead><tr><th>${E.modo === "grupo" ? "GRUPO" : "CUENTA"}</th><th>HOY</th></tr></thead><tbody>${cercaB().map((x) => `<tr><td><b>${esc(x.cuenta)}</b> <span class="live">GRUPO B</span><br><small class="dim">${esc(x.cuenta + " " + signed(x.pnl))}</small></td><td style="white-space:normal">${esc(x.txt)}</td></tr>`).join("")}${h.unidades.map(({ u, e }) => `<tr><td><b>${esc(u.nombre)}</b>${h.foco && u.id === h.foco.id ? ' <span class="live">EN FOCO</span>' : ""}<br><small class="dim">${esc(u.cuentas.map((c) => c.codigo + " " + signed(pnl(c))).join(" · "))}</small></td><td style="white-space:normal">${esc(e.txt)}</td></tr>`).join("")}</tbody></table></div>` : ""}
-    ${h.fondeadas.length ? `<div class="sec" style="margin-top:16px">FONDEADAS · GRUPO A (DÍA GRANDE) + GRUPO B (DÍAS MÍNIMOS)</div><p class="hint">${esc(motor().resumen)}</p>${[...h.fondeadas].sort((a, b) => (a.grupo || "Z").localeCompare(b.grupo || "Z")).map((f) => `<div class="rule"><b>${esc(f.cuenta)}${f.grupo ? ` <span class="live">${esc(f.grupo)}</span>` : ""}</b><span class="v" style="grid-column:span 2">${esc(f.txt)}</span></div>`).join("")}` : ""}
-    <details style="margin-top:12px"><summary class="hint" style="cursor:pointer">Ajustar la estrategia</summary><div class="filters" style="margin-top:10px">
+  const E = est(), h = hoyOperas(), m = motor(), ses = sesiones(), dia = h.dia || tradingDay(Date.now());
+  const fc = h.foco && h.foco.cuentas[0], x = fc && m.examenes.find((y) => y.cuenta === fc.codigo), lon = fc && modoG(fc.grupo) === "londres";
+  const nTr = fc ? tradesDia(fc, dia).length : 0, tope = fc ? (Number(fc.tp) || 3000) * E.consistencia / 100 : 0;
+  const modos = rotan().length > 1
+    ? rotan().map((g) => `<span class="seg mini"><span class="seglab">${esc(g.nombre)}</span><button type="button" data-gmodo="${g.id}:londres" aria-pressed="${modoG(g.id) === "londres"}">Londres + NY</button><button type="button" data-gmodo="${g.id}:balas" aria-pressed="${modoG(g.id) !== "londres"}">2 balas</button></span>`).join("")
+    : `<span class="seg mini"><button type="button" data-ver="exModo:londres" aria-pressed="${E.exModo === "londres"}">Londres + NY</button><button type="button" data-ver="exModo:balas" aria-pressed="${E.exModo !== "londres"}">2 balas</button></span>`;
+  // the focus: one big card with the session, the numbers and the full instruction once
+  let hero = "";
+  if (fc) {
+    const L = x ? x.londres : 0, hecho = (v) => (v > 0 ? "ok" : v < 0 ? "ko" : "");
+    const pasos = lon
+      ? [["🇬🇧 Londres", ses.lon, nTr && x && L !== 0 ? sgn(L) : ses.nyYa ? "sin entrada" : "ahora", nTr && L !== 0 ? hecho(L) : ses.nyYa ? "skip" : "now"],
+         ["🗽 Nueva York", ses.ny, x && x.hoy !== L ? sgn(x.hoy - L) : ses.nyYa ? "ahora" : "después", x && x.hoy !== L ? hecho(x.hoy - L) : ses.nyYa ? "now" : ""]]
+      : [["Bala 1", "", h.e.estado === "bala1" ? "ahora" : nTr ? sgn(tradesDia(fc, dia)[0].pnl) : "", h.e.estado === "bala1" ? "now" : nTr ? hecho(tradesDia(fc, dia)[0].pnl) : ""],
+         ["Bala 2", "", h.e.estado === "bala2" ? "ahora" : nTr > 1 ? sgn(tradesDia(fc, dia)[1].pnl) : "si gana la 1", h.e.estado === "bala2" ? "now" : nTr > 1 ? hecho(tradesDia(fc, dia)[1].pnl) : ""]];
+    // after a stop, who takes the turn: the other account of the same group first
+    const otra = h.unidades.map(({ u }) => u).find((u) => u !== h.foco && u.cuentas[0].grupo === fc.grupo && !tradesDia(u.cuentas[0], dia).length)
+      || h.unidades.map(({ u }) => u).find((u) => u !== h.foco && !tradesDia(u.cuentas[0], dia).length);
+    const tiles = lon
+      ? [["Entrada", `−${usd(E.lonIni)}`, `+${usd(Math.round(E.lonIni * E.lonT / E.lonR))}`, "2–3 contratos · 1:1"],
+         ["Promediando", `−${usd(E.lonR)}`, `+${usd(E.lonT)}`, "nunca más de −" + usd(E.lonR)],
+         ["Tope del día", "", `+${usd(tope)}`, "consistencia " + E.consistencia + " %"]]
+      : [["Bala 1", `−${usd(E.b1r)}`, `+${usd(E.b1t)}`, "si pierde, para"], ["Bala 2", `−${usd(E.b2r)}`, `+${usd(E.b2t)}`, "cierra justo, sin trailing"],
+         ["Tope del día", "", `+${usd(tope)}`, "consistencia " + E.consistencia + " %"]];
+    // a stop already today: a second one ends the day (London plan); otherwise, who takes the turn
+    const yaStop = h.unidades.some(({ u, e }) => u !== h.foco && tradesDia(u.cuentas[0], dia).length && (e.estado === "stop" || e.tot < 0));
+    if (lon && yaStop) tiles.push(["Si hace stop", "", "Día acabado", "segundo stop de hoy: no operes más"]);
+    else if (otra && (!lon || otra.cuentas[0].grupo === fc.grupo)) tiles.push([lon ? (ses.nyYa || nTr ? "Si hace stop" : "Si hace stop en Londres") : "Si la Bala 1 pierde", "", otra.nombre, lon ? "opera en Nueva York, mismo plan" : "la siguiente bala va ahí"]);
+    const estado = !nTr && lon ? (ses.nyYa ? "Londres ya pasó sin entrada · toca Nueva York" : "Toca Londres") : cabeza(h.e.txt);
+    hero = `<div class="hero">
+      <div class="hero-l"><div class="eyebrow">OPERA HOY</div><div class="hero-acc">${esc(h.foco.nombre)}</div>
+        <div class="hero-tags"><span class="tagg">${esc(gName(fc.grupo))}</span><span class="tagm">${lon ? "Londres + Nueva York" : "2 balas"}</span>${E.modo === "grupo" ? `<span class="tagm">copiadas: ${esc(h.foco.cuentas.map((c) => c.codigo).join(", "))}</span>` : ""}</div>
+        <div class="hero-st">${esc(estado)}</div>
+        <div class="steps">${pasos.map(([n, hr, v, k], i) => `${i ? '<span class="arrow">→</span>' : ""}<span class="step ${k}"><b>${n}</b>${hr ? `<small>${hr}</small>` : ""}<em>${esc(v)}</em></span>`).join("")}</div></div>
+      <div class="tiles">${tiles.map(([t, r, g, n]) => `<div class="tile"><span class="tl">${esc(t)}</span><span class="tv">${r ? `<span class="neg">${esc(r)}</span><span class="sl">/</span>` : ""}<span class="${r || /^\+/.test(g) ? "pos" : ""}">${esc(g)}</span></span><span class="tn">${esc(n)}</span></div>`).join("")}</div>
+    </div>
+    <details class="full"><summary>Instrucción completa</summary><p>${esc(h.e.txt)}</p></details>`;
+  }
+  const otras = fc ? h.lineas.filter((l) => !l.startsWith("Opera ")) : h.lineas;
+  // every group that rotates, with its plan and its accounts inside
+  const cerca = new Set(cercaB().map((y) => y.cuenta));
+  const tablero = rotan().map((g) => {
+    const cs = cuentas().filter((c) => c.grupo === g.id && vivaC(c) && !cerca.has(c.codigo)), mo = modoG(g.id);
+    return `<div class="gbox"><div class="gbox-h"><b>${esc(g.nombre)}</b><span class="tagm">${mo === "londres" ? "Londres + NY" : "2 balas"}</span></div>
+      <p class="gplan">${esc(planCorto(mo, E))}</p>
+      <div class="accs">${cs.map((c) => { const u = h.unidades.find(({ u }) => u.cuentas.some((y) => y.id === c.id)), n = tradesDia(c, dia).length, esFoco = !!(h.foco && h.foco.cuentas.some((y) => y.id === c.id));
+        return cuentaChip(c, { foco: esFoco, estado: esFoco ? "▶ Ahora" : n && u ? cabeza(u.e.txt) : "En espera" }); }).join("") || '<p class="hint">Sin cuentas vivas.</p>'}</div></div>`; }).join("");
+  const grupoB = cercaB().length ? `<div class="gbox b"><div class="gbox-h"><b>GRUPO B · cerca de pasar</b><span class="tagm">aparte, conservador</span></div>
+      <div class="accs">${cercaB().map((y) => { const c = cuentas().find((z) => z.codigo === y.cuenta); return c ? cuentaChip(c, { estado: cabeza(y.txt) }) : ""; }).join("")}</div></div>` : "";
+  return `<div class="card hoy"><div class="hoy-head"><h3>🎯 Hoy operas</h3>
+      <div class="hoy-ctl">${modos}<span class="seg mini"><button type="button" data-modo="individual" aria-pressed="${E.modo === "individual"}">Cuenta a cuenta</button><button type="button" data-modo="grupo" aria-pressed="${E.modo === "grupo"}">Por grupos (copiadas)</button></span></div></div>
+    ${hero}
+    ${otras.map((l) => `<div class="banner ok" style="margin:10px 0 0">${esc(l)}</div>`).join("")}
+    <button type="button" class="btn" data-bt="ir-consulta" style="margin:14px 0 4px">🔎 ¿Puedo entrar? Foto del gráfico al profesor</button>
+    ${tablero || grupoB ? `<div class="sec">TUS GRUPOS HOY</div><div class="gboard">${tablero}${grupoB}</div>` : ""}
+    ${h.fondeadas.length ? `<div class="sec">FONDEADAS · GRUPO A (DÍA GRANDE) + GRUPO B (DÍAS MÍNIMOS)</div><p class="hint">${esc(m.resumen)}</p>${[...h.fondeadas].sort((a, b) => (a.grupo || "Z").localeCompare(b.grupo || "Z")).map((f) => `<div class="rule"><b>${esc(f.cuenta)}${f.grupo ? ` <span class="live">${esc(f.grupo)}</span>` : ""}</b><span class="v" style="grid-column:span 2">${esc(f.txt)}</span></div>`).join("")}` : ""}
+    <details style="margin-top:14px"><summary class="hint" style="cursor:pointer">Ajustar la estrategia</summary><div class="filters" style="margin-top:10px">
       ${[...(modosEnUso().includes("londres") ? [["lonIni", "Londres · riesgo de entrada"], ["lonR", "Londres · riesgo máximo promediando"], ["lonT", "Londres · objetivo promediando"], ["lonMax", "Londres · buscar con trailing"]] : []),
         ...(modosEnUso().includes("balas") ? [["b1r", "Bala 1 · riesgo"], ["b1t", "Bala 1 · objetivo"], ["b2r", "Bala 2 · riesgo"], ["b2t", "Bala 2 · objetivo"], ["opsDia", "Operaciones al día"]] : []), ["examCerca", "Examen · grupo B desde (+$)"], ["cercaR", "Grupo B · riesgo"], ["fuerteSL", "Día grande · riesgo"], ["fuerteTP", "Día grande · objetivo"], ["minimoSL", "Día mínimo · riesgo"], ["minimo", "Día mínimo · ganar"], ["recupR", "Recuperación · riesgo"], ["diasPayout", "Días mínimos tras el día grande"], ["pausaStops", "Pausa · stops en un día"], ["pausaSemana", "Pausa · pérdida en la semana"], ["pausaRojos", "Pausa · días en rojo"]]
         .map(([k, l]) => `<label style="display:grid;gap:4px;font-size:12px;color:var(--muted)">${l}<input type="number" data-est="${k}" value="${E[k]}" style="width:120px"></label>`).join("")}</div></details></div>`;

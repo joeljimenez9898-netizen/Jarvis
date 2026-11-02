@@ -266,6 +266,12 @@ async function checkIpadApps() {
     if (!page.includes(">Caminoalmillon <span>") || !page.includes('"CAMINOALMILLON"') || !page.includes("window.PLAN && window.PLAN.onCambio") || !page.includes("setModo: (g, v) => guardarEst"))
       wrongSym.push("Caminoalmillon (the squad panel) must show the Plan de Futuros plan itself: same engine, groups, strategies and settings");
     if (!page.includes("after a stop the turn goes to an untraded unit, the same group first")) wrongSym.push("Hoy operas: after a stop, the other account of the same group takes the turn first");
+    if (!page.includes('<div class="hero">') || !page.includes("TUS GRUPOS HOY") || !page.includes("function cuentaChip(") || !page.includes('<details class="full"><summary>Instrucción completa'))
+      wrongSym.push("Hoy operas: one focus card (session steps + number tiles, the full instruction once) and every group with its accounts inside");
+    if (!page.includes("function grupoBox(") || !page.includes("Grupos y sus cuentas") || !page.includes("por comprar"))
+      wrongSym.push("Grupos: each group shows its accounts (live, burned and booked to buy) instead of a table of counts");
+    if (!page.includes("only proposes a move when one group has two or more") || !page.includes("if (n(hi) - n(lo) <= 1) return;"))
+      wrongSym.push("Reparto: Jarvis must not swap the accounts Joel placed in his groups; it only evens out a gap of two or more");
     if (!page.includes("places Joel booked ahead (autoregistro.proximas)") || !page.includes("update({ proximas: prox })")) wrongSym.push("New Topstep accounts: the next ones bought take the names and groups Joel booked ahead");
     if (!page.includes("if the focus account sat it out and another one won, that one is today's focus")) wrongSym.push("Hoy operas: the focus must follow the account he actually traded and won with");
     if (!page.includes("function guardarRiesgo(") || !page.includes("S.renderLuego")) wrongSym.push("Plan de Futuros: risk limits must save themselves when changed, without being lost to a re-render");
