@@ -254,6 +254,7 @@ async function checkIpadApps() {
     if (!page.includes('id="sq-host"') || !page.includes('id="os-sq"') || !page.includes('id="sq-open"') || !page.includes("window.__SQ_FEED")) wrongSym.push("Jarvis: the TopStep Squad panel (published from another conversation) must stay in the build");
     if (!page.includes(">Caminoalmillon <span>") || !page.includes('"CAMINOALMILLON"') || !page.includes("window.PLAN && window.PLAN.onCambio") || !page.includes("setModo: (g, v) => guardarEst"))
       wrongSym.push("Caminoalmillon (the squad panel) must show the Plan de Futuros plan itself: same engine, groups, strategies and settings");
+    if (!page.includes("places Joel booked ahead (autoregistro.proximas)") || !page.includes("update({ proximas: prox })")) wrongSym.push("New Topstep accounts: the next ones bought take the names and groups Joel booked ahead");
     if (!page.includes("if the focus account sat it out and another one won, that one is today's focus")) wrongSym.push("Hoy operas: the focus must follow the account he actually traded and won with");
     if (!page.includes("function guardarRiesgo(") || !page.includes("S.renderLuego")) wrongSym.push("Plan de Futuros: risk limits must save themselves when changed, without being lost to a re-render");
     if (!page.includes("async function autoRegistro(") || !page.includes("function reparto()") || !page.includes('data-act="repartir"') || !page.includes("tsTipo")) wrongSym.push("Plan de Futuros: new Topstep accounts must register themselves and groups must be split like TopStep Squad");

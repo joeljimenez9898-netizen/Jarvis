@@ -658,12 +658,16 @@ function sinRegistrar() {
 }
 async function registrarTs(lista) {
   let n = Math.max(0, ...cuentas().map((c) => Number((String(c.codigo).match(/^TS-(\d+)$/i) || [])[1]) || 0));
-  const hechas = [];
+  const hechas = [], usados = new Set(cuentas().map((c) => String(c.codigo)));
+  // places Joel booked ahead (autoregistro.proximas): the next accounts bought take these names, groups and states, in order
+  const prox = [...(S.autoreg?.proximas || [])].filter((x) => x && x.codigo && !usados.has(String(x.codigo)));
   for (const a of lista) {
-    const tam = tsTam(a.nombre), tipo = tsTipo(a.nombre), r = REGLAS_TS[tam] || { tp: tam * 0.06, sl: -tam * 0.04 };
-    const c = { codigo: "TS-" + ++n, empresa: "TopStep", tipo, estado: tipo === "Fondeada" ? "ACTIVA" : "EXAM", balanceIni: tam, pnl: 0, tp: r.tp, sl: r.sl,
-                topstepId: String(a.id), orden: 100 + n, origen: "Topstep (automática)", registrada: iso(new Date()) };
-    c.grupo = grupoPara(c);
+    const tam = tsTam(a.nombre), tipo = tsTipo(a.nombre), r = REGLAS_TS[tam] || { tp: tam * 0.06, sl: -tam * 0.04 }, res = prox.shift();
+    if (!res) do n++; while (usados.has("TS-" + n));
+    const codigo = res ? String(res.codigo) : "TS-" + n; usados.add(codigo);
+    const c = { codigo, empresa: "TopStep", tipo, estado: res?.estado || (tipo === "Fondeada" ? "ACTIVA" : "EXAM"), balanceIni: tam, pnl: 0, tp: r.tp, sl: r.sl,
+                topstepId: String(a.id), orden: 100 + (Number(codigo.replace(/\D/g, "")) || n), origen: "Topstep (automática)", registrada: iso(new Date()) };
+    c.grupo = (res?.grupo && S.grupos.get(res.grupo) ? res.grupo : "") || grupoPara(c);
     // limits: the same as an account of its size already in that group (what Joel set there), else from the group's copy ratio
     const par = cuentas().find((x) => x.grupo === c.grupo && Number(x.balanceIni) === tam && x.dll != null && vivaC(x));
     const m = multTxt(S.grupos.get(c.grupo)), k = (parseFloat(m) || 1) * tam / 50000;
@@ -676,6 +680,7 @@ async function registrarTs(lista) {
       topstepId: String(a.id), dias: [1, 2, 3, 4, 5], creado: new Date().toISOString(), origen: "Topstep (automática)" });
     S.cuentas.set("ts-auto-" + a.id, c); hechas.push(c);
   }
+  if ((S.autoreg?.proximas || []).length) await S.db.doc("fm/plan").collection("config").doc("autoregistro").update({ proximas: prox });
   return hechas;
 }
 // Accounts bought from now on register themselves; the ones that were already unlinked when this started wait in Cuentas for a tap.
