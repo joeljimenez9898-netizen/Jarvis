@@ -164,6 +164,25 @@
 .pf .acc-bar { height: 6px; border-radius: 99px; background: #e2e8f0; overflow: hidden; } .pf .acc-bar i { display: block; height: 100%; border-radius: 99px; }
 .pf .acc-bar i.g { background: #22c55e; } .pf .acc-bar i.r { background: #ef4444; }
 .pf .acc-meta { font-size: 12px; color: var(--faint); } .pf .acc-st { font-size: 13px; font-weight: 700; color: var(--ink); } .pf .acc-when { font-size: 12px; color: var(--muted); }
+/* Análisis */
+.pf .plan-ok { margin-bottom: 4px; }
+.pf .racha { display: grid; grid-template-columns: auto 1fr auto; gap: 24px; align-items: center; }
+@media (max-width: 900px) { .pf .racha { grid-template-columns: 1fr; } }
+.pf .racha .big { font-size: 56px; font-weight: 800; letter-spacing: -.04em; color: var(--green); line-height: 1; margin-right: 10px; }
+.pf .racha .big2 { font-size: 30px; font-weight: 800; letter-spacing: -.02em; display: block; }
+.pf .racha .lab { color: var(--muted); font-size: 14px; }
+.pf .meta5 { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; } .pf .meta5 i { width: 34px; height: 12px; border-radius: 99px; background: #e2e8f0; }
+.pf .meta5 i.on { background: #22c55e; } .pf .meta5 span { color: var(--muted); font-size: 14px; margin-left: 8px; }
+.pf .diasplan { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; margin-top: 16px; }
+.pf .dp { display: grid; gap: 3px; border-radius: 12px; padding: 10px 12px; border: 1px solid var(--line); font-size: 13px; }
+.pf .dp.ok { background: #f0fdf4; border-color: #bbf7d0; } .pf .dp.ko { background: #fef2f2; border-color: #fecaca; }
+.pf .dp b { font-size: 14px; } .pf .dp small { color: var(--red); }
+.pf .concl { margin: 8px 0 0; font-size: 15px; line-height: 1.5; }
+.pf .vs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.pf .vsc { display: grid; gap: 4px; background: var(--soft); border: 1px solid var(--line); border-radius: 14px; padding: 16px; font-size: 13px; color: var(--muted); }
+.pf .vsc b { color: var(--ink); font-size: 15px; } .pf .vsc .vv { font-size: 28px; font-weight: 800; letter-spacing: -.02em; }
+.pf .rachab { display: flex; width: 100%; text-align: left; cursor: pointer; margin-bottom: 12px; font: inherit; font-weight: 700; }
+.pf .rachab span { margin-left: auto; opacity: .8; }
 </style>
 <div class="pf" id="pf">
   <div class="bar">
@@ -206,7 +225,7 @@ const ESTADO_COLOR = { ACTIVA: "#22c55e", EXAM: "#eab308", STANDBY: "#94a3b8", P
 const GRUPO_ESTADOS = { MAESTRA: "👑 MAESTRA", ACTIVO: "🔄 ACTIVO", PAUSADO: "⏸️ PAUSADO", RESERVA: "⚪ RESERVA" };
 const ICONO = (g, i) => (g.estado === "MAESTRA" ? "🥇" : i === 1 ? "🥈" : "📊");
 const ACCIONES = ["Liquidar", "Cerrar y bloquear", "Solo alertar"];
-const TABS = [["dashboard", "Dashboard"], ["grupos", "Grupos"], ["cuentas", "Cuentas"], ["operaciones", "Operaciones"], ["semanas", "Semanas"],
+const TABS = [["dashboard", "Dashboard"], ["analisis", "📊 Análisis"], ["grupos", "Grupos"], ["cuentas", "Cuentas"], ["operaciones", "Operaciones"], ["semanas", "Semanas"],
               ["reglas", "Reglas"], ["backtest", "📒 Backtesting"], ["domingo", "📋 Domingo"], ["riesgo", "⚙️ Riesgo"], ["calendario", "📅 Calendario"]];
 
 const S = { tab: "dashboard", grupos: new Map(), cuentas: new Map(), ops: new Map(), semanas: new Map(), revisiones: new Map(), topstep: null,
@@ -310,7 +329,7 @@ V.dashboard = () => {
     values: labels.map((l) => { const w = sem.find((s) => s.semana === l && s.grupo === g.id); return w ? semanaStats(w, days).pnl : 0; }) }));
   const top = cs.map((c) => [c, pnl(c)]).filter(([, v]) => v).sort((a, b) => b[1] - a[1]).slice(0, 8);
   const alertas = vigil().filter((x) => x.nivel);
-  return hoyHtml() + `<div class="banner ${p.ok ? "ok" : "bad"}">${esc(p.txt)}</div>${alertas.map((x) => `<div class="banner warn">${NIVEL[x.nivel]} · ${esc(x.c.codigo)} lleva ${x.hoy > 0 ? "+" : ""}${money(x.hoy)} hoy</div>`).join("")}
+  return hoyHtml() + rachaHtml() + `<div class="banner ${p.ok ? "ok" : "bad"}">${esc(p.txt)}</div>${alertas.map((x) => `<div class="banner warn">${NIVEL[x.nivel]} · ${esc(x.c.codigo)} lleva ${x.hoy > 0 ? "+" : ""}${money(x.hoy)} hoy</div>`).join("")}
   <div class="grid4">
     <div class="card kpi"><div class="lab">P&amp;L TOTAL SISTEMA <span>💰</span></div><div class="val ${cls(total)}">${money(total)}</div></div>
     <div class="card kpi"><div class="lab">CAPITAL BAJO GESTIÓN <span>🏦</span></div><div class="val blue">${money(cap)}</div></div>
@@ -936,6 +955,125 @@ function hoyHtml() {
         .map(([k, l]) => `<label style="display:grid;gap:4px;font-size:12px;color:var(--muted)">${l}<input type="number" data-est="${k}" value="${E[k]}" style="width:120px"></label>`).join("")}</div></details></div>`;
 }
 
+// ── Análisis: his real trades from Topstep (every account it reads, the old burned exams too) plus the ones he wrote by hand ──
+// Sessions follow the rules engine: before 5:00 New York time it is London, from 5:00 to 18:00 New York.
+const hmNY = (t) => { const [h, m] = new Intl.DateTimeFormat("en-GB", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(t)).split(":").map(Number); return h * 60 + m; };
+const sesionDe = (t) => { if (!t) return ""; const x = hmNY(t); return x >= 300 && x < 1080 ? "ny" : "lon"; };
+const horaES = (t) => Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Madrid", hour: "2-digit", hourCycle: "h23" }).format(new Date(t)));
+function tradesAnalisis() {
+  const plan = new Map(cuentas().filter((c) => c.topstepId).map((c) => [String(c.topstepId), c])), out = [];
+  for (const [id, a] of Object.entries(S.topstep?.cuentas || {})) {
+    const c = plan.get(String(id)), prac = /^PRAC/i.test(a.nombre || "");
+    const nombre = c ? c.codigo : (prac ? "Práctica" : "Examen") + " …" + String(a.nombre || id).slice(-4);
+    for (const t of a.trades || []) out.push({ cuenta: nombre, cid: c ? c.id : "ts:" + id, plan: c || null, prac, pnl: Number(t.pnl) || 0, fecha: t.fecha, at: t.abre || t.cierra, cierra: t.cierra, dir: t.dir, contratos: t.contratos, dur: t.dur });
+  }
+  for (const o of list(S.ops)) { const c = S.cuentas.get(o.cuenta); if (!c || o.fecha == null) continue;
+    out.push({ cuenta: c.codigo, cid: o.cuenta, plan: { id: o.cuenta, ...c }, prac: false, pnl: Number(o.pnl) || 0, fecha: o.fecha, at: o.creado || "", cierra: o.creado || "", dir: o.dir, contratos: o.contratos, manual: true }); }
+  return out.sort((a, b) => ((a.cierra || a.fecha) < (b.cierra || b.fecha) ? -1 : 1));
+}
+function estadisticas(tr) {
+  const w = tr.filter((t) => t.pnl > 0), l = tr.filter((t) => t.pnl < 0), gw = w.reduce((a, t) => a + t.pnl, 0), gl = -l.reduce((a, t) => a + t.pnl, 0);
+  let eq = 0, pico = 0, dd = 0, rw = 0, rl = 0, mw = 0, ml = 0;
+  for (const t of tr) { eq += t.pnl; pico = Math.max(pico, eq); dd = Math.max(dd, pico - eq);
+    if (t.pnl > 0) { rw++; rl = 0; } else if (t.pnl < 0) { rl++; rw = 0; } mw = Math.max(mw, rw); ml = Math.max(ml, rl); }
+  return { n: tr.length, total: eq, wr: tr.length ? w.length / tr.length : null, pf: gl ? gw / gl : gw ? Infinity : null, medG: w.length ? gw / w.length : 0, medP: l.length ? -gl / l.length : 0,
+           esp: tr.length ? eq / tr.length : 0, mejor: tr.length ? Math.max(...tr.map((t) => t.pnl)) : 0, peor: tr.length ? Math.min(...tr.map((t) => t.pnl)) : 0, dd, mw, ml };
+}
+// ── ¿Cumpliste el plan? Each day of each account is checked against his strategy (the plan of that account's group) ──
+function cumplimiento(tr) {
+  const E = est(), dias = new Map();
+  for (const t of tr.filter((x) => !x.prac)) { const k = t.fecha + "|" + t.cid; if (!dias.has(k)) dias.set(k, []); dias.get(k).push(t); }
+  return [...dias.entries()].map(([k, ts_]) => {
+    const [fecha] = k.split("|"), c = ts_[0].plan, mo = c && c.grupo !== "maestra" ? modoG(c.grupo) : "londres", fallos = [];
+    const tot = ts_.reduce((a, t) => a + t.pnl, 0), obj = c && c.grupo !== "maestra" ? Number(c.tp) || 3000 : 3000, tope = obj * E.consistencia / 100;
+    const tol = (v) => v * 1.05;
+    if (mo === "londres") {
+      const lon = ts_.filter((t) => sesionDe(t.at) !== "ny"), ny = ts_.filter((t) => sesionDe(t.at) === "ny"), L = lon.reduce((a, t) => a + t.pnl, 0), N = ny.reduce((a, t) => a + t.pnl, 0);
+      if (ts_.some((t) => t.pnl < -tol(E.lonR))) fallos.push("un trade perdió más de " + usd(E.lonR));
+      if (tot < -tol(E.lonR)) fallos.push("el día pasó del stop de " + usd(E.lonR));
+      if (lon.length && ny.length && L <= 0) fallos.push("operaste Nueva York sin ganancias de Londres");
+      if (lon.length && ny.length && L > 0 && N < -tol(L)) fallos.push("Nueva York perdió más de lo ganado en Londres");
+      if (lon.length && ny.length && L >= 0.9 * E.lonT) fallos.push("seguiste en Nueva York con el objetivo de Londres hecho");
+    } else {
+      const b1 = ts_[0];
+      if (ts_.some((t) => t.pnl < -tol(E.b1r))) fallos.push("una bala perdió más de " + usd(E.b1r));
+      if (b1.pnl < 0 && ts_.length > 1) fallos.push("seguiste operando tras perder la bala 1");
+      if (ts_.length > E.opsDia) fallos.push(ts_.length + " trades: tu plan son " + E.opsDia);
+    }
+    // after a stop, nothing more that day
+    let run = 0, tras = false; for (const t of ts_) { if (run <= -0.9 * (mo === "londres" ? E.lonR : E.b1r)) tras = true; run += t.pnl; }
+    if (tras) fallos.push("seguiste operando después del stop");
+    if (tot > tope * 1.02) fallos.push("pasaste el tope del día (" + usd(tope) + ") por la consistencia");
+    return { fecha, cuenta: ts_[0].cuenta, n: ts_.length, tot, ok: !fallos.length, fallos: [...new Set(fallos)], mo };
+  }).sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : a.cuenta.localeCompare(b.cuenta)));
+}
+// a day counts when every account traded that day kept the plan; the streak runs back from the last traded day
+function rachaPlan(cu) {
+  const porDia = new Map(); for (const d of cu) porDia.set(d.fecha, (porDia.get(d.fecha) ?? true) && d.ok);
+  const dias = [...porDia.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
+  let racha = 0; for (const [, ok] of dias) { if (!ok) break; racha++; }
+  let mejor = 0, r = 0; for (const [, ok] of [...dias].reverse()) { r = ok ? r + 1 : 0; mejor = Math.max(mejor, r); }
+  return { racha, mejor, dias: dias.length, buenos: dias.filter(([, ok]) => ok).length };
+}
+function linea(vals, { h = 220 } = {}) {
+  if (vals.length < 2) return '<p class="empty">Hacen falta al menos 2 trades.</p>';
+  const W = 640, pad = 54, top = 14, bot = 18, ch = h - top - bot, mx = Math.max(0, ...vals), mn = Math.min(0, ...vals), rg = mx - mn || 1;
+  const X = (i) => pad + (i * (W - pad - 10)) / (vals.length - 1), Y = (v) => top + ((mx - v) / rg) * ch;
+  const d = vals.map((v, i) => (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(v).toFixed(1)).join(" "), up = vals[vals.length - 1] >= 0, col = up ? "#16a34a" : "#dc2626";
+  let g = ""; for (let k = 0; k <= 3; k++) { const v = mx - (k * rg) / 3, y = top + (k * ch) / 3; g += `<line x1="${pad}" x2="${W - 10}" y1="${y}" y2="${y}" stroke="#eef2f7"/><text x="${pad - 8}" y="${y + 4}" font-size="12" fill="#64748b" text-anchor="end">${Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + "k" : Math.round(v)}</text>`; }
+  return `<svg viewBox="0 0 ${W} ${h}" width="100%" role="img" aria-label="Curva de resultados">${g}<line x1="${pad}" x2="${W - 10}" y1="${Y(0)}" y2="${Y(0)}" stroke="#cbd5e1"/>
+    <path d="${d} L ${X(vals.length - 1)} ${Y(0)} L ${X(0)} ${Y(0)} Z" fill="${col}" opacity=".08"/><path d="${d}" fill="none" stroke="${col}" stroke-width="2.5" stroke-linejoin="round"/></svg>`;
+}
+const pctTxt = (x) => (x == null ? "—" : Math.round(x * 100) + " %");
+const pfTxt = (x) => (x == null ? "—" : x === Infinity ? "∞" : x.toFixed(2).replace(".", ","));
+// one or two sentences Jarvis reads from the numbers
+function conclusiones(tr) {
+  const out = [], s = (f) => estadisticas(tr.filter(f));
+  const lo = s((t) => sesionDe(t.at) === "lon"), ny = s((t) => sesionDe(t.at) === "ny");
+  if (lo.n >= 5 && ny.n >= 5) { const [a, b, na, nb] = lo.total >= ny.total ? [lo, ny, "Londres", "Nueva York"] : [ny, lo, "Nueva York", "Londres"];
+    out.push(`Ganas más en ${na} (${sgn(a.total)}, acierto ${pctTxt(a.wr)}) que en ${nb} (${sgn(b.total)}, acierto ${pctTxt(b.wr)}).`); }
+  const L = s((t) => t.dir === "LONG"), C = s((t) => t.dir === "SHORT");
+  if (L.n >= 5 && C.n >= 5) out.push(`En largo ${sgn(L.total)} (${pctTxt(L.wr)}), en corto ${sgn(C.total)} (${pctTxt(C.wr)}).`);
+  const g = estadisticas(tr); if (g.n >= 10 && g.medP && Math.abs(g.medP) > 1.5 * g.medG) out.push(`Tus pérdidas medias (${usd(g.medP)}) son mucho mayores que tus ganancias medias (+${usd(g.medG)}): el stop manda más que el objetivo.`);
+  const grandes = tr.filter((t) => t.pnl <= -1900); if (grandes.length) out.push(`${grandes.length} ${grandes.length === 1 ? "trade se llevó" : "trades se llevaron"} la cuenta casi entera (−2.000 $): ${usd(grandes.reduce((a, t) => a + t.pnl, 0))} en total. Con tu stop de −${usd(est().lonR)} no habría pasado.`);
+  return out;
+}
+const AN_PER = [["7", "7 días"], ["30", "30 días"], ["90", "90 días"]];
+V.analisis = () => {
+  const todos = tradesAnalisis(), f = S.f.an || "todas", per = S.f.anp || "90";
+  const desde = iso(new Date(Date.now() - Number(per) * 86400000));
+  const cuentasAn = [...new Set(todos.map((t) => t.cuenta))];
+  const tr = todos.filter((t) => t.fecha >= desde && (f === "todas" || (f === "examenes" ? !t.prac : f === "practica" ? t.prac : t.cuenta === f)));
+  const g = estadisticas(tr), eq = []; tr.reduce((a, t) => (eq.push(a + t.pnl), a + t.pnl), 0);
+  const cu = cumplimiento(todos.filter((t) => t.fecha >= desde)), rp = rachaPlan(cu);
+  const ses = [["lon", "🇬🇧 Londres"], ["ny", "🗽 Nueva York"]].map(([k, n]) => [n, estadisticas(tr.filter((t) => sesionDe(t.at) === k))]);
+  const dsem = ["L", "M", "X", "J", "V"], porDS = dsem.map((_, i) => tr.filter((t) => new Date(t.fecha + "T12:00:00Z").getUTCDay() === i + 1).reduce((a, t) => a + t.pnl, 0));
+  const horas = [...new Set(tr.filter((t) => t.at).map((t) => horaES(t.at)))].sort((a, b) => a - b), porH = horas.map((h) => tr.filter((t) => t.at && horaES(t.at) === h).reduce((a, t) => a + t.pnl, 0));
+  const kpi = (lab, val, c = "", sub = "") => `<div class="card kpi"><div class="lab">${lab}</div><div class="val ${c}">${val}</div>${sub ? `<p class="hint" style="margin-top:6px">${sub}</p>` : ""}</div>`;
+  const chips = (key, cur, opts) => `<div class="chips" style="margin-bottom:10px">${opts.map(([k, n]) => `<button type="button" data-${key}="${esc(k)}" aria-pressed="${cur === k}">${esc(n)}</button>`).join("")}</div>`;
+  return `${chips("an", f, [["todas", "Todas"], ["examenes", "Exámenes"], ["practica", "Práctica (MASTER)"], ...cuentasAn.map((c) => [c, c])])}${chips("anp", per, AN_PER)}
+  <div class="card plan-ok"><div class="cardhead"><div><h3>✅ ¿Cumples el plan?</h3><p class="hint">Cada día de cada examen, comparado con tu estrategia: stop, Nueva York solo con lo de Londres, nada después de un stop y el tope de consistencia.</p></div></div>
+    <div class="racha"><div><span class="big">${rp.racha}</span><span class="lab">${rp.racha === 1 ? "día seguido" : "días seguidos"} cumpliendo</span></div>
+      <div class="meta5">${Array.from({ length: 5 }, (_, i) => `<i class="${i < rp.racha ? "on" : ""}"></i>`).join("")}<span>${rp.racha >= 5 ? "✅ 5 días: ya puedes plantear copiar 2 cuentas" : `Te faltan ${5 - rp.racha} para poder copiar 2 cuentas`}</span></div>
+      <div><span class="big2">${rp.dias ? Math.round((rp.buenos / rp.dias) * 100) + " %" : "—"}</span><span class="lab">días con el plan cumplido (${rp.buenos}/${rp.dias}) · mejor racha ${rp.mejor}</span></div></div>
+    <div class="diasplan">${cu.slice(0, 12).map((d) => `<div class="dp ${d.ok ? "ok" : "ko"}"><b>${d.ok ? "✅" : "❌"} ${d.fecha.split("-").reverse().slice(0, 2).join("/")}</b><span>${esc(d.cuenta)} · ${d.n} ${d.n === 1 ? "trade" : "trades"} · <span class="${cls(d.tot)}">${sgn(d.tot)}</span></span>${d.ok ? "" : `<small>${esc(d.fallos.join(" · "))}</small>`}</div>`).join("") || '<p class="empty">Aún no hay días operados en los exámenes.</p>'}</div></div>
+  <div class="grid4">${kpi("RESULTADO", sgn(g.total), cls(g.total), g.n + " trades")}${kpi("ACIERTO", pctTxt(g.wr), "blue", `ganancia media +${usd(g.medG)} · pérdida media ${usd(g.medP)}`)}${kpi("PROFIT FACTOR", pfTxt(g.pf), g.pf != null && g.pf >= 1 ? "pos" : "neg", "lo ganado ÷ lo perdido")}${kpi("POR TRADE", sgn(g.esp), cls(g.esp), `mejor ${sgn(g.mejor)} · peor ${sgn(g.peor)}`)}</div>
+  <div class="grid4">${kpi("CAÍDA MÁXIMA", usd(-g.dd), "neg", "desde el punto más alto")}${kpi("RACHA GANADORA", g.mw, "pos", "trades seguidos")}${kpi("RACHA PERDEDORA", g.ml, "neg", "trades seguidos")}${kpi("SESIONES", ses.map(([n, s]) => n.split(" ")[0] + " " + s.n).join(" · "), "", "trades por sesión")}</div>
+  ${conclusiones(tr).length ? `<div class="card" style="margin-top:18px"><h3>🧠 Lo que dicen tus números</h3>${conclusiones(tr).map((x) => `<p class="concl">${esc(x)}</p>`).join("")}</div>` : ""}
+  <div class="grid2">
+    <div class="card"><h3>Curva de resultados</h3><p class="hint">Suma de tus trades, uno tras otro</p>${linea(eq)}</div>
+    <div class="card"><h3>Londres contra Nueva York</h3><p class="hint">Cada trade según la hora de Nueva York a la que entró</p>
+      <div class="vs">${ses.map(([n, s]) => `<div class="vsc"><b>${n}</b><span class="vv ${cls(s.total)}">${sgn(s.total)}</span><span>${s.n} trades · acierto ${pctTxt(s.wr)}</span><span>por trade ${sgn(s.esp)} · PF ${pfTxt(s.pf)}</span></div>`).join("")}</div></div>
+    <div class="card"><h3>Por día de la semana</h3>${bars([{ name: "Resultado", color: "#22c55e", values: porDS }], dsem)}</div>
+    <div class="card"><h3>Por hora de entrada (España)</h3>${horas.length ? bars([{ name: "Resultado", color: "#3b82f6", values: porH }], horas.map((h) => h + "h")) : '<p class="empty">Sin horas todavía.</p>'}</div>
+  </div>`;
+};
+// a small line on the dashboard: the plan streak
+function rachaHtml() {
+  const rp = rachaPlan(cumplimiento(tradesAnalisis()));
+  if (!rp.dias) return "";
+  return `<button type="button" class="banner ${rp.racha ? "ok" : "bad"} rachab" data-tab="analisis">${rp.racha ? "✅" : "❌"} Plan cumplido: ${rp.racha} ${rp.racha === 1 ? "día seguido" : "días seguidos"} · ${rp.racha >= 5 ? "ya llevas 5" : "faltan " + (5 - rp.racha) + " para copiar 2 cuentas"} <span>Ver análisis →</span></button>`;
+}
 // ── render & events ────────────────────────────────────────────
 function render() {
   $("#pf-tabs").innerHTML = TABS.map(([k, n]) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${S.tab === k}">${n}</button>`).join("");
@@ -960,6 +1098,8 @@ root.addEventListener("click", async (e) => {
   const d = t.dataset;
   if (d.tab) { S.tab = d.tab; try { localStorage.setItem("pf-tab", S.tab); } catch {} render(); return; }
   if (d.chip) { S.f.chip = d.chip; render(); return; }
+  if (d.an) { S.f.an = d.an; render(); return; }
+  if (d.anp) { S.f.anp = d.anp; render(); return; }
   if (d.new) return openForm(d.new);
   if (d.edit) return openForm(d.edit, d.id);
   if (d.cancel != null) { $("#pf-modal").hidden = true; return; }
