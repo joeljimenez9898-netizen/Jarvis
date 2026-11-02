@@ -427,6 +427,8 @@ V.backtest = () => {
     (S.btCons ? "" : `<div class="card" style="margin-bottom:18px;border:2px solid #0ea5e9"><h3>🔎 ¿Puedo entrar?</h3><p class="hint">En mitad de la sesión, mándale una foto del gráfico (M15 y M5 si quieres, a la vez) y tu profesor te dice, según tu estrategia, si es entrada, si esperar o si no entrar.</p>
       <button type="button" class="btn green" data-bt="consulta" style="margin-top:10px">🔎 Foto del gráfico</button></div>`) + '<input type="file" id="bt-cons" accept="image/*" multiple hidden>' +
     (S.btSubida && !S.btBusy ? btSubidaHtml() : "") + (S.btf ? btFormHtml() : "") + (S.btImp ? btImpHtml() : "") +
+    // the market replay (past MNQ days from Topstep, M1/M5/M15) is part of backtesting: it lives here, not in a tab of its own
+    (typeof replayHtml === "function" ? `<div style="margin-bottom:18px">${replayHtml()}</div>` : "") +
   `<div class="card" style="margin-bottom:18px"><div class="cardhead"><div><h3>📒 Backtesting</h3><p class="hint">Tus pruebas de TradingView (Paper Trading y Bar Replay) y tus operaciones reales. Jarvis guarda set up, día, hora y sesión de cada entrada para decirte qué te funciona y en qué fallas.</p></div></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap"><button type="button" class="btn green" data-bt="nueva">+ Apuntar operación</button>
       <button type="button" class="btn" data-bt="foto">📷 Captura o vídeo</button><button type="button" class="btn" data-bt="csv">⬆️ Importar de TradingView</button>

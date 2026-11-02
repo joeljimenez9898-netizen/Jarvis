@@ -239,7 +239,7 @@ const ESTADO_COLOR = { ACTIVA: "#22c55e", EXAM: "#eab308", STANDBY: "#94a3b8", P
 const GRUPO_ESTADOS = { MAESTRA: "👑 MAESTRA", ACTIVO: "🔄 ACTIVO", PAUSADO: "⏸️ PAUSADO", RESERVA: "⚪ RESERVA" };
 const ICONO = (g, i) => (g.estado === "MAESTRA" ? "🥇" : i === 1 ? "🥈" : "📊");
 const ACCIONES = ["Liquidar", "Cerrar y bloquear", "Solo alertar"];
-const TABS = [["dashboard", "Dashboard"], ["analisis", "📊 Análisis"], ["replay", "⏪ Repetición"], ["grupos", "Grupos"], ["cuentas", "Cuentas"], ["operaciones", "Operaciones"], ["semanas", "Semanas"],
+const TABS = [["dashboard", "Dashboard"], ["analisis", "📊 Análisis"], ["grupos", "Grupos"], ["cuentas", "Cuentas"], ["operaciones", "Operaciones"], ["semanas", "Semanas"],
               ["reglas", "Reglas"], ["backtest", "📒 Backtesting"], ["domingo", "📋 Domingo"], ["riesgo", "⚙️ Riesgo"], ["calendario", "📅 Calendario"]];
 
 const S = { tab: "dashboard", grupos: new Map(), cuentas: new Map(), ops: new Map(), semanas: new Map(), revisiones: new Map(), topstep: null,
@@ -1137,13 +1137,14 @@ function rachaHtml() {
   if (!rp.dias) return "";
   return `<button type="button" class="banner ${rp.racha ? "ok" : "bad"} rachab" data-tab="analisis">${rp.racha ? "✅" : "❌"} Plan cumplido: ${rp.racha} ${rp.racha === 1 ? "día seguido" : "días seguidos"} · ${rp.racha >= 5 ? "ya llevas 5" : "faltan " + (5 - rp.racha) + " para copiar 2 cuentas"} <span>Ver análisis →</span></button>`;
 }
-// ── ⏪ Repetición: a past MNQ day replayed bar by bar (1-minute bars Topstep read, fm/replay/dias), traded with his plan ──
+// ── Repetición de mercado (inside 📒 Backtesting): a past MNQ day replayed bar by bar from the 1-minute bars Topstep read
+// (fm/replay/dias), shown in M1, M5 or M15, traded with his plan. Stops and targets are always checked minute by minute ──
 // MNQ: 2 $ per point per contract. Stop and target are set in dollars for the whole position, as he thinks of them.
 // The plan blocks him like his rules say: past −lonR on the day, or at the consistency cap, no new trades.
 const RP_PUNTO = 2;
 const rpE = () => est();
 function rpEstado() {
-  if (!S.rp) { const E = rpE(); S.rp = { fecha: "", dia: null, i: 0, play: false, vel: 4, pos: null, trades: [], n: 3, riesgo: E.lonIni, obj: Math.round(E.lonIni * E.lonT / E.lonR) }; }
+  if (!S.rp) { const E = rpE(); S.rp = { fecha: "", dia: null, i: 0, play: false, vel: 4, tf: 5, pos: null, trades: [], n: 3, riesgo: E.lonIni, obj: Math.round(E.lonIni * E.lonT / E.lonR) }; }
   return S.rp;
 }
 const rpHora = (R, k) => { const t = Date.parse(R.dia.inicio) + R.dia.m[k] * 60000; return new Intl.DateTimeFormat("es-ES", { timeZone: "Europe/Madrid", hour: "2-digit", minute: "2-digit" }).format(new Date(t)); };
@@ -1185,21 +1186,36 @@ function rpPromediar(R) {
   p.obj = Math.round((p.entrada + s * E.lonT / (n * RP_PUNTO)) * 4) / 4;
 }
 function rpRiesgo(R) { const p = R.pos; return p ? Math.abs(p.entrada - p.stop) * p.n * RP_PUNTO : 0; }
+// candles of the chosen timeframe from the 1-minute bars seen so far: the last one is still forming, as it would live
+function rpAgrupar(R) {
+  const d = R.dia, tf = R.tf || 1, g = [];
+  for (let k = 0; k <= R.i; k++) { const b = Math.floor(d.m[k] / tf), u = g[g.length - 1];
+    if (!u || u.b !== b) g.push({ b, k0: k, k1: k, m: b * tf, o: d.o[k], h: d.h[k], l: d.l[k], c: d.c[k] });
+    else { u.k1 = k; u.h = Math.max(u.h, d.h[k]); u.l = Math.min(u.l, d.l[k]); u.c = d.c[k]; } }
+  return g;
+}
 function rpVelas(R) {
-  const d = R.dia, N = 100, a = Math.max(0, R.i - N + 1), idx = []; for (let k = a; k <= R.i; k++) idx.push(k);
+  const G = rpAgrupar(R), N = R.tf === 15 ? 48 : R.tf === 5 ? 72 : 100, a0 = Math.max(0, G.length - N), V = G.slice(a0);
+  const d = { m: V.map((v) => v.m), o: V.map((v) => v.o), h: V.map((v) => v.h), l: V.map((v) => v.l), c: V.map((v) => v.c) };
+  const a = 0, idx = V.map((_, j) => j), deK = (k) => { const j = V.findIndex((v) => k >= v.k0 && k <= v.k1); return j < 0 ? null : j; };
+  const hora = (j) => { const t = Date.parse(R.dia.inicio) + d.m[j] * 60000; return new Intl.DateTimeFormat("es-ES", { timeZone: "Europe/Madrid", hour: "2-digit", minute: "2-digit" }).format(new Date(t)); };
   const p = R.pos, extra = p ? [p.stop, p.obj, p.entrada] : [];
   const hi = Math.max(...idx.map((k) => d.h[k]), ...extra), lo = Math.min(...idx.map((k) => d.l[k]), ...extra), rg = hi - lo || 1;
+  let s0 = "";
   const W = 1000, H = 380, pr = 70, top = 10, ch = H - 30, cw = (W - pr) / N, Y = (v) => top + ((hi - v) / rg) * (ch - top);
-  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Velas de 1 minuto">`;
+  // his red line: 2:00 New York, when London opens
+  { const j = d.m.findIndex((m) => m >= 120 && m < 120 + (R.tf || 1)); if (j >= 0) s0 = `<line x1="${j * cw}" x2="${j * cw}" y1="0" y2="${ch}" stroke="#dc2626" stroke-width="1.5"/><text x="${j * cw + 4}" y="14" font-size="11" font-weight="700" fill="#dc2626">2:00 NY</text>`; }
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Velas de ${R.tf || 1} minutos">`;
   // sessions: London 2:00–5:00 and New York 9:30–12:00 (New York time)
   for (const [m0, m1, col] of [[120, 300, "rgba(59,130,246,.06)"], [570, 720, "rgba(34,197,94,.07)"]]) {
     const ks = idx.filter((k) => d.m[k] >= m0 && d.m[k] < m1); if (ks.length) s += `<rect x="${(ks[0] - a) * cw}" y="0" width="${ks.length * cw}" height="${ch}" fill="${col}"/>`; }
+  s += s0;
   for (let g = 0; g <= 4; g++) { const v = hi - (g * rg) / 4, y = Y(v); s += `<line x1="0" x2="${W - pr}" y1="${y}" y2="${y}" stroke="#eef2f7"/><text x="${W - pr + 6}" y="${y + 4}" font-size="12" fill="#64748b">${v.toFixed(2)}</text>`; }
   idx.forEach((k, j) => { const up = d.c[k] >= d.o[k], col = up ? "#16a34a" : "#dc2626", x = j * cw + cw / 2, yb = Y(Math.max(d.o[k], d.c[k])), hb = Math.max(1, Math.abs(Y(d.o[k]) - Y(d.c[k])));
     s += `<line x1="${x}" x2="${x}" y1="${Y(d.h[k])}" y2="${Y(d.l[k])}" stroke="${col}"/><rect x="${x - cw * 0.35}" y="${yb}" width="${cw * 0.7}" height="${hb}" fill="${col}"/>`;
-    if (j % 15 === 0) s += `<text x="${x}" y="${H - 8}" font-size="11" fill="#94a3b8" text-anchor="middle">${rpHora(R, k)}</text>`; });
+    if (j % (R.tf === 15 ? 8 : 12) === 0) s += `<text x="${x}" y="${H - 8}" font-size="11" fill="#94a3b8" text-anchor="middle">${hora(j)}</text>`; });
   // his trades on this stretch: ▲/▼ where he went in, ● where he came out
-  for (const t of R.trades) for (const [k, v, ent] of [[t.ka, t.entrada, true], [t.kc, t.salida, false]]) { if (k == null || k < a) continue; const x = (k - a) * cw + cw / 2, y = Y(v);
+  for (const t of R.trades) for (const [k1, v, ent] of [[t.ka, t.entrada, true], [t.kc, t.salida, false]]) { const k = k1 == null ? null : deK(k1); if (k == null) continue; const x = k * cw + cw / 2, y = Y(v);
     s += ent ? `<path d="M ${x - 6} ${t.dir === "LONG" ? y + 12 : y - 12} L ${x + 6} ${t.dir === "LONG" ? y + 12 : y - 12} L ${x} ${y + (t.dir === "LONG" ? 2 : -2)} Z" fill="#2563eb"/>` : `<circle cx="${x}" cy="${y}" r="5" fill="${t.pnl >= 0 ? "#16a34a" : "#dc2626"}" stroke="#fff" stroke-width="2"/>`; }
   if (p) for (const [v, col, lab] of [[p.entrada, "#0f172a", "entrada"], [p.stop, "#dc2626", "stop"], [p.obj, "#16a34a", "objetivo"]])
     s += `<line x1="0" x2="${W - pr}" y1="${Y(v)}" y2="${Y(v)}" stroke="${col}" stroke-dasharray="6 4" stroke-width="1.5"/><text x="6" y="${Y(v) - 4}" font-size="12" font-weight="700" fill="${col}">${lab} ${v.toFixed(2)}</text>`;
@@ -1214,7 +1230,7 @@ function rpInfo(R) {
 }
 // the chart and the numbers are repainted alone while it plays, so the inputs keep their values
 function rpPintar() {
-  const R = S.rp, root = $("#pf"); if (!R || !R.dia || S.tab !== "replay") return;
+  const R = S.rp, root = $("#pf"); if (!R || !R.dia || S.tab !== "backtest") return;
   const g = root.querySelector("#rp-chart"), f = root.querySelector("#rp-info"), t = root.querySelector("#rp-trades");
   if (g) g.innerHTML = rpVelas(R); if (f) f.innerHTML = rpInfo(R); if (t) t.innerHTML = rpTabla(R);
   root.querySelectorAll("[data-rp=long],[data-rp=short]").forEach((x) => { x.disabled = !!(R.pos || rpBloqueo(R)); });
@@ -1237,34 +1253,41 @@ function rpCargar(fecha) {
 }
 function rpTick() {
   clearTimeout(S.rpT); const R = S.rp; if (!R || !R.play) return;
-  if (S.tab !== "replay") { R.play = false; return; }
-  rpPaso(R); rpPintar(); if (R.play) S.rpT = setTimeout(rpTick, Math.max(40, 1000 / R.vel));
+  if (S.tab !== "backtest") { R.play = false; return; }
+  for (let j = 0; j < Math.max(1, Math.round(R.vel / 25)); j++) rpPaso(R);
+  rpPintar(); if (R.play) S.rpT = setTimeout(rpTick, Math.max(40, 1000 / R.vel));
 }
-V.replay = () => {
+function replayHtml() {
   const R = rpEstado(), E = rpE(), fechas = [...(S.replayIdx?.dias || [])].sort().reverse(), ses = [...S.rpSes.values()].sort((a, b) => (a.guardada < b.guardada ? 1 : -1));
   if (!R.fecha && fechas.length) setTimeout(() => rpCargar(fechas[0]), 0);
   const dl = (f) => new Date(f + "T12:00:00Z").toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
-  return `<div class="card"><div class="cardhead"><div><h3>⏪ Repetición de mercado · MNQ 1 minuto</h3><p class="hint">Elige un día pasado, avanza vela a vela y opera tu plan como si fuera en directo. Sin dinero real. Velas de Topstep, de las 0:00 a las 12:00 de Nueva York.</p></div></div>
+  return `<div class="card"><div class="cardhead"><div><h3>⏪ Repetición de mercado · MNQ</h3><p class="hint">Backtesting con velas reales de Topstep: elige un día (${fechas.length} guardados), salta a Londres o a Nueva York, avanza vela a vela y opera tu plan como si fuera en directo. Sin dinero real. De las 0:00 a las 12:00 de Nueva York.</p></div></div>
     ${fechas.length ? `<div class="filters"><select data-rpf="fecha">${fechas.map((f) => `<option value="${f}" ${f === R.fecha ? "selected" : ""}>${dl(f)}</option>`).join("")}</select>
+      <span class="seg mini">${[1, 5, 15].map((v) => `<button type="button" data-rp="tf:${v}" aria-pressed="${(R.tf || 1) === v}">M${v}</button>`).join("")}</span>
       <span class="seg mini"><button type="button" data-rp="ir:120">🇬🇧 Ir a Londres (2:00 NY)</button><button type="button" data-rp="ir:570">🗽 Ir a Nueva York (9:30 NY)</button></span></div>` : '<p class="empty">Aún no hay días guardados para repetir.</p>'}
     ${R.dia ? `<div id="rp-info">${rpInfo(R)}</div><div id="rp-chart" class="rp-chart">${rpVelas(R)}</div>
       <div class="rp-ctl"><button type="button" class="btn dark" data-rp="play">${R.play ? "⏸ Pausa" : "▶ Reproducir"}</button>
-        <span class="seg mini">${[1, 4, 15, 60].map((v) => `<button type="button" data-rp="vel:${v}" aria-pressed="${R.vel === v}">${v}×</button>`).join("")}</span>
-        <button type="button" class="btn small" data-rp="mas:1">+1 vela</button><button type="button" class="btn small" data-rp="mas:5">+5</button><button type="button" class="btn small" data-rp="mas:15">+15</button></div>
+        <span class="seg mini">${[[1, "1×"], [4, "4×"], [15, "15×"], [60, "60×"], [240, "240×"]].map(([v, n]) => `<button type="button" data-rp="vel:${v}" aria-pressed="${R.vel === v}">${n}</button>`).join("")}</span>
+        <button type="button" class="btn small" data-rp="vela:1">+1 vela</button><button type="button" class="btn small" data-rp="vela:5">+5 velas</button><button type="button" class="btn small" data-rp="mas:60">+1 hora</button></div>
       <div class="rp-trade"><label>Contratos<input type="number" min="1" data-rpv="n" value="${R.n}"></label><label>Riesgo $<input type="number" min="10" step="10" data-rpv="riesgo" value="${R.riesgo}"></label><label>Objetivo $<input type="number" min="10" step="10" data-rpv="obj" value="${R.obj}"></label>
         <button type="button" class="btn green" data-rp="long" ${R.pos || rpBloqueo(R) ? "disabled" : ""}>Comprar</button><button type="button" class="btn red" data-rp="short" ${R.pos || rpBloqueo(R) ? "disabled" : ""}>Vender</button>
         <button type="button" class="btn" data-rp="promediar" ${R.pos ? "" : "disabled"}>Promediar (+contratos)</button><button type="button" class="btn dark" data-rp="cerrar" ${R.pos ? "" : "disabled"}>Cerrar</button></div>
       <p class="hint">Tu plan: entrada −${usd(E.lonIni)} / +${usd(Math.round(E.lonIni * E.lonT / E.lonR))}; si promedias, el stop se queda donde estaba y el objetivo pasa a +${usd(E.lonT)} para toda la posición. Nunca más de −${usd(E.lonR)}.</p>
       <div id="rp-trades">${rpTabla(R)}</div>
       ${R.trades.length ? `<button type="button" class="btn green" data-rp="guardar" style="margin-top:10px">💾 Guardar la sesión</button>` : ""}` : R.fecha ? '<p class="empty">Cargando las velas…</p>' : ""}</div>
-  ${ses.length ? `<div class="card" style="margin-top:18px"><h3>Tus sesiones de repetición</h3><div class="tablewrap"><table><thead><tr><th>DÍA</th><th>TRADES</th><th>ACIERTO</th><th>RESULTADO</th><th>PLAN</th></tr></thead><tbody>
+  ${ses.length ? `<div class="card" style="margin:18px 0"><h3>Tus sesiones de repetición</h3><div class="tablewrap"><table><thead><tr><th>DÍA</th><th>TRADES</th><th>ACIERTO</th><th>RESULTADO</th><th>PLAN</th></tr></thead><tbody>
     ${ses.slice(0, 20).map((x) => `<tr><td>${esc(dl(x.fecha))}</td><td>${x.n}</td><td>${pctTxt(x.wr)}</td><td class="${cls(x.pnl)}"><b>${sgn(x.pnl)}</b></td><td>${x.bloqueado ? "🔒 llegó al límite" : "✅"}</td></tr>`).join("")}</tbody></table></div>
     <p class="hint">En total: ${sgn(ses.reduce((a, x) => a + (Number(x.pnl) || 0), 0))} en ${ses.length} ${ses.length === 1 ? "sesión" : "sesiones"}.</p></div>` : ""}`;
-};
+}
 async function rpAccion(d, t) {
   const R = rpEstado(), [k, v] = String(d.rp).split(":");
   if (k === "play") { R.play = !R.play; if (R.play) rpTick(); else clearTimeout(S.rpT); rpPintar(); return; }
   if (k === "vel") { R.vel = Number(v); render(); return; }
+  if (k === "tf") { R.tf = Number(v); render(); return; }
+  if (k === "vela") { R.play = false; const tf = R.tf || 1, fin = R.dia.c.length - 1, g = (j) => Math.floor(R.dia.m[j] / tf);
+    // one candle: finish the one forming, or the next one if this one is already complete
+    for (let j = 0; j < Number(v); j++) { const b = g(R.i), meta = R.i >= fin || g(R.i + 1) !== b ? b + 1 : b; while (R.i < fin && g(R.i + 1) <= meta) rpPaso(R); }
+    rpPintar(); return; }
   if (k === "mas") { R.play = false; for (let j = 0; j < Number(v); j++) rpPaso(R); rpPintar(); return; }
   if (k === "ir") { R.play = false; const j = R.dia ? R.dia.m.findIndex((m) => m >= Number(v)) : -1; if (j >= 0 && !R.pos) R.i = j; render(); return; }
   if (k === "long" || k === "short") { rpEntrar(R, k === "long" ? "LONG" : "SHORT"); rpPintar(); return; }
@@ -1435,8 +1458,8 @@ window.PLAN = { contexto, render, vista, onCambio: (f) => { oyentes.add(f); retu
   const sub = (col, map) => plan.collection(col).onSnapshot((snap) => { map.clear(); for (const d of snap.docs) map.set(d.id, d.data()); if (col === "revisiones" && S.rev && !S.revisiones.has(S.rev.id)) {} done(col); }, () => done(col));
   btSub(plan);
   sub("grupos", S.grupos); sub("cuentas", S.cuentas); sub("operaciones", S.ops); sub("semanas", S.semanas); sub("revisiones", S.revisiones);
-  db.doc("fm/replay").onSnapshot((snap) => { S.replayIdx = snap.exists ? snap.data() : null; if (S.tab === "replay") render(); }, () => {});
-  db.doc("fm/replay").collection("sesiones").onSnapshot((snap) => { S.rpSes.clear(); for (const d of snap.docs) S.rpSes.set(d.id, d.data()); if (S.tab === "replay") render(); }, () => {});
+  db.doc("fm/replay").onSnapshot((snap) => { S.replayIdx = snap.exists ? snap.data() : null; if (S.tab === "backtest") render(); }, () => {});
+  db.doc("fm/replay").collection("sesiones").onSnapshot((snap) => { S.rpSes.clear(); for (const d of snap.docs) S.rpSes.set(d.id, d.data()); if (S.tab === "backtest") render(); }, () => {});
   db.doc("fm/topstep").onSnapshot((snap) => { S.topstep = snap.exists ? snap.data() : null; done("topstep"); }, () => done("topstep"));
   plan.collection("config").doc("estrategia").onSnapshot((snap) => { S.estrategia = snap.exists ? snap.data() : null; render(); }, () => {});
   plan.collection("config").doc("rotacion").onSnapshot((snap) => { S.rotacion = snap.exists ? snap.data() : null; S.rotacionLista = true; setTimeout(avanzarFoco, 300); render(); }, () => {});

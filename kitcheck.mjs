@@ -127,9 +127,12 @@ async function checkReplay() {
   const d = rp.empaquetar("2026-11-02", "MNQZ6", [{ t: "2026-11-02T14:31:00Z", o: 2, h: 3, l: 1, c: 2.5, v: 9 }, { t: "2026-11-02T14:30:00Z", o: 1, h: 2, l: 0.5, c: 2, v: 5 }]);
   if (JSON.stringify(d.m) !== "[570,571]" || d.c[0] !== 2 || d.c[1] !== 2.5) return [false, "packed day: " + JSON.stringify(d).slice(0, 160)];
   const page = fs.readFileSync(new URL("./ipad/plan-futuros.html", import.meta.url), "utf8");
-  for (const s of ['["replay", "⏪ Repetición"]', "V.replay = () =>", "function rpBloqueo(", "Bloqueado por tu plan", "the stop is checked before the target", 'collection("sesiones")'])
-    if (!page.includes(s)) return [false, "replay tab is missing: " + s];
-  return [true, "only login, contract search and bars; NY midnight 04:00Z in summer time, 05:00Z after the change; 9:30 NY is minute 570; the replay tab blocks new trades at the day stop and the consistency cap"];
+  for (const s of ["function replayHtml(", "function rpAgrupar(", "data-rp=\"tf:${v}\"", "function rpBloqueo(", "Bloqueado por tu plan", "the stop is checked before the target", 'collection("sesiones")'])
+    if (!page.includes(s)) return [false, "market replay is missing: " + s];
+  if (page.includes('["replay", ')) return [false, "the market replay must live inside 📒 Backtesting, not in a tab of its own"];
+  const bt = fs.readFileSync(new URL("./ipad/backtest.js", import.meta.url), "utf8");
+  if (!bt.includes("replayHtml()")) return [false, "📒 Backtesting does not show the market replay"];
+  return [true, "only login, contract search and bars; NY midnight 04:00Z in summer time, 05:00Z after the change; 9:30 NY is minute 570; the replay sits in 📒 Backtesting with M1/M5/M15 and blocks new trades at the day stop and the consistency cap"];
 }
 async function checkTopstepReadOnly() {
   const ts = await import("./topstep-sync.mjs");
