@@ -754,7 +754,11 @@ function hoyOperas() {
   // a stop moves the next bullet (and tomorrow's focus) to the next unit that hasn't traded today
   let foco = us[i], e = estadoU(foco);
   const lon = modoG(foco.cuentas[0].grupo) === "londres", dueno = foco;
-  if (e.estado === "stop" || (e.estado === "fin" && e.tot < 0)) { for (let k = 1; k < us.length; k++) { const u = us[(i + k) % us.length]; if (!tradesDia(u.cuentas[0], dia).length) { foco = u; e = estadoU(u); break; } } }
+  // after a stop the turn goes to an untraded unit, the same group first (its other account keeps the group's plan)
+  if (e.estado === "stop" || (e.estado === "fin" && e.tot < 0)) {
+    const resto = Array.from({ length: us.length - 1 }, (_, k) => us[(i + k + 1) % us.length]), g0 = foco.cuentas[0].grupo;
+    const sig = [...resto.filter((u) => u.cuentas[0].grupo === g0), ...resto.filter((u) => u.cuentas[0].grupo !== g0)].find((u) => !tradesDia(u.cuentas[0], dia).length);
+    if (sig) { foco = sig; e = estadoU(sig); } }
   const lineas = [];
   if (lon && foco !== dueno) lineas.push("🛑 " + dueno.nombre + " ha cerrado el día en " + signed(estadoU(dueno).tot) + ": hoy no operes más. Mañana: " + foco.nombre + ".");
   else if (lon) lineas.push("Opera " + (E.modo === "grupo" ? foco.nombre + " (" + foco.cuentas.map((c) => c.codigo).join(", ") + ", copiadas desde la MASTER)" : foco.nombre) + ". " + e.txt);

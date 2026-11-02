@@ -164,7 +164,7 @@ async function checkTopstepReadOnly() {
   const LO = "2026-10-27T08:00:00Z", NYt = "2026-10-27T15:00:00Z", XL = (codigo, t) => ({ ...Ex(codigo, t.map((x) => x.pnl)), tradesHoy: t });
   const ml = ts.motorReglas({ estrategia: E0, hoy: H, ahora: NYt, cuentas: [XL("L1", [{ pnl: 500, at: LO }]), XL("L2", [{ pnl: -1000, at: LO }]), XL("L3", [{ pnl: 600, at: LO }, { pnl: -600, at: NYt }]), XL("L4", [])] });
   const kl = ml.avisos.map((a) => a.key.split(":").slice(1).join(":")).join(" "), l1 = ml.examenes.find((x) => x.cuenta === "L1").txt, l4 = ml.examenes.find((x) => x.cuenta === "L4").txt;
-  if (kl !== "L1:lon-ok L2:lon-ko L3:ny-cero" || !ml.avisos[0].txt.includes("arriesga como máximo 500 $") || !l1.includes("+1.000 $ más") || !l4.includes("arriesgando 500 $ para ganar 500 $ (1:1)") || !l4.includes("sube como máximo a 1.000 $ y el objetivo pasa a 1.000 $") || !l4.includes("Nunca más de −1.000 $ en toda la posición"))
+  if (kl !== "L1:lon-ok L2:lon-ko L3:ny-cero" || !ml.avisos[0].txt.includes("arriesga como máximo 500 $") || !l1.includes("arriesga como máximo 500 $ para ganar 500 $") || !l4.includes("arriesgando 500 $ para ganar 500 $ (1:1)") || !l4.includes("sube como máximo a 1.000 $ y el objetivo pasa a 1.000 $") || !l4.includes("Nunca más de −1.000 $ en toda la posición"))
     return [false, "London + New York: " + kl + " | " + l1];
   // his London hours are 2:00–5:00 New York time: past them with no London entry, the focus is New York (with Spain's hours)
   const sinLon = (at) => ts.motorReglas({ estrategia: E0, hoy: "2026-10-29", ahora: at, cuentas: [XL("N1", [])] }).examenes[0].txt;
@@ -176,6 +176,11 @@ async function checkTopstepReadOnly() {
     cuentas: [{ ...XG("TS-MASTER", "maestra", -1000), estado: "ACTIVA" }, XG("G1a", "g1", -1000), XG("G1b", "g1", -1000)] });
   if (cg.examenes.some((x) => x.cuenta === "TS-MASTER") || cg.pausa.stopsHoy !== 1 || cg.pausa.dia || cg.pausa.semana !== -1000)
     return [false, "copied groups: " + JSON.stringify(cg.pausa) + " " + cg.examenes.map((x) => x.cuenta)];
+  // London's target made: the day is done; a London stop sends New York to the other account of the same group
+  const XN = (codigo, grupo, tr) => ({ codigo, grupo, tipo: "Challenge", estado: "EXAM", tp: 3000, sl: -2000, dias: tr.length ? { "2026-11-03": tr.reduce((a, b) => a + b.pnl, 0) } : {}, tradesHoy: tr, pnl: tr.reduce((a, b) => a + b.pnl, 0) });
+  const lonDe = (tr) => ts.motorReglas({ estrategia: E0, hoy: "2026-11-03", ahora: "2026-11-03T13:00:00Z", cuentas: [XN("TS-2", "g1", tr), XN("TS-3", "g1", []), XN("TS-4", "g2", [])] }).examenes[0].txt;
+  if (!lonDe([{ pnl: 1000, at: "2026-11-03T08:00:00Z" }]).includes("objetivo hecho. Día hecho, cierra") || !lonDe([{ pnl: -1000, at: "2026-11-03T08:00:00Z" }]).includes("En Nueva York puedes operar TS-3, la otra de su grupo"))
+    return [false, "London target / London stop: " + lonDe([{ pnl: -1000, at: "2026-11-03T08:00:00Z" }])];
   // a New York trade with no London entry is called New York, never London
   const sn = ts.motorReglas({ estrategia: E0, hoy: "2026-10-30", ahora: "2026-10-30T15:06:00Z", cuentas: [XL("N2", [{ pnl: -57, at: "2026-10-30T13:31:38Z" }, { pnl: 492, at: "2026-10-30T14:23:32Z" }])] });
   if (!sn.examenes[0].txt.startsWith("✅ Nueva York en +435 $") || sn.avisos.some((a) => /Londres en \+/.test(a.txt)) || !sn.avisos.some((a) => a.key.endsWith(":N2:ny-ok")))
@@ -260,6 +265,7 @@ async function checkIpadApps() {
     if (!page.includes('id="sq-host"') || !page.includes('id="os-sq"') || !page.includes('id="sq-open"') || !page.includes("window.__SQ_FEED")) wrongSym.push("Jarvis: the TopStep Squad panel (published from another conversation) must stay in the build");
     if (!page.includes(">Caminoalmillon <span>") || !page.includes('"CAMINOALMILLON"') || !page.includes("window.PLAN && window.PLAN.onCambio") || !page.includes("setModo: (g, v) => guardarEst"))
       wrongSym.push("Caminoalmillon (the squad panel) must show the Plan de Futuros plan itself: same engine, groups, strategies and settings");
+    if (!page.includes("after a stop the turn goes to an untraded unit, the same group first")) wrongSym.push("Hoy operas: after a stop, the other account of the same group takes the turn first");
     if (!page.includes("places Joel booked ahead (autoregistro.proximas)") || !page.includes("update({ proximas: prox })")) wrongSym.push("New Topstep accounts: the next ones bought take the names and groups Joel booked ahead");
     if (!page.includes("if the focus account sat it out and another one won, that one is today's focus")) wrongSym.push("Hoy operas: the focus must follow the account he actually traded and won with");
     if (!page.includes("function guardarRiesgo(") || !page.includes("S.renderLuego")) wrongSym.push("Plan de Futuros: risk limits must save themselves when changed, without being lost to a re-render");
