@@ -284,8 +284,8 @@ async function checkIpadApps() {
     if (!page.includes(">Caminoalmillon <span>") || !page.includes('"CAMINOALMILLON"') || !page.includes("window.PLAN && window.PLAN.onCambio") || !page.includes("setModo: (g, v) => guardarEst"))
       wrongSym.push("Caminoalmillon (the squad panel) must show the Plan de Futuros plan itself: same engine, groups, strategies and settings");
     if (!page.includes("after a stop the turn goes to an untraded unit, the same group first")) wrongSym.push("Hoy operas: after a stop, the other account of the same group takes the turn first");
-    if (!page.includes('<div class="hero">') || !page.includes("TUS GRUPOS HOY") || !page.includes("function cuentaChip(") || !page.includes('<details class="full"><summary>Instrucción completa'))
-      wrongSym.push("Hoy operas: one focus card (session steps + number tiles, the full instruction once) and every group with its accounts inside");
+    if (!page.includes('<div class="hero">') || page.includes("TUS GRUPOS HOY") || !page.includes("return ahoraHtml() + hoyHtml()") || !page.includes("function cuentaChip(") || !page.includes('<details class="full"><summary>Instrucción completa'))
+      wrongSym.push("Dashboard: «Lo que te toca ahora» first, then one focus card (session steps + number tiles, the full instruction once); the groups live only in Grupos");
     if (!page.includes('["analisis", "📊 Análisis"]') || !page.includes("V.analisis = () =>") || !page.includes("function estadisticas(") || !page.includes("Londres contra Nueva York") || !page.includes("function linea("))
       wrongSym.push("Análisis: his real trades (win rate, profit factor, curve, drawdown, streaks, London vs New York, weekday and hour) must have their own tab");
     if (!page.includes("function cumplimiento(") || !page.includes("function rachaPlan(") || !page.includes("operaste Nueva York sin ganancias de Londres") || !page.includes("seguiste operando después del stop") || !page.includes("rachaHtml() +"))

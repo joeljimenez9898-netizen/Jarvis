@@ -343,7 +343,8 @@ V.dashboard = () => {
     values: labels.map((l) => { const w = sem.find((s) => s.semana === l && s.grupo === g.id); return w ? semanaStats(w, days).pnl : 0; }) }));
   const top = cs.map((c) => [c, pnl(c)]).filter(([, v]) => v).sort((a, b) => b[1] - a[1]).slice(0, 8);
   const alertas = vigil().filter((x) => x.nivel);
-  return hoyHtml() + rachaHtml() + `<div class="banner ${p.ok ? "ok" : "bad"}">${esc(p.txt)}</div>${alertas.map((x) => `<div class="banner warn">${NIVEL[x.nivel]} · ${esc(x.c.codigo)} lleva ${x.hoy > 0 ? "+" : ""}${money(x.hoy)} hoy</div>`).join("")}
+  // what his rules say right now goes first: it is what he has to act on
+  return ahoraHtml() + hoyHtml() + rachaHtml() + `<div class="banner ${p.ok ? "ok" : "bad"}">${esc(p.txt)}</div>${alertas.map((x) => `<div class="banner warn">${NIVEL[x.nivel]} · ${esc(x.c.codigo)} lleva ${x.hoy > 0 ? "+" : ""}${money(x.hoy)} hoy</div>`).join("")}
   <div class="grid4">
     <div class="card kpi"><div class="lab">P&amp;L TOTAL SISTEMA <span>💰</span></div><div class="val ${cls(total)}">${money(total)}</div></div>
     <div class="card kpi"><div class="lab">CAPITAL BAJO GESTIÓN <span>🏦</span></div><div class="val blue">${money(cap)}</div></div>
@@ -946,22 +947,11 @@ function hoyHtml() {
     <details class="full"><summary>Instrucción completa</summary><p>${esc(h.e.txt)}</p></details>`;
   }
   const otras = fc ? h.lineas.filter((l) => !l.startsWith("Opera ")) : h.lineas;
-  // every group that rotates, with its plan and its accounts inside
-  const cerca = new Set(cercaB().map((y) => y.cuenta));
-  const tablero = rotan().map((g) => {
-    const cs = cuentas().filter((c) => c.grupo === g.id && vivaC(c) && !cerca.has(c.codigo)), mo = modoG(g.id);
-    return `<div class="gbox"><div class="gbox-h"><b>${esc(g.nombre)}</b><span class="tagm">${mo === "londres" ? "Londres + NY" : "2 balas"}</span></div>
-      <p class="gplan">${esc(planCorto(mo, E))}</p>
-      <div class="accs">${cs.map((c) => { const u = h.unidades.find(({ u }) => u.cuentas.some((y) => y.id === c.id)), n = tradesDia(c, dia).length, esFoco = !!(h.foco && h.foco.cuentas.some((y) => y.id === c.id));
-        return cuentaChip(c, { foco: esFoco, estado: esFoco ? "▶ Ahora" : n && u ? cabeza(u.e.txt) : "En espera" }); }).join("") || '<p class="hint">Sin cuentas vivas.</p>'}</div></div>`; }).join("");
-  const grupoB = cercaB().length ? `<div class="gbox b"><div class="gbox-h"><b>GRUPO B · cerca de pasar</b><span class="tagm">aparte, conservador</span></div>
-      <div class="accs">${cercaB().map((y) => { const c = cuentas().find((z) => z.codigo === y.cuenta); return c ? cuentaChip(c, { estado: cabeza(y.txt) }) : ""; }).join("")}</div></div>` : "";
   return `<div class="card hoy"><div class="hoy-head"><h3>🎯 Hoy operas</h3>
       <div class="hoy-ctl">${modos}<span class="seg mini"><button type="button" data-modo="individual" aria-pressed="${E.modo === "individual"}">Cuenta a cuenta</button><button type="button" data-modo="grupo" aria-pressed="${E.modo === "grupo"}">Por grupos (copiadas)</button></span></div></div>
     ${hero}
     ${otras.map((l) => `<div class="banner ok" style="margin:10px 0 0">${esc(l)}</div>`).join("")}
     <button type="button" class="btn" data-bt="ir-consulta" style="margin:14px 0 4px">🔎 ¿Puedo entrar? Foto del gráfico al profesor</button>
-    ${tablero || grupoB ? `<div class="sec">TUS GRUPOS HOY</div><div class="gboard">${tablero}${grupoB}</div>` : ""}
     ${h.fondeadas.length ? `<div class="sec">FONDEADAS · GRUPO A (DÍA GRANDE) + GRUPO B (DÍAS MÍNIMOS)</div><p class="hint">${esc(m.resumen)}</p>${[...h.fondeadas].sort((a, b) => (a.grupo || "Z").localeCompare(b.grupo || "Z")).map((f) => `<div class="rule"><b>${esc(f.cuenta)}${f.grupo ? ` <span class="live">${esc(f.grupo)}</span>` : ""}</b><span class="v" style="grid-column:span 2">${esc(f.txt)}</span></div>`).join("")}` : ""}
     <details style="margin-top:14px"><summary class="hint" style="cursor:pointer">Ajustar la estrategia</summary><div class="filters" style="margin-top:10px">
       ${[...(modosEnUso().includes("londres") ? [["lonIni", "Londres · riesgo de entrada"], ["lonR", "Londres · riesgo máximo promediando"], ["lonT", "Londres · objetivo promediando"], ["lonMax", "Londres · buscar con trailing"]] : []),
