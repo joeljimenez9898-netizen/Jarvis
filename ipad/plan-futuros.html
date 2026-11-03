@@ -181,7 +181,11 @@
 .pf .vs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
 .pf .vsc { display: grid; gap: 4px; background: var(--soft); border: 1px solid var(--line); border-radius: 14px; padding: 16px; font-size: 13px; color: var(--muted); }
 .pf .vsc b { color: var(--ink); font-size: 15px; } .pf .vsc .vv { font-size: 28px; font-weight: 800; letter-spacing: -.02em; }
-.pf .rachab { display: flex; width: 100%; text-align: left; cursor: pointer; margin-bottom: 12px; font: inherit; font-weight: 700; }
+.pf .rachab { display: flex; width: 100%; text-align: left; cursor: pointer; margin-bottom: 8px; font: inherit; font-weight: 700; }
+.pf details.ahora { margin-bottom: 18px; border: 2px solid #f59e0b; } .pf details.ahora summary { display: flex; align-items: center; gap: 12px; cursor: pointer; list-style: none; }
+.pf details.ahora summary::-webkit-details-marker { display: none; } .pf details.ahora[open] summary { margin-bottom: 14px; }
+.pf details.ahora .cuenta { font-size: 13px; font-weight: 700; border-radius: 999px; padding: 3px 10px; background: var(--green-bg); color: #15803d; } .pf details.ahora .cuenta.hay { background: #fef3c7; color: #92400e; }
+.pf details.ahora .plegar { margin-left: auto; font-size: 13px; color: var(--muted); font-weight: 600; } .pf details.ahora .plegar::after { content: "Mostrar ▾"; } .pf details.ahora[open] .plegar::after { content: "Ocultar ▴"; }
 .pf .rachab span { margin-left: auto; opacity: .8; }
 /* Análisis: explanations and the week map */
 .pf .kpi .lab { align-items: center; } .pf details.exp { position: relative; letter-spacing: 0; }
@@ -243,7 +247,7 @@ const TABS = [["dashboard", "Dashboard"], ["analisis", "📊 Análisis"], ["grup
               ["reglas", "Reglas"], ["backtest", "📒 Backtesting"], ["domingo", "📋 Domingo"], ["riesgo", "⚙️ Riesgo"], ["calendario", "📅 Calendario"]];
 
 const S = { tab: "dashboard", grupos: new Map(), cuentas: new Map(), ops: new Map(), semanas: new Map(), revisiones: new Map(), topstep: null,
-            ready: false, db: null, rpSes: new Map(), replayIdx: null, rp: null, rpT: 0, page: { cuentas: 0, ops: 0 }, f: { chip: "todos", cg: "", ct: "", ce: "", og: "", oc: "", or: "", oq: "", rq: "", rg: "" },
+            ready: false, db: null, ahoraAbierto: (() => { try { return localStorage.getItem("pf-ahora") !== "0"; } catch { return true; } })(), rpSes: new Map(), replayIdx: null, rp: null, rpT: 0, page: { cuentas: 0, ops: 0 }, f: { chip: "todos", cg: "", ct: "", ce: "", og: "", oc: "", or: "", oq: "", rq: "", rg: "" },
             cal: { y: new Date().getFullYear(), m: new Date().getMonth(), modo: "pct", g: "", c: "", anual: false }, risk: {}, sel: new Set(), rev: null };
 try { S.tab = localStorage.getItem("pf-tab") || "dashboard"; } catch {}
 if (!TABS.some(([k]) => k === S.tab)) S.tab = "dashboard";
@@ -343,8 +347,9 @@ V.dashboard = () => {
     values: labels.map((l) => { const w = sem.find((s) => s.semana === l && s.grupo === g.id); return w ? semanaStats(w, days).pnl : 0; }) }));
   const top = cs.map((c) => [c, pnl(c)]).filter(([, v]) => v).sort((a, b) => b[1] - a[1]).slice(0, 8);
   const alertas = vigil().filter((x) => x.nivel);
-  // what his rules say right now goes first: it is what he has to act on
-  return ahoraHtml() + hoyHtml() + rachaHtml() + `<div class="banner ${p.ok ? "ok" : "bad"}">${esc(p.txt)}</div>${alertas.map((x) => `<div class="banner warn">${NIVEL[x.nivel]} · ${esc(x.c.codigo)} lleva ${x.hoy > 0 ? "+" : ""}${money(x.hoy)} hoy</div>`).join("")}
+  // what his rules say right now goes first, in one box he can fold: the rules engine, his limits today, the plan streak and the copier pause
+  const extra = rachaHtml() + `<div class="banner ${p.ok ? "ok" : "bad"}" style="margin-bottom:8px">${esc(p.txt)}</div>${alertas.map((x) => `<div class="banner warn" style="margin-bottom:8px">${NIVEL[x.nivel]} · ${esc(x.c.codigo)} lleva ${x.hoy > 0 ? "+" : ""}${money(x.hoy)} hoy</div>`).join("")}`;
+  return ahoraHtml({ extra, plegable: true, nAlertas: alertas.length + (p.ok ? 0 : 1) }) + hoyHtml() + `
   <div class="grid4">
     <div class="card kpi"><div class="lab">P&amp;L TOTAL SISTEMA <span>💰</span></div><div class="val ${cls(total)}">${money(total)}</div></div>
     <div class="card kpi"><div class="lab">CAPITAL BAJO GESTIÓN <span>🏦</span></div><div class="val blue">${money(cap)}</div></div>
@@ -541,8 +546,12 @@ function reglas() {
       ["Avisos", "Al móvil cada hora y en «⚠️ Avisos de hoy»", "Londres, Nueva York, tope del día, stops, días fuertes, días mínimos, payout, suplente y pausa"]]],
   ];
 }
-function ahoraHtml() {
-  const r = motor(), L = r.avisos.map((a) => a.txt);
+function ahoraHtml({ extra = "", plegable = false, nAlertas = 0 } = {}) {
+  const r = motor(), L = r.avisos.map((a) => a.txt), n = L.length + nAlertas;
+  // on the dashboard it folds: closed, the title still says how many warnings there are
+  if (plegable) return `<details class="card ahora" data-ahora ${S.ahoraAbierto !== false ? "open" : ""}><summary><h3>🔔 Lo que te toca ahora</h3><span class="cuenta ${n ? "hay" : ""}">${n ? n + (n === 1 ? " aviso" : " avisos") : "todo en orden"}</span><span class="plegar"></span></summary>
+    ${L.length ? L.map((t) => `<div class="banner warn" style="margin-bottom:8px">${esc(t)}</div>`).join("") : '<div class="banner ok" style="margin-bottom:8px">✅ Nada que hacer ahora: ninguna regla ha saltado hoy.</div>'}
+    ${extra}${r.resumen ? `<p class="hint" style="margin-top:4px">${esc(r.resumen)}</p>` : ""}</details>`;
   return `<div class="card" style="margin-bottom:18px;border:2px solid #f59e0b"><h3>🔔 Lo que te toca ahora</h3><p class="hint">Jarvis aplica tus reglas a tus cuentas de Topstep. Estos mismos avisos te llegan al móvil cada hora, y al cerrar Londres (11:57) te llega el resumen de la sesión.</p>
     ${L.length ? L.map((t) => `<div class="banner warn" style="margin-bottom:8px">${esc(t)}</div>`).join("") : '<div class="banner ok">✅ Nada que hacer ahora: ninguna regla ha saltado hoy.</div>'}
     ${r.resumen ? `<p class="hint" style="margin-top:8px">${esc(r.resumen)}</p>` : ""}</div>`;
@@ -1376,6 +1385,7 @@ root.addEventListener("change", (e) => {
   if (d.rev != null) { const r = S.revisiones.get(t.value); S.rev = { id: t.value, checks: { ...(r?.checks || {}) }, estados: { ...(r?.estados || {}) }, notas: r?.notas || "" }; render(); return; }
 });
 // A risk value typed in the table saves itself a moment later, even if the field is never left (iPad keeps the keyboard up).
+root.addEventListener("toggle", (e) => { if (e.target.matches && e.target.matches("details[data-ahora]")) { S.ahoraAbierto = e.target.open; try { localStorage.setItem("pf-ahora", e.target.open ? "1" : "0"); } catch {} } }, true);
 root.addEventListener("input", (e) => { const v = e.target.dataset.rpv; if (v && S.rp && e.target.value !== "") S.rp[v] = Math.max(1, Number(e.target.value) || 1); });
 root.addEventListener("change", (e) => { if (e.target.dataset.rpf === "fecha") rpCargar(e.target.value); });
 root.addEventListener("input", (e) => { const r = e.target.dataset.r; if (r && e.target.type === "number" && e.target.value !== "") { const [id, k] = r.split("."); S.risk[id] = { ...(S.risk[id] || {}), [k]: Number(e.target.value) }; guardarRiesgo(); } });
