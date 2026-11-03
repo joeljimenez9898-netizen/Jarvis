@@ -298,12 +298,6 @@ function grupoStats(g, days = dayMap()) {
            rojas: cs.filter((c) => pnl(c) < 0).length, semana, total, cap, semanaPct: cap ? semana / cap : 0,
            dd: slTot && total < 0 ? Math.round((-total / slTot) * 100) : 0, examen: cs.filter((c) => c.estado === "EXAM").length };
 }
-function pausa() {
-  const days = dayMap();
-  const malos = grupos().filter((g) => g.estado === "ACTIVO" || g.estado === "MAESTRA").map((g) => [g, grupoStats(g, days)]).filter(([, s]) => s.semanaPct <= -0.05);
-  return malos.length ? { ok: false, txt: "⛔ PAUSAR COPIADOR — " + malos.map(([g, s]) => `${g.nombre} ${(s.semanaPct * 100).toFixed(1)}%`).join(", ") + " esta semana (umbral -5%)" }
-                      : { ok: true, txt: "✅ OPERAR NORMAL — Ningún grupo ha superado el umbral de pausa del -5%" };
-}
 
 // ── charts (plain SVG) ─────────────────────────────────────────
 function bars(series, labels, { h = 230, money: m = true } = {}) {
@@ -335,7 +329,7 @@ function donut(parts) {
 // ── views ──────────────────────────────────────────────────────
 const V = {};
 V.dashboard = () => {
-  const cs = cuentas(), os = ops(), days = dayMap(), p = pausa();
+  const cs = cuentas(), os = ops(), days = dayMap();
   const total = cs.reduce((a, c) => a + pnl(c), 0), cap = capital(cs.filter((c) => c.estado === "ACTIVA" || c.estado === "EXAM"));
   const tp = os.filter((o) => o.resultado === "TP" || (o.resultado !== "SL" && o.resultado !== "BE" && Number(o.pnl) > 0)).length;
   const wr = os.length ? ((tp / os.length) * 100).toFixed(1) + "%" : "—";
@@ -348,8 +342,8 @@ V.dashboard = () => {
   const top = cs.map((c) => [c, pnl(c)]).filter(([, v]) => v).sort((a, b) => b[1] - a[1]).slice(0, 8);
   const alertas = vigil().filter((x) => x.nivel);
   // what his rules say right now goes first, in one box he can fold: the rules engine, his limits today, the plan streak and the copier pause
-  const extra = rachaHtml() + `<div class="banner ${p.ok ? "ok" : "bad"}" style="margin-bottom:8px">${esc(p.txt)}</div>${alertas.map((x) => `<div class="banner warn" style="margin-bottom:8px">${NIVEL[x.nivel]} · ${esc(x.c.codigo)} lleva ${x.hoy > 0 ? "+" : ""}${money(x.hoy)} hoy</div>`).join("")}`;
-  return ahoraHtml({ extra, plegable: true, nAlertas: alertas.length + (p.ok ? 0 : 1) }) + hoyHtml() + `
+  const extra = rachaHtml() + `${alertas.map((x) => `<div class="banner warn" style="margin-bottom:8px">${NIVEL[x.nivel]} · ${esc(x.c.codigo)} lleva ${x.hoy > 0 ? "+" : ""}${money(x.hoy)} hoy</div>`).join("")}`;
+  return ahoraHtml({ extra, plegable: true, nAlertas: alertas.length }) + hoyHtml() + `
   <div class="grid4">
     <div class="card kpi"><div class="lab">P&amp;L TOTAL SISTEMA <span>💰</span></div><div class="val ${cls(total)}">${money(total)}</div></div>
     <div class="card kpi"><div class="lab">CAPITAL BAJO GESTIÓN <span>🏦</span></div><div class="val blue">${money(cap)}</div></div>
@@ -1414,9 +1408,9 @@ $("#pf-file").addEventListener("change", async () => {
 
 // What Jarvis reads when Joel asks about his plan.
 function contexto() {
-  const days = dayMap(), p = pausa(), os = ops();
+  const days = dayMap(), os = ops(), mp = motor();
   return {
-    estadoDelSistema: p.txt,
+    estadoDelSistema: mp.pausa.dia || mp.pausa.semanal ? mp.avisos.filter((a) => /:pausa-/.test(a.key)).map((a) => a.txt).join(" ") : "Sin pausa: tus reglas de stops del día y de la semana no han saltado.",
     grupos: grupos().map((g) => { const s = grupoStats(g, days); return { grupo: g.nombre, empresa: g.empresa, ratio: g.ratio || null, estado: g.estado, suplente: g.suplente ? cCode(g.suplente) : null,
       cuentas: s.cs.length, verdes: s.verdes, rojas: s.rojas, pnlSemana: Math.round(s.semana * 100) / 100, pnlTotal: Math.round(s.total * 100) / 100, pctDrawdown: s.dd }; }),
     cuentas: cuentas().map((c) => { const v = pnl(c), r = riskOf(c); return { cuenta: c.codigo, grupo: gName(c.grupo), empresa: c.empresa, tipo: c.tipo, estado: c.estado,
