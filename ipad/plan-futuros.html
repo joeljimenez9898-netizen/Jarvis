@@ -369,6 +369,8 @@ const papelG = (g) => (g.estado === "MAESTRA" ? "Opera aquí y el copiador manda
 // Groups as boxes with their accounts inside: live ones first, then the burned or passed ones, then the ones booked to buy
 function grupoBox(g, days) {
   const s = grupoStats(g, days), dia = tradingDay(Date.now()), h = g.estado === "ACTIVO" ? hoyOperas() : null;
+  // exams at +examCerca or more (52.000 on a 50K) are group B: they stay in their group but trade apart, one at a time
+  const cerca = new Set(h ? cercaB().map((x) => x.cuenta) : []);
   const cs = [...s.cs].sort((a, b) => Number(!vivaC(a)) - Number(!vivaC(b)) || (Number(a.orden) || 0) - (Number(b.orden) || 0));
   const prox = (S.autoreg?.proximas || []).filter((x) => x && x.grupo === g.id && !cuentas().some((c) => c.codigo === x.codigo));
   return `<div class="gbox"><div class="gbox-h"><b>${esc(g.nombre)}</b><span class="tagm">${g.estado === "ACTIVO" ? (modoG(g.id) === "londres" ? "Londres + NY" : "2 balas") : GRUPO_ESTADOS[g.estado] || esc(g.estado)}</span>
@@ -376,7 +378,7 @@ function grupoBox(g, days) {
     <p class="gplan">${esc(papelG(g))}</p>
     <div class="gstats"><span>Vivas <b>${s.activas}</b></span><span>Esta semana <b class="${cls(s.semana)}">${sgn(s.semana)}</b></span><span>Verdes <b>${s.verdes}</b></span><span>Rojas <b>${s.rojas}</b></span>${s.dd ? `<span>Drawdown <b>${s.dd} %</b></span>` : ""}${g.ratio ? `<span>Copia <b>${esc(g.ratio)}</b></span>` : ""}</div>
     <div class="accs">${cs.map((c) => { const foco = !!(h && h.foco && h.foco.cuentas.some((y) => y.id === c.id)), n = vivaC(c) ? tradesDia(c, dia).length : 0;
-        return cuentaChip(c, { foco, estado: !h || !vivaC(c) ? "" : foco ? "▶ Hoy en foco" : n ? sgn(tradesDia(c, dia).reduce((a, y) => a + y.pnl, 0)) + " hoy" : "En espera",
+        return cuentaChip(c, { foco, estado: !h || !vivaC(c) ? "" : cerca.has(c.codigo) ? "🎯 Grupo B: aparte, un trade al día" : foco ? "▶ Hoy en foco" : n ? sgn(tradesDia(c, dia).reduce((a, y) => a + y.pnl, 0)) + " hoy" : "En espera",
           cuando: c.quemada ? "quemada el " + c.quemada.split("-").reverse().join("/") : "" }); }).join("")}
       ${prox.map((x) => `<div class="acc prox"><span class="acc-top"><b>${esc(x.codigo)}</b></span><span class="acc-meta">por comprar${x.estado ? " · " + esc(x.estado) : ""}</span><span class="acc-when">Jarvis la registra aquí sola</span></div>`).join("")}
       ${!cs.length && !prox.length ? '<p class="hint" style="margin:0">Sin cuentas.</p>' : ""}</div></div>`;
@@ -872,7 +874,7 @@ function balas(c, d) {
 }
 function hoyOperas() {
   const E = est(), dia = tradingDay(Date.now()), us = unidades(), R = S.rotacion || {};
-  if (!us.length && cercaB().length) return { unidades: [], foco: null, lineas: ["🎯 Foco en el grupo B, cerca de pasar: " + cercaB().map((x) => x.cuenta).join(", ") + ". Van aparte, una a una y en conservador."], fondeadas: fondeadasHoy() };
+  if (!us.length && cercaB().length) return { unidades: [], foco: null, lineas: ["🎯 Foco en el grupo B, cerca de pasar: " + cercaB().map((x) => x.cuenta).join(", ") + ". Van aparte, una a una y en conservador.", ...cercaB().map((x) => x.cuenta + " → " + x.txt)], fondeadas: fondeadasHoy() };
   if (!us.length) return { unidades: [], foco: null, lineas: ["No hay exámenes vivos en los grupos que rotan. Cuando compres cuentas, Jarvis las registra y aquí te dirá cuál operar."], fondeadas: fondeadasHoy() };
   let i = Math.max(0, us.findIndex((u) => u.id === R.foco)); if (us.findIndex((u) => u.id === R.foco) < 0) i = 0;
   // the last day he traded: if the focus account sat it out and another one won, that one is today's focus (he follows the one he trades)
