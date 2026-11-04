@@ -294,6 +294,8 @@ async function checkIpadApps() {
       wrongSym.push("Burned accounts: an account through its trailing floor is never alive (no focus, no turn) and is marked PERDIDA «TS-n quemada» by itself");
     if (!page.includes("🎯 Grupo B: aparte, un trade al día") || !page.includes("...cercaB().map((x) => x.cuenta + \" → \" + x.txt)"))
       wrongSym.push("Group B (exams at +2.000, 52.000 on a 50K): Grupos marks them apart and Hoy operas says what to risk");
+    if (!page.includes("async function autoSuplente(") || !page.includes("Each gap is filled once") || !page.includes("setTimeout(autoSuplente, 2500)"))
+      wrongSym.push("Suplentes: when a rotating account burns or passes, the waiting substitute steps into that group by itself, once per gap");
     if (!page.includes("function grupoBox(") || !page.includes("Grupos y sus cuentas") || !page.includes("por comprar"))
       wrongSym.push("Grupos: each group shows its accounts (live, burned and booked to buy) instead of a table of counts");
     if (!page.includes("only proposes a move when one group has two or more") || !page.includes("if (n(hi) - n(lo) <= 1) return;"))

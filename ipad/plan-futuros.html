@@ -379,7 +379,7 @@ function grupoBox(g, days) {
     <div class="gstats"><span>Vivas <b>${s.activas}</b></span><span>Esta semana <b class="${cls(s.semana)}">${sgn(s.semana)}</b></span><span>Verdes <b>${s.verdes}</b></span><span>Rojas <b>${s.rojas}</b></span>${s.dd ? `<span>Drawdown <b>${s.dd} %</b></span>` : ""}${g.ratio ? `<span>Copia <b>${esc(g.ratio)}</b></span>` : ""}</div>
     <div class="accs">${cs.map((c) => { const foco = !!(h && h.foco && h.foco.cuentas.some((y) => y.id === c.id)), n = vivaC(c) ? tradesDia(c, dia).length : 0;
         return cuentaChip(c, { foco, estado: !h || !vivaC(c) ? "" : cerca.has(c.codigo) ? "🎯 Grupo B: aparte, un trade al día" : foco ? "▶ Hoy en foco" : n ? sgn(tradesDia(c, dia).reduce((a, y) => a + y.pnl, 0)) + " hoy" : "En espera",
-          cuando: c.quemada ? "quemada el " + c.quemada.split("-").reverse().join("/") : "" }); }).join("")}
+          cuando: c.quemada ? "quemada el " + c.quemada.split("-").reverse().join("/") + (c.reemplazada && c.reemplazada !== "no" ? " · la sustituye " + c.reemplazada : "") : c.sustituye ? "entró en lugar de " + c.sustituye : "" }); }).join("")}
       ${prox.map((x) => `<div class="acc prox"><span class="acc-top"><b>${esc(x.codigo)}</b></span><span class="acc-meta">por comprar${x.estado ? " · " + esc(x.estado) : ""}</span><span class="acc-when">Jarvis la registra aquí sola</span></div>`).join("")}
       ${!cs.length && !prox.length ? '<p class="hint" style="margin:0">Sin cuentas.</p>' : ""}</div></div>`;
 }
@@ -795,6 +795,31 @@ async function registrarTs(lista) {
   return hechas;
 }
 // Accounts bought from now on register themselves; the ones that were already unlinked when this started wait in Cuentas for a tap.
+// The substitute steps in by itself: when an account of a rotating group burns or passes its exam, the first account waiting
+// in reserve (STANDBY in a RESERVA group, alive on Topstep) takes its place, in that group and with that group's plan and limits.
+// Each gap is filled once («reemplazada» on the account that left); the group with fewer live accounts goes first.
+async function autoSuplente() {
+  if (!S.db || !S.ready || S.supBusy) return;
+  const activos = new Set(rotan().map((g) => g.id)), reserva = new Set(grupos().filter((g) => g.estado === "RESERVA").map((g) => g.id));
+  const huecos = cuentas().filter((c) => activos.has(c.grupo) && !c.reemplazada && (c.estado === "PERDIDA" || (c.estado === "EXAM" && c.tipo !== "Fondeada" && pnl(c) >= (Number(c.tp) || 3000))))
+    .sort((a, b) => cuentas().filter((x) => x.grupo === a.grupo && vivaC(x)).length - cuentas().filter((x) => x.grupo === b.grupo && vivaC(x)).length);
+  const sups = cuentas().filter((c) => reserva.has(c.grupo) && c.estado === "STANDBY" && !quemadaTs(c)).sort((a, b) => (Number(a.orden) || 0) - (Number(b.orden) || 0));
+  if (!huecos.length || !sups.length) return;
+  S.supBusy = true;
+  try {
+    const hechos = [];
+    for (const h of huecos) {
+      const s = sups.shift(); if (!s) break;
+      const par = cuentas().find((x) => x.grupo === h.grupo && x.id !== s.id && x.dll != null && Number(x.balanceIni) === Number(s.balanceIni)) || h;
+      await S.db.doc("fm/plan").collection("cuentas").doc(s.id).update({ grupo: h.grupo, estado: s.tipo === "Fondeada" ? "ACTIVA" : "EXAM", entra: tradingDay(Date.now()), sustituye: h.codigo,
+        mult: par.mult || s.mult || "1x", dll: par.dll ?? s.dll, dllOn: par.dllOn !== false, dllAccion: par.dllAccion || "Liquidar", dpt: par.dpt ?? s.dpt, dptOn: par.dptOn !== false, dptAccion: par.dptAccion || "Liquidar" });
+      await S.db.doc("fm/plan").collection("cuentas").doc(h.id).update({ reemplazada: s.codigo });
+      hechos.push(s.codigo + " entra en " + gName(h.grupo) + " en lugar de " + h.codigo);
+    }
+    if (hechos.length) toast("🔁 " + hechos.join("; ") + ". Repón la reserva: compra otro examen para Suplentes.");
+  } catch (err) { toast("No he podido meter la suplente: " + (err.message || "error")); }
+  finally { S.supBusy = false; }
+}
 async function autoQuemadas() {
   if (!S.db || !S.ready || !S.topstep || S.quemBusy) return;
   const l = cuentas().filter((c) => (c.estado === "ACTIVA" || c.estado === "EXAM") && quemadaTs(c));
@@ -809,6 +834,7 @@ async function autoQuemadas() {
       await S.db.doc("fm/plan").collection("cuentas").doc(c.id).update({ estado: "PERDIDA", quemada: dia, codigo });
       if (c.topstepId) { try { await S.db.doc("fm/main").collection("cuentas").doc("ts-auto-" + c.topstepId).update({ estado: "perdida", alias: codigo }); } catch {} }
     }
+    setTimeout(autoSuplente, 1500);
     toast("🔥 " + l.map((c) => c.codigo).join(" y ") + (l.length === 1 ? " se ha quemado: la marco como perdida." : " se han quemado: las marco como perdidas."));
   } catch (err) { toast("No he podido marcar las cuentas quemadas: " + (err.message || "error")); }
   finally { S.quemBusy = false; }
@@ -1473,7 +1499,7 @@ window.PLAN = { contexto, render, vista, onCambio: (f) => { oyentes.add(f); retu
   if (!db) { S.ready = true; render(); return; }
   const plan = db.doc("fm/plan"), pend = new Set(["grupos", "cuentas", "operaciones", "semanas", "revisiones", "topstep"]);
   const editando = () => { const a = ROOT.activeElement; return a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName) && a.closest("#pf-view"); };
-  const done = (k) => { pend.delete(k); if (!pend.size && !S.ready) { S.ready = true; } if (k === "topstep" || k === "cuentas") { setTimeout(autoRegistro, 500); setTimeout(autoQuemadas, 800); } if (editando()) { S.renderLuego = true; return; } render(); };
+  const done = (k) => { pend.delete(k); if (!pend.size && !S.ready) { S.ready = true; } if (k === "topstep" || k === "cuentas") { setTimeout(autoRegistro, 500); setTimeout(autoQuemadas, 800); setTimeout(autoSuplente, 2500); } if (editando()) { S.renderLuego = true; return; } render(); };
   root.addEventListener("focusout", () => setTimeout(() => { if (S.renderLuego && !editando()) { S.renderLuego = false; render(); } }, 50));
   const sub = (col, map) => plan.collection(col).onSnapshot((snap) => { map.clear(); for (const d of snap.docs) map.set(d.id, d.data()); if (col === "revisiones" && S.rev && !S.revisiones.has(S.rev.id)) {} done(col); }, () => done(col));
   btSub(plan);
