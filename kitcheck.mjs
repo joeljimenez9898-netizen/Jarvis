@@ -304,6 +304,8 @@ async function checkIpadApps() {
       wrongSym.push("Burned accounts: an account through its trailing floor is never alive (no focus, no turn) and is marked PERDIDA «TS-n quemada» by itself");
     if (!page.includes("🎯 Grupo B: aparte, un trade al día") || !page.includes("...cercaB().map((x) => x.cuenta + \" → \" + x.txt)"))
       wrongSym.push("Group B (exams at +2.000, 52.000 on a 50K): Grupos marks them apart and Hoy operas says what to risk");
+    if (!page.includes("\"Bloqueo de Topstep\"") || !page.includes("(^|-)DLL(-|$)") || !page.includes("🔒 Topstep corta a"))
+      wrongSym.push("Topstep daily loss limit: accounts bought with DLL are recorded as «Bloqueo de Topstep» at −1.000 $ and shown as such");
     if (!page.includes("const COMPRA_DIAS = 5;") || !page.includes("function compraExamen(") || !page.includes("compraExamen: compraExamen().txt"))
       wrongSym.push("Next exam: Jarvis reminds Joel not to buy another exam until 5 traded days in a row keeping the plan (dashboard and voice)");
     if (!page.includes("async function autoSuplente(") || !page.includes("Each gap is filled once") || !page.includes("setTimeout(autoSuplente, 2500)"))

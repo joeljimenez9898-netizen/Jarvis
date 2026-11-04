@@ -242,7 +242,8 @@ const ESTADO_DOT = { ACTIVA: "#16a34a", EXAM: "#eab308", STANDBY: "#cbd5e1", PEN
 const ESTADO_COLOR = { ACTIVA: "#22c55e", EXAM: "#eab308", STANDBY: "#94a3b8", PENDIENTE: "#cbd5e1", PERDIDA: "#ef4444" };
 const GRUPO_ESTADOS = { MAESTRA: "👑 MAESTRA", ACTIVO: "🔄 ACTIVO", PAUSADO: "⏸️ PAUSADO", RESERVA: "⚪ RESERVA" };
 const ICONO = (g, i) => (g.estado === "MAESTRA" ? "🥇" : i === 1 ? "🥈" : "📊");
-const ACCIONES = ["Liquidar", "Cerrar y bloquear", "Solo alertar"];
+// «Bloqueo de Topstep»: the daily loss limit is set in TopstepX itself, so Topstep closes and blocks the account for the day
+const ACCIONES = ["Liquidar", "Cerrar y bloquear", "Bloqueo de Topstep", "Solo alertar"];
 const TABS = [["dashboard", "Dashboard"], ["analisis", "📊 Análisis"], ["grupos", "Grupos"], ["cuentas", "Cuentas"], ["operaciones", "Operaciones"], ["semanas", "Semanas"],
               ["reglas", "Reglas"], ["backtest", "📒 Backtesting"], ["domingo", "📋 Domingo"], ["riesgo", "⚙️ Riesgo"], ["calendario", "📅 Calendario"]];
 
@@ -785,6 +786,8 @@ async function registrarTs(lista) {
     const m = multTxt(S.grupos.get(c.grupo)), k = (parseFloat(m) || 1) * tam / 50000;
     Object.assign(c, par ? { mult: par.mult || m, dllOn: par.dllOn !== false, dll: par.dll, dllAccion: par.dllAccion || "Liquidar", dptOn: par.dptOn !== false, dpt: par.dpt, dptAccion: par.dptAccion || "Liquidar" }
                          : { mult: m, dllOn: true, dll: Math.round(1000 * k), dllAccion: "Liquidar", dptOn: true, dpt: Math.round(1500 * k), dptAccion: "Liquidar" });
+    // Topstep names the accounts bought with a daily loss limit «…-DLL-…»: Topstep itself closes and blocks the day at −1.000 $
+    if (/(^|-)DLL(-|$)/i.test(a.nombre || "")) Object.assign(c, { dllOn: true, dll: 1000, dllAccion: "Bloqueo de Topstep", dllTopstep: true });
     await S.db.doc("fm/plan").collection("cuentas").doc("ts-auto-" + a.id).set(c);
     // the same account in the list the morning summary and TopStep Squad read (fm/main/cuentas)
     await S.db.doc("fm/main").collection("cuentas").doc("ts-auto-" + a.id).set({ alias: c.codigo, firma: "Topstep", plataforma: "TopstepX", tamano: tam, fase: tipo === "Fondeada" ? "fondeada" : "evaluacion",
@@ -955,6 +958,7 @@ function cuentaChip(c, { foco = false, estado = "", cuando = "" } = {}) {
     <span class="acc-top"><b>${esc(c.codigo)}</b>${foco ? '<span class="live">EN FOCO</span>' : ""}${muerta ? `<span class="pill st-${esc(c.estado)}">${c.estado === "PERDIDA" ? "🔥 quemada" : esc(c.estado)}</span>` : ""}<span class="acc-pnl ${cls(p)}">${sgn(p)}</span></span>
     <span class="acc-bar"><i class="${p < 0 ? "r" : "g"}" style="width:${w.toFixed(1)}%"></i></span>
     <span class="acc-meta">${muerta ? "" : tp && c.tipo !== "Fondeada" ? `${p >= 0 ? "faltan " + usd(Math.max(0, tp - p)) : "drawdown " + Math.round(w) + " %"}` : esc(c.tipo || "")}</span>
+    ${c.dllTopstep && !muerta ? `<span class="acc-when">🔒 Topstep corta a −${usd(c.dll || 1000)}</span>` : ""}
     ${estado ? `<span class="acc-st">${esc(estado)}</span>` : ""}${cuando ? `<span class="acc-when">${esc(cuando)}</span>` : ""}</button>`;
 }
 // What the plan of a group is, in one line of numbers
