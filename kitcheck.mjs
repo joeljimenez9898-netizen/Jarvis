@@ -118,6 +118,16 @@ async function checkSnapshotContainment() {
 /** The Topstep sync may only read: login, account list, trade history, contracts and price bars. Never orders or positions. */
 // The market replay: its Topstep reader can only log in, find the contract and read price bars; New York midnight follows the
 // clock change; a day is packed as minutes since that midnight; the Plan page replays it and blocks like his plan does.
+// Two exams burned this week and marked PERDIDA: their losses still count for the week pause, and they get no plan of their own
+async function checkPausaQuemadas() {
+  const ts = await import("./topstep-sync.mjs");
+  const c = (codigo, estado, dias) => ({ codigo, tipo: "Challenge", estado, tp: 3000, sl: -2000, grupo: "g1", pnl: Object.values(dias).reduce((a, b) => a + b, 0), dias, tradesHoy: [] });
+  const r = ts.motorReglas({ estrategia: ts.estrategiaDe({}), hoy: "2026-11-04", ahora: "2026-11-04T15:00:00Z",
+    cuentas: [c("TS-2 quemada", "PERDIDA", { "2026-11-03": -2005 }), c("TS-3 quemada", "PERDIDA", { "2026-11-03": -2072 }), c("TS-4", "EXAM", {})] });
+  if (!r.pausa.semanal || r.pausa.semana !== -4077) return [false, "week pause: " + JSON.stringify(r.pausa)];
+  if (r.examenes.map((x) => x.cuenta).join() !== "TS-4") return [false, "burned accounts got a plan: " + r.examenes.map((x) => x.cuenta).join()];
+  return [true, "two exams burned on Tuesday (−4.077 $) still pause the week; only TS-4 gets a plan"];
+}
 async function checkReplay() {
   const rp = await import("./replay-sync.mjs");
   const allowed = [...rp.READ_ONLY_ENDPOINTS].sort(), want = ["/api/Auth/loginKey", "/api/Contract/search", "/api/History/retrieveBars"];
@@ -294,6 +304,8 @@ async function checkIpadApps() {
       wrongSym.push("Burned accounts: an account through its trailing floor is never alive (no focus, no turn) and is marked PERDIDA «TS-n quemada» by itself");
     if (!page.includes("🎯 Grupo B: aparte, un trade al día") || !page.includes("...cercaB().map((x) => x.cuenta + \" → \" + x.txt)"))
       wrongSym.push("Group B (exams at +2.000, 52.000 on a 50K): Grupos marks them apart and Hoy operas says what to risk");
+    if (!page.includes("const COMPRA_DIAS = 5;") || !page.includes("function compraExamen(") || !page.includes("compraExamen: compraExamen().txt"))
+      wrongSym.push("Next exam: Jarvis reminds Joel not to buy another exam until 5 traded days in a row keeping the plan (dashboard and voice)");
     if (!page.includes("async function autoSuplente(") || !page.includes("Each gap is filled once") || !page.includes("setTimeout(autoSuplente, 2500)"))
       wrongSym.push("Suplentes: when a rotating account burns or passes, the waiting substitute steps into that group by itself, once per gap");
     if (!page.includes("function grupoBox(") || !page.includes("Grupos y sus cuentas") || !page.includes("por comprar"))
@@ -355,6 +367,7 @@ export const CHECKS = [["spoken addresses parse", checkAddresses],
                        ["snapshots can't leave the teardowns folder", checkSnapshotContainment],
                        ["Topstep sync is read-only", checkTopstepReadOnly],
                        ["Market replay reads bars only", checkReplay],
+                       ["Week pause counts burned accounts", checkPausaQuemadas],
                        ["iPad Jarvis: app stars, Miro read-only", checkIpadApps]];
 
 export async function run() {

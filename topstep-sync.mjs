@@ -376,7 +376,8 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
     "Fondeadas hoy: " + partes.join(" · ") + "." + (de("A2").length || de("B2").length ? " Cada mitad lleva su propio trade, nunca el mismo en todas." : "");
   // the pause: stops today across all accounts, and the week so far (Monday to today) across all accounts
   // copied by groups (modo "grupo"), one trade lands in every account of the group: it counts once (a stop, and the group's average P&L)
-  const vivas = cuentas.filter(viva), dia = (c, d) => Number((c.dias || {})[d]) || 0;
+  // an account burned this week still counts: its loss is what the pause is for
+  const vivas = cuentas.filter((c) => viva(c) || c.estado === "PERDIDA"), dia = (c, d) => Number((c.dias || {})[d]) || 0;
   const unidad = (c) => (E.modo === "grupo" && c.grupo ? "g:" + c.grupo + (c.tipo === "Fondeada" ? ":f" : "") : "c:" + c.codigo);
   const stopsHoy = new Set(vivas.filter((c) => dia(c, hoy) <= -0.9 * (c.tipo === "Fondeada" ? E.fuerteSL : stopDe(c))).map(unidad)).size;
   const t0 = Date.parse(hoy + "T12:00:00Z"), lunes = new Date(t0 - ((new Date(t0).getUTCDay() + 6) % 7) * 86400000).toISOString().slice(0, 10);
@@ -417,7 +418,8 @@ export function resumenSesion(planCuentas, cuentasTs, estrategia, sesion, at) {
   const hoy = tradingDay(at), E = estrategiaDe(estrategia), usd = (n) => Math.round(Math.abs(n)).toLocaleString("es-ES", { useGrouping: "always" }) + " $";
   const sg = (n) => (Math.round(n) === 0 ? "" : n < 0 ? "−" : "+") + usd(n);
   const vinc = planCuentas.filter((c) => c.topstepId && cuentasTs[c.topstepId] && cuentasTs[c.topstepId].balance != null && ["ACTIVA", "EXAM"].includes(c.estado));
-  const cuentas = vinc.map((c) => { const t = cuentasTs[c.topstepId];
+  // the engine also gets the accounts burned this week, so the week pause counts their losses
+  const cuentas = [...vinc, ...planCuentas.filter((c) => c.estado === "PERDIDA" && c.topstepId && cuentasTs[c.topstepId] && cuentasTs[c.topstepId].balance != null)].map((c) => { const t = cuentasTs[c.topstepId];
     return { codigo: c.codigo, tipo: c.tipo, estado: c.estado, tp: c.tp, sl: c.sl, orden: c.orden, grupo: c.grupo, pnl: Math.round((t.balance - (Number(c.balanceIni) || 0)) * 100) / 100, dias: t.dias || {},
              tradesHoy: (t.trades || []).filter((o) => o.fecha === hoy).sort((a, b) => (a.cierra < b.cierra ? -1 : 1)).map((o) => ({ pnl: Number(o.pnl) || 0, at: o.cierra })) }; });
   const r = motorReglas({ estrategia: E, cuentas, hoy, ahora: at, londresCerrada: true });

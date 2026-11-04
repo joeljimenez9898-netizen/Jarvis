@@ -850,7 +850,7 @@ async function autoRegistro() {
     if (!nuevas.length) return;
     const hechas = await registrarTs(nuevas);
     await ref.update({ conocidas: [...(S.autoreg.conocidas || []), ...nuevas.map((a) => a.id)] });
-    toast("Jarvis ha registrado " + hechas.map((c) => c.codigo + " en " + gName(c.grupo)).join(", ") + ".");
+    toast("Jarvis ha registrado " + hechas.map((c) => c.codigo + " en " + gName(c.grupo)).join(", ") + "." + (compraExamen().ok ? "" : " Recuerda lo que acordamos: con esta cuenta, primero 5 días seguidos cumpliendo el plan antes de comprar otra."));
   } catch (err) { toast("No he podido registrar las cuentas nuevas: " + (err.message || "error")); }
   finally { S.autoregBusy = false; }
 }
@@ -1177,10 +1177,18 @@ V.analisis = () => {
   </div>`;
 };
 // a small line on the dashboard: the plan streak
+// The next exam is earned: Joel agreed not to buy another one until he has 5 traded days in a row keeping his plan
+const COMPRA_DIAS = 5;
+function compraExamen() {
+  const rp = rachaPlan(cumplimiento(tradesAnalisis())), ok = rp.racha >= COMPRA_DIAS;
+  return { ok, racha: rp.racha, txt: ok ? "🛒 Ya puedes comprar el siguiente examen: llevas " + rp.racha + " días seguidos cumpliendo el plan."
+    : "🛒 Todavía no compres otro examen: llevas " + rp.racha + " de " + COMPRA_DIAS + " días seguidos cumpliendo el plan. Cuando llegues a " + COMPRA_DIAS + ", te aviso." };
+}
 function rachaHtml() {
-  const rp = rachaPlan(cumplimiento(tradesAnalisis()));
-  if (!rp.dias) return "";
-  return `<button type="button" class="banner ${rp.racha ? "ok" : "bad"} rachab" data-tab="analisis">${rp.racha ? "✅" : "❌"} Plan cumplido: ${rp.racha} ${rp.racha === 1 ? "día seguido" : "días seguidos"} · ${rp.racha >= 5 ? "ya llevas 5" : "faltan " + (5 - rp.racha) + " para copiar 2 cuentas"} <span>Ver análisis →</span></button>`;
+  const rp = rachaPlan(cumplimiento(tradesAnalisis())), ce = compraExamen();
+  const compra = `<div class="banner ${ce.ok ? "ok" : "warn"}" style="margin-bottom:8px">${esc(ce.txt)}</div>`;
+  if (!rp.dias) return compra;
+  return compra + `<button type="button" class="banner ${rp.racha ? "ok" : "bad"} rachab" data-tab="analisis">${rp.racha ? "✅" : "❌"} Plan cumplido: ${rp.racha} ${rp.racha === 1 ? "día seguido" : "días seguidos"} · ${rp.racha >= 5 ? "ya llevas 5" : "faltan " + (5 - rp.racha) + " para copiar 2 cuentas"} <span>Ver análisis →</span></button>`;
 }
 // ── Repetición de mercado (inside 📒 Backtesting): a past MNQ day replayed bar by bar from the 1-minute bars Topstep read
 // (fm/replay/dias), shown in M1, M5 or M15, traded with his plan. Stops and targets are always checked minute by minute ──
@@ -1463,6 +1471,7 @@ $("#pf-file").addEventListener("change", async () => {
 function contexto() {
   const days = dayMap(), os = ops(), mp = motor();
   return {
+    compraExamen: compraExamen().txt,
     estadoDelSistema: mp.pausa.dia || mp.pausa.semanal ? mp.avisos.filter((a) => /:pausa-/.test(a.key)).map((a) => a.txt).join(" ") : "Sin pausa: tus reglas de stops del día y de la semana no han saltado.",
     grupos: grupos().map((g) => { const s = grupoStats(g, days); return { grupo: g.nombre, empresa: g.empresa, ratio: g.ratio || null, estado: g.estado, suplente: g.suplente ? cCode(g.suplente) : null,
       cuentas: s.cs.length, verdes: s.verdes, rojas: s.rojas, pnlSemana: Math.round(s.semana * 100) / 100, pnlTotal: Math.round(s.total * 100) / 100, pctDrawdown: s.dd }; }),
