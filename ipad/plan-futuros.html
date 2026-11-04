@@ -354,7 +354,7 @@ V.dashboard = () => {
     <div class="card"><h3>P&amp;L Semanal por Grupo</h3><p class="hint">${esc(gs.map((g) => g.nombre + (g.ratio ? ` (${g.ratio})` : "")).join(" · "))}</p>
       ${labels.length ? bars(series, labels) : '<p class="empty">Añade semanas en la pestaña Semanas.</p>'}</div>
     <div class="card"><h3>Resumen de Grupos</h3><p class="hint">Estado actual de cada grupo activo</p>
-      ${gs.map((g, i) => { const s = grupoStats(g, days); return `<div class="gcard"><div class="top"><span>${ICONO(g, i)} ${esc(g.nombre)} — ${esc(g.empresa)}</span><span class="${cls(s.total)}">${signed(s.total)}</span></div>
+      ${gs.map((g, i) => { const s = grupoStats(g, days); return `<div class="gcard"><div class="top"><span>${ICONO(g, i)} ${esc(g.nombre)} — ${g.estado === "ACTIVO" ? (modoG(g.id) === "londres" ? "Londres + Nueva York" : "2 balas") : esc(g.empresa)}</span><span class="${cls(s.total)}">${signed(s.total)}</span></div>
         <div class="meta"><span>Estado <b>${GRUPO_ESTADOS[g.estado] || esc(g.estado)}</b></span><span>Cuentas <b>${s.cs.length}</b></span><span>Verdes <b>${s.verdes}</b></span><span>Rojas <b>${s.rojas}</b></span></div>
         <div class="meta"><span>Challenge <b>${s.examen ? s.examen + " en examen" : "—"}</b></span></div><div class="meta">${s.cs.map((c) => `<span class="pill st-${esc(c.estado)}">${esc(c.codigo)} ${signed(pnl(c))}</span>`).join("") || "Sin cuentas"}</div></div>`; }).join("")}</div>
     <div class="card"><h3>Distribución de cuentas</h3><p class="hint">Por estado actual</p>
