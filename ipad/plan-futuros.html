@@ -726,7 +726,10 @@ function toast(t) { const el = $("#pf-toast"); el.textContent = t; el.hidden = f
 // ── groups chosen like the TopStep Squad, and Topstep accounts that register themselves ──
 // Squad's rule, on the groups that rotate (ACTIVO; MAESTRA and RESERVA keep theirs): funded accounts are spread so no group
 // holds them all, then each exam goes to the group with fewest live accounts, mixing advanced exams with fragile ones.
-const vivaC = (c) => c.estado === "ACTIVA" || c.estado === "EXAM";
+// Burned: Topstep's balance went through the end-of-day trailing floor (the rules engine works it out from his days).
+// A burned account is never alive, even before its state in the plan says PERDIDA (autoQuemadas() writes that).
+const quemadaTs = (c) => { if (!ts(c)) return false; const m = motor(), x = [...m.examenes, ...m.fondeadas].find((y) => y.cuenta === c.codigo); return !!x && x.margen <= 0; };
+const vivaC = (c) => (c.estado === "ACTIVA" || c.estado === "EXAM") && !quemadaTs(c);
 const progreso = (c) => { const tp = Number(c.tp) || 0; return c.tipo === "Fondeada" || !tp ? 0 : Math.max(0, pnl(c) / tp); };
 const colchon = (c) => { const sl = Math.abs(Number(c.sl) || 0); return sl ? (pnl(c) + sl) / sl : 1; };
 const rotan = () => grupos().filter((g) => g.estado === "ACTIVO");
@@ -790,6 +793,24 @@ async function registrarTs(lista) {
   return hechas;
 }
 // Accounts bought from now on register themselves; the ones that were already unlinked when this started wait in Cuentas for a tap.
+async function autoQuemadas() {
+  if (!S.db || !S.ready || !S.topstep || S.quemBusy) return;
+  const l = cuentas().filter((c) => (c.estado === "ACTIVA" || c.estado === "EXAM") && quemadaTs(c));
+  if (!l.length) return;
+  S.quemBusy = true;
+  try {
+    const hoy = tradingDay(Date.now()), dm = dayMap();
+    for (const c of l) {
+      // the day it burned: its last traded day
+      const dia = Object.keys(dm[c.id] || {}).filter((d) => d <= hoy).sort().pop() || hoy;
+      const codigo = /quemada$/i.test(c.codigo) ? c.codigo : c.codigo + " quemada";
+      await S.db.doc("fm/plan").collection("cuentas").doc(c.id).update({ estado: "PERDIDA", quemada: dia, codigo });
+      if (c.topstepId) { try { await S.db.doc("fm/main").collection("cuentas").doc("ts-auto-" + c.topstepId).update({ estado: "perdida", alias: codigo }); } catch {} }
+    }
+    toast("🔥 " + l.map((c) => c.codigo).join(" y ") + (l.length === 1 ? " se ha quemado: la marco como perdida." : " se han quemado: las marco como perdidas."));
+  } catch (err) { toast("No he podido marcar las cuentas quemadas: " + (err.message || "error")); }
+  finally { S.quemBusy = false; }
+}
 async function autoRegistro() {
   if (!S.db || !S.ready || !S.topstep || !S.autoreg || S.autoregBusy) return;
   const libres = sinRegistrar(), ref = S.db.doc("fm/plan").collection("config").doc("autoregistro");
@@ -818,9 +839,11 @@ const modosEnUso = () => { const s = [...new Set(rotan().map((g) => modoG(g.id))
 const quienes = (mo) => (modosEnUso().length > 1 ? rotan().filter((g) => modoG(g.id) === mo).map((g) => g.nombre).join(", ") : "");
 // The engine on today's accounts: the same warnings the hourly watch sends to his phone, live while the app is open.
 function motor() {
+  if (S.motorMemo && Date.now() - S.motorMemo.t < 1500) return S.motorMemo.v;
   const dia = tradingDay(Date.now()), dm = dayMap();
-  return motorReglas({ estrategia: est(), hoy: dia, cuentas: cuentas().map((c) => ({ codigo: c.codigo, tipo: c.tipo, estado: c.estado, tp: c.tp, sl: c.sl, orden: c.orden, grupo: c.grupo,
+  const v = motorReglas({ estrategia: est(), hoy: dia, cuentas: cuentas().map((c) => ({ codigo: c.codigo, tipo: c.tipo, estado: c.estado, tp: c.tp, sl: c.sl, orden: c.orden, grupo: c.grupo,
     pnl: pnl(c), dias: dm[c.id] || {}, tradesHoy: tradesDia(c, dia) })), ahora: new Date().toISOString() });
+  S.motorMemo = { t: Date.now(), v }; return v;
 }
 const tradesDia = (c, d) => [...(ts(c)?.trades || []).filter((x) => x.fecha === d).map((x) => ({ pnl: Number(x.pnl) || 0, at: x.cierra || "" })),
   ...list(S.ops).filter((o) => o.cuenta === c.id && o.fecha === d).map((o) => ({ pnl: Number(o.pnl) || 0, at: o.creado || "" }))].sort((a, b) => (a.at < b.at ? -1 : 1));
@@ -1296,6 +1319,7 @@ async function rpAccion(d, t) {
 }
 // ── render & events ────────────────────────────────────────────
 function render() {
+  S.motorMemo = null;
   $("#pf-tabs").innerHTML = TABS.map(([k, n]) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${S.tab === k}">${n}</button>`).join("");
   $("#pf-view").innerHTML = !S.ready ? '<p class="empty">Cargando tu plan…</p>' : V[S.tab]();
   oyentes.forEach((f) => { try { f(); } catch {} });
@@ -1447,14 +1471,14 @@ window.PLAN = { contexto, render, vista, onCambio: (f) => { oyentes.add(f); retu
   if (!db) { S.ready = true; render(); return; }
   const plan = db.doc("fm/plan"), pend = new Set(["grupos", "cuentas", "operaciones", "semanas", "revisiones", "topstep"]);
   const editando = () => { const a = ROOT.activeElement; return a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName) && a.closest("#pf-view"); };
-  const done = (k) => { pend.delete(k); if (!pend.size && !S.ready) { S.ready = true; } if (k === "topstep" || k === "cuentas") setTimeout(autoRegistro, 500); if (editando()) { S.renderLuego = true; return; } render(); };
+  const done = (k) => { pend.delete(k); if (!pend.size && !S.ready) { S.ready = true; } if (k === "topstep" || k === "cuentas") { setTimeout(autoRegistro, 500); setTimeout(autoQuemadas, 800); } if (editando()) { S.renderLuego = true; return; } render(); };
   root.addEventListener("focusout", () => setTimeout(() => { if (S.renderLuego && !editando()) { S.renderLuego = false; render(); } }, 50));
   const sub = (col, map) => plan.collection(col).onSnapshot((snap) => { map.clear(); for (const d of snap.docs) map.set(d.id, d.data()); if (col === "revisiones" && S.rev && !S.revisiones.has(S.rev.id)) {} done(col); }, () => done(col));
   btSub(plan);
   sub("grupos", S.grupos); sub("cuentas", S.cuentas); sub("operaciones", S.ops); sub("semanas", S.semanas); sub("revisiones", S.revisiones);
   db.doc("fm/replay").onSnapshot((snap) => { S.replayIdx = snap.exists ? snap.data() : null; if (S.tab === "backtest") render(); }, () => {});
   db.doc("fm/replay").collection("sesiones").onSnapshot((snap) => { S.rpSes.clear(); for (const d of snap.docs) S.rpSes.set(d.id, d.data()); if (S.tab === "backtest") render(); }, () => {});
-  db.doc("fm/topstep").onSnapshot((snap) => { S.topstep = snap.exists ? snap.data() : null; done("topstep"); }, () => done("topstep"));
+  db.doc("fm/topstep").onSnapshot((snap) => { S.topstep = snap.exists ? snap.data() : null; done("topstep"); setTimeout(autoQuemadas, 500); }, () => done("topstep"));
   plan.collection("config").doc("estrategia").onSnapshot((snap) => { S.estrategia = snap.exists ? snap.data() : null; render(); }, () => {});
   plan.collection("config").doc("rotacion").onSnapshot((snap) => { S.rotacion = snap.exists ? snap.data() : null; S.rotacionLista = true; setTimeout(avanzarFoco, 300); render(); }, () => {});
   setInterval(avanzarFoco, 20000);

@@ -290,6 +290,8 @@ async function checkIpadApps() {
       wrongSym.push("Análisis: his real trades (win rate, profit factor, curve, drawdown, streaks, London vs New York, weekday and hour) must have their own tab");
     if (!page.includes("function cumplimiento(") || !page.includes("function rachaPlan(") || !page.includes("operaste Nueva York sin ganancias de Londres") || !page.includes("seguiste operando después del stop") || !page.includes("rachaHtml() +"))
       wrongSym.push("¿Cumples el plan?: each traded exam day checked against his strategy, with the streak towards copying 2 accounts on the dashboard");
+    if (!page.includes("const vivaC = (c) => (c.estado === \"ACTIVA\" || c.estado === \"EXAM\") && !quemadaTs(c);") || !page.includes("async function autoQuemadas(") || !page.includes("setTimeout(autoQuemadas, 800)"))
+      wrongSym.push("Burned accounts: an account through its trailing floor is never alive (no focus, no turn) and is marked PERDIDA «TS-n quemada» by itself");
     if (!page.includes("function grupoBox(") || !page.includes("Grupos y sus cuentas") || !page.includes("por comprar"))
       wrongSym.push("Grupos: each group shows its accounts (live, burned and booked to buy) instead of a table of counts");
     if (!page.includes("only proposes a move when one group has two or more") || !page.includes("if (n(hi) - n(lo) <= 1) return;"))
