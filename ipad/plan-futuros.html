@@ -582,7 +582,8 @@ const riskOf = (c) => ({ mult: c.mult || "1x", dllOn: c.dllOn !== false, dll: c.
                          dptOn: c.dptOn !== false, dpt: c.dpt ?? Math.round(Number(c.tp) || 0), dptAccion: c.dptAccion || "Liquidar", ...(S.risk[c.id] || {}) });
 V.riesgo = () => {
   const q = S.f.rq.trim().toLowerCase();
-  const cs = cuentas().filter((c) => (!S.f.rg || c.grupo === S.f.rg) && (!q || c.codigo.toLowerCase().includes(q)));
+  // burned accounts have nothing left to watch: they stay in Cuentas, not here
+  const cs = cuentas().filter((c) => c.estado !== "PERDIDA" && (!S.f.rg || c.grupo === S.f.rg) && (!q || c.codigo.toLowerCase().includes(q)));
   const g2 = grupos().find((g) => g.ratio && g.ratio.startsWith("0.5"));
   return `<div class="cardhead"><div><span style="font-size:28px">⚙️</span><p class="hint">Administra las reglas de gestión de riesgo para todas tus cuentas</p></div>
     <div style="margin-left:auto;display:flex;gap:10px"><span class="hint" style="align-self:center">Se guarda solo al cambiarlo</span><button class="btn green" type="button" data-act="guardar-riesgo">💾 Guardar cambios</button><button class="btn" type="button" data-act="reset-riesgo">↺ Restablecer</button></div></div>
