@@ -991,48 +991,82 @@ function planCorto(mo, E) {
 
 // ── Ejemplo de la escalera: fondeadas imaginarias, día a día, con el mismo motor y sus números, para ver cómo quedan los grupos ──
 // Nada de esto se guarda: son cuentas inventadas (TS-1, TS-2…, como él las llama) que hacen su día grande, sus días mínimos y piden el payout.
-const ejemplo = () => (S.ej ||= { n: 8, esc: "bien", dia: 1 });
+const ejemplo = () => (S.ej ||= { n: 8, esc: "bien", dia: 5 });
 function ejemploSim(n, esc, hasta) {
   const E = { ...est(), escalera: true }, fechas = [];
   for (let t = Date.parse("2026-01-05T12:00:00Z"); fechas.length < hasta; t += 86400000) { const w = new Date(t).getUTCDay(); if (w && w < 6) fechas.push(new Date(t).toISOString().slice(0, 10)); }
   let semilla = 11; const azar = () => (semilla = (semilla * 16807) % 2147483647) / 2147483647;
   const cs = [...Array(n)].map((_, i) => ({ codigo: "TS-" + (i + 1), tipo: "Fondeada", estado: "ACTIVA", sl: -2000, orden: i + 1, grupo: "ej", pnl: 0, dias: {}, tradesHoy: [] }));
-  let r = null, res = {}, payouts = 0;
+  const hist = [], k_ = { payouts: 0, grandes: 0, minimos: 0, ganado: 0, malos: 0 };
+  let r = null;
   for (let k = 0; k < hasta; k++) {
-    const hoy = fechas[k];
+    const hoy = fechas[k], dia = {};
     r = motorReglas({ estrategia: E, cuentas: cs.map((c) => ({ ...c, dias: { ...c.dias } })), hoy, ahora: hoy + "T15:00:00Z" });
-    res = {};
     for (const x of r.fondeadas) {
-      const c = cs.find((y) => y.codigo === x.cuenta);
-      if (x.rol === "payout") { res[c.codigo] = "💰 payout"; payouts++; c.dias = {}; c.pnl = 0; c.orden = 100 + k; continue; }
-      if (x.rol === "cola" || x.rol === "quemada") continue;
+      const c = cs.find((y) => y.codigo === x.cuenta), g = x.grupo === "B" ? x.txt.split(" · ")[0] : x.grupo === "A" ? "Grupo 1" : x.grupo;
+      if (x.rol === "payout") { dia[c.codigo] = { rol: "payout", g }; k_.payouts++; c.dias = {}; c.pnl = 0; c.orden = 100 + k; continue; }
+      if (x.rol === "cola" || x.rol === "quemada") { dia[c.codigo] = { rol: x.rol, g }; continue; }
       const ok = esc === "bien" || azar() < (x.rol === "minimos" ? 0.7 : 0.5);
       const p = x.rol === "minimos" ? (ok ? E.dmTP : -E.minimoSL) : x.rol === "recuperacion" ? (ok ? E.minimo : -E.recupR) : (ok ? E.fuerteTP : -E.fuerteIni);
-      c.dias[hoy] = p; c.pnl += p; res[c.codigo] = p;
+      c.dias[hoy] = p; c.pnl += p; k_.ganado += p; if (!ok) k_.malos++;
+      if (ok && x.rol === "fuerte") k_.grandes++; if (ok && x.rol === "minimos") k_.minimos++;
+      dia[c.codigo] = { rol: x.rol, g, p, ok, n: x.dias + 1 };
     }
+    hist.push(dia);
   }
-  return { E, r, res, fecha: fechas[hasta - 1], payouts };
+  return { E, r, hist, fechas, k: k_, cuentas: cs.map((c) => c.codigo) };
 }
+// one colour and one mark per state, the same in the map, the board and the legend
+const EJ_EST = {
+  "fuerte+": ["Día grande hecho", "#f59e0b", "★"], "fuerte-": ["Día grande fallado", "#dc2626", "✕"],
+  "minimos+": ["Día mínimo hecho", "#16a34a", "✓"], "minimos-": ["Día mínimo en stop", "#f87171", "✕"],
+  "recuperacion+": ["Recuperando", "#fb923c", "↺"], "recuperacion-": ["Recuperando", "#fb923c", "↺"],
+  payout: ["Pide el payout", "#7c3aed", "$"], cola: ["En cola", "#cbd5e1", "·"], quemada: ["Quemada", "#0f172a", "🔥"] };
+const ejClave = (d) => (!d ? null : d.rol === "payout" || d.rol === "cola" || d.rol === "quemada" ? d.rol : d.rol + (d.ok ? "+" : "-"));
 function ejemploHtml() {
-  const j = ejemplo(), { E, r, res, fecha, payouts } = ejemploSim(j.n, j.esc, j.dia);
-  const grupoDe = (x) => (x.grupo === "A" ? "Grupo 1" : x.grupo === "B" ? x.txt.split(" · ")[0] : x.grupo === "Cola" ? "⏳ En cola (hoy no operan)" : x.grupo === "Payout" ? "💰 Piden el payout" : x.grupo === "Recup" ? "🩹 Recuperando aparte" : x.rol === "quemada" ? "🔥 Quemadas (repón con un examen nuevo)" : "Otras");
-  const orden = ["Grupo 1"], cajas = {};
-  for (const x of r.fondeadas) { const g = grupoDe(x); (cajas[g] ||= []).push(x); if (!orden.includes(g)) orden.push(g); }
-  const sesion = (g) => (g === "Grupo 1" ? " · " + (E.sesionT1 || "Nueva York") : /^Grupo Días Mínimos/.test(g) ? " · " + (E.sesionT2 || "Londres") + " · su propio trade" : "");
-  const papel = (x) => (x.rol === "fuerte" ? "💪 día grande · " + E.pgContratos + " contratos · entra −" + usd(E.fuerteIni) + " / +" + usd(E.fuerteIni) + ", promedia hasta +" + usd(E.fuerteTP)
-    : x.rol === "minimos" ? "📅 día mínimo " + (x.dias + 1) + "/" + E.diasPayout + " · " + E.dmContratos + " contrato · −" + usd(E.minimoSL) + " / cierra en +" + usd(E.dmTP)
-    : x.rol === "recuperacion" ? "🩹 recupera: −" + usd(E.recupR) + " / +" + usd(E.minimo) : x.rol === "payout" ? "💰 4 días mínimos hechos: pide el payout" : x.rol === "cola" ? "espera su día grande" : x.rol);
-  const fila = (x) => { const v = res[x.cuenta]; return `<div style="display:flex;gap:8px;justify-content:space-between;padding:6px 0;border-top:1px solid var(--line)"><span><b>${esc(x.cuenta)}</b> <span class="hint">${esc(papel(x))}</span></span>${typeof v === "number" ? `<b style="white-space:nowrap" class="${v > 0 ? "pos" : "neg"}">${v > 0 ? "+" : "−"}${usd(Math.abs(v))}</b>` : v ? `<b>${esc(v)}</b>` : ""}</div>`; };
-  const caja = (g) => `<div style="border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--card)"><b>${esc(g + sesion(g))}</b>${[...cajas[g]].sort((a, b) => (b.rol === "fuerte" || b.rol === "recuperacion") - (a.rol === "fuerte" || a.rol === "recuperacion")).map(fila).join("")}</div>`;
-  const fecha2 = fecha.split("-").reverse().slice(0, 2).join("/");
-  return `<details data-ejemplo style="margin-top:14px" ${j.abierto ? "open" : ""}><summary class="hint" style="cursor:pointer">👀 Ver un ejemplo de la escalera día a día (cuentas inventadas)</summary>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0">
+  const j = ejemplo(), { E, hist, fechas, k, cuentas: cods } = ejemploSim(j.n, j.esc, j.dia), hoy = hist[hist.length - 1];
+  const f2 = (d) => d.split("-").reverse().slice(0, 2).join("/"), sg = (v) => (v > 0 ? "+" : v < 0 ? "−" : "") + usd(Math.abs(v));
+  // KPIs: what the ladder gives after these days
+  const enDM = Object.values(hoy).filter((d) => d.rol === "minimos").length, cola = Object.values(hoy).filter((d) => d.rol === "cola").length;
+  const kpi = [["Payouts pedidos", String(k.payouts), "en " + j.dia + (j.dia === 1 ? " día" : " días")], ["Beneficio total", sg(k.ganado), "todas las fondeadas"],
+    ["Días grandes", String(k.grandes), "hechos (+" + usd(E.fuerteTP) + ")"], ["Días mínimos", String(k.minimos), "hechos (+" + usd(E.dmTP) + ")"],
+    ["Hoy", enDM + " en mínimos", cola + " en cola"]];
+  // the map: one row per account, one column per day (the last 20), today framed
+  const desde = Math.max(0, hist.length - 20), cols = hist.slice(desde);
+  const celda = (d, i) => { const c = ejClave(d), [t, col, mk] = EJ_EST[c] || ["", "transparent", ""], ult = desde + i === hist.length - 1;
+    return `<span title="${esc(t + (d && d.p ? " " + sg(d.p) : ""))}" style="display:grid;place-items:center;height:26px;border-radius:6px;font-size:12px;font-weight:800;background:${col};color:${c === "cola" ? "#64748b" : "#fff"};${ult ? "box-shadow:0 0 0 2px #0f172a" : ""}">${mk}</span>`; };
+  const mapa = `<div style="overflow-x:auto"><div style="display:grid;grid-template-columns:52px repeat(${cols.length},minmax(26px,1fr));gap:4px;min-width:${52 + cols.length * 30}px;align-items:center">
+    <span></span>${cols.map((_, i) => `<span style="text-align:center;font-size:10px;color:var(--muted);font-weight:${desde + i === hist.length - 1 ? 800 : 500}">D${desde + i + 1}</span>`).join("")}
+    ${cods.map((cod) => `<b style="font-size:12px">${esc(cod)}</b>${cols.map((d, i) => celda(d[cod], i)).join("")}`).join("")}</div></div>`;
+  const leyenda = [...new Map(Object.entries(EJ_EST).map(([c, v]) => [v[0], v])).values()].map(([t, col, mk]) =>
+    `<span style="display:inline-flex;gap:6px;align-items:center;font-size:12px;color:var(--muted)"><span style="display:grid;place-items:center;width:18px;height:18px;border-radius:5px;background:${col};color:${col === "#cbd5e1" ? "#64748b" : "#fff"};font-size:10px;font-weight:800">${mk}</span>${esc(t)}</span>`).join("");
+  // today's board: one card per group, one chip per account
+  const grupos = {}, orden = ["Grupo 1"];
+  for (const cod of cods) { const d = hoy[cod]; if (!d) continue; const g = d.rol === "cola" ? "Cola" : d.rol === "payout" ? "Payout" : d.rol === "quemada" ? "Quemadas" : d.g || "Otras"; (grupos[g] ||= []).push([cod, d]); if (!orden.includes(g)) orden.push(g); }
+  const titulo = { "Grupo 1": ["Grupo 1", (E.sesionT1 || "Nueva York") + " · un solo trade desde la MASTER", "#1d4ed8"], Cola: ["En cola", "hoy no operan", "#94a3b8"],
+    Payout: ["Payout", "4 días mínimos hechos", "#7c3aed"], Recup: ["Recuperando aparte", "su propio trade, −" + usd(E.recupR) + " / +" + usd(E.minimo), "#ea580c"], Quemadas: ["Quemadas", "repón con un examen nuevo", "#0f172a"] };
+  const dots = (n) => `<span style="display:inline-flex;gap:3px;margin-left:6px">${[...Array(E.diasPayout)].map((_, i) => `<i style="width:7px;height:7px;border-radius:50%;background:${i < n ? "#16a34a" : "#e2e8f0"}"></i>`).join("")}</span>`;
+  const chip = ([cod, d]) => { const [t, col] = EJ_EST[ejClave(d)] || ["", "#cbd5e1"];
+    const que = d.rol === "fuerte" ? E.pgContratos + " contratos · −" + usd(E.fuerteIni) + " / +" + usd(E.fuerteIni) + " → +" + usd(E.fuerteTP)
+      : d.rol === "minimos" ? E.dmContratos + " contrato · −" + usd(E.minimoSL) + " / +" + usd(E.dmTP) : d.rol === "recuperacion" ? "−" + usd(E.recupR) + " / +" + usd(E.minimo) : t;
+    return `<div style="display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:8px 10px;border-radius:10px;background:var(--soft);border-left:4px solid ${col}">
+      <b>${esc(cod)}</b><span style="font-size:12px;color:var(--muted)">${d.rol === "fuerte" ? "💪 día grande · " : d.rol === "minimos" ? "📅 día mínimo" + dots(d.n - (d.ok ? 0 : 1)) + " · " : ""}${esc(que)}</span>
+      ${typeof d.p === "number" ? `<b style="white-space:nowrap;color:${d.p > 0 ? "#16a34a" : "#dc2626"}">${sg(d.p)}</b>` : "<span></span>"}</div>`; };
+  const tarjeta = (g) => { const [tt, sub, col] = titulo[g] || [g, /^Grupo Días Mínimos/.test(g) ? (E.sesionT2 || "Londres") + " · su propio trade" : "", "#16a34a"];
+    return `<div style="border:1px solid var(--line);border-radius:14px;padding:12px;background:var(--card);border-top:4px solid ${col};display:grid;gap:8px;align-content:start">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><b>${esc(tt)}</b><span style="font-size:12px;color:var(--muted)">${grupos[g].length} · ${esc(sub)}</span></div>${[...grupos[g]].sort((x, y) => (y[1].rol === "fuerte") - (x[1].rol === "fuerte")).map(chip).join("")}</div>`; };
+  const tablero = `<div style="display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">${orden.filter((g) => grupos[g]).map(tarjeta).join("")}</div>`;
+  return `<details data-ejemplo style="margin-top:14px" ${j.abierto ? "open" : ""}><summary class="hint" style="cursor:pointer">👀 Simulador de la escalera (cuentas inventadas, tus reglas)</summary>
+    <div style="display:grid;gap:14px;margin-top:12px">
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
       <span class="seg mini"><button type="button" data-ej="n-">−</button><button type="button" disabled>${j.n} fondeadas</button><button type="button" data-ej="n+">+</button></span>
       <span class="seg mini"><button type="button" data-ej="bien" aria-pressed="${j.esc === "bien"}">Todo sale bien</button><button type="button" data-ej="real" aria-pressed="${j.esc === "real"}">Con días malos</button></span>
-      <span class="seg mini"><button type="button" data-ej="d-">◀</button><button type="button" disabled>Día ${j.dia} (${fecha2})</button><button type="button" data-ej="d+">▶</button></span></div>
-    <p class="hint">${esc(r.resumen)}</p>
-    <div style="display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">${orden.filter((g) => cajas[g]).map(caja).join("")}</div>
-    <p class="hint" style="margin-top:8px">A la derecha, lo que hizo cada cuenta ese día en el ejemplo. Payouts pedidos hasta el día ${j.dia}: <b>${payouts}</b>. Con ${E.pgMax || 1} cuenta a la vez en el día grande y ${E.diasPayout} días mínimos, si todo sale bien nunca hay más de ${E.diasPayout} cuentas en días mínimos; los Grupos Días Mínimos aparecen cuando se atrasan días mínimos (prueba «Con días malos» y muchas cuentas).</p></details>`;
+      <span class="seg mini"><button type="button" data-ej="d-">◀</button><button type="button" disabled>Día ${j.dia} · ${f2(fechas[j.dia - 1])}</button><button type="button" data-ej="d+">▶</button></span></div>
+    <div class="tiles" style="background:var(--navy);padding:10px;border-radius:16px">${kpi.map(([t, v, n]) => `<div class="tile"><span class="tl">${esc(t)}</span><span class="tv"><span class="${/^\+/.test(v) ? "pos" : /^−/.test(v) ? "neg" : ""}">${esc(v)}</span></span><span class="tn">${esc(n)}</span></div>`).join("")}</div>
+    <div><div class="sec" style="margin:0 0 8px">MAPA DE LA ESCALERA · CADA FILA UNA CUENTA, CADA COLUMNA UN DÍA</div>${mapa}
+      <div style="display:flex;flex-wrap:wrap;gap:10px 16px;margin-top:10px">${leyenda}</div></div>
+    <div><div class="sec" style="margin:0 0 8px">HOY, DÍA ${j.dia}: QUIÉN OPERA EN CADA GRUPO</div>${tablero}</div>
+    <p class="hint" style="margin:0">Con ${E.pgMax || 1} cuenta a la vez en el día grande y ${E.diasPayout} días mínimos, si todo sale bien nunca hay más de ${E.diasPayout} cuentas en días mínimos y cada día sale un payout desde el día ${E.diasPayout + 2}. Los Grupos Días Mínimos solo aparecen cuando se atrasan días mínimos.</p></div></details>`;
 }
 function hoyHtml() {
   const E = est(), h = hoyOperas(), m = motor(), ses = sesiones(), dia = h.dia || tradingDay(Date.now());
