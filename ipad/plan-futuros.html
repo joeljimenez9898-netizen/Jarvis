@@ -1056,7 +1056,7 @@ function ejemploHtml() {
   const tarjeta = (g) => { const [tt, sub, col] = titulo[g] || [g, /^Grupo Días Mínimos/.test(g) ? (E.sesionT2 || "Londres") + " · su propio trade" : "", "#16a34a"];
     return `<div style="border:1px solid var(--line);border-radius:14px;padding:12px;background:var(--card);border-top:4px solid ${col};display:grid;gap:8px;align-content:start">
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><b>${esc(tt)}</b><span style="font-size:12px;color:var(--muted)">${grupos[g].length} · ${esc(sub)}</span></div>${[...grupos[g]].sort((x, y) => (y[1].rol === "fuerte") - (x[1].rol === "fuerte")).map(chip).join("")}</div>`; };
-  // step by step: what happened each day, in words (the last 8 days, today on top)
+  // step by step: what happens on the chosen day, in words (only that day; ◀ ▶ move through the days)
   const lista = (xs) => xs.length < 2 ? xs.join("") : xs.slice(0, -1).join(", ") + " y " + xs.at(-1);
   const frase = (d, i) => { const de = (f) => cods.filter((c) => d[c] && f(d[c]));
     const g = de((x) => x.rol === "fuerte"), m = de((x) => x.rol === "minimos"), p = de((x) => x.rol === "payout"), c = de((x) => x.rol === "cola"), rc = de((x) => x.rol === "recuperacion");
@@ -1075,7 +1075,7 @@ function ejemploHtml() {
     if (c.length) L.push(`<span style="color:var(--muted)">${lista(c.map((k) => k))} ${c.length > 1 ? "esperan" : "espera"} su turno.</span>`);
     return `<div style="display:grid;grid-template-columns:64px 1fr;gap:10px;padding:10px 12px;border-radius:12px;background:${i === hist.length - 1 ? "#eff6ff" : "var(--soft)"};border:1px solid ${i === hist.length - 1 ? "#bfdbfe" : "var(--line)"}">
       <b style="font-size:13px">Día ${i + 1}<br><span style="font-weight:500;color:var(--muted);font-size:11px">${f2(fechas[i])}</span></b><div style="display:grid;gap:4px;font-size:13px">${L.map((x) => "<span>" + x + "</span>").join("")}</div></div>`; };
-  const relato = `<div style="display:grid;gap:8px">${hist.map((d, i) => [d, i]).slice(-8).reverse().map(([d, i]) => frase(d, i)).join("")}</div>`;
+  const relato = `<div style="display:grid;gap:8px">${frase(hist[hist.length - 1], hist.length - 1)}</div>`;
   const tablero = `<div style="display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">${orden.filter((g) => grupos[g]).map(tarjeta).join("")}</div>`;
   return `<details data-ejemplo style="margin-top:14px" ${j.abierto ? "open" : ""}><summary class="hint" style="cursor:pointer">👀 Simulador de la escalera (cuentas inventadas, tus reglas)</summary>
     <div style="display:grid;gap:14px;margin-top:12px">
@@ -1084,7 +1084,7 @@ function ejemploHtml() {
       <span class="seg mini"><button type="button" data-ej="bien" aria-pressed="${j.esc === "bien"}">Todo sale bien</button><button type="button" data-ej="real" aria-pressed="${j.esc === "real"}">Con días malos</button><button type="button" data-ej="atraso" aria-pressed="${j.esc === "atraso"}">Se atrasan los mínimos</button></span>
       <span class="seg mini"><button type="button" data-ej="d-">◀</button><button type="button" disabled>Día ${j.dia} · ${f2(fechas[j.dia - 1])}</button><button type="button" data-ej="d+">▶</button></span></div>
     <div class="tiles" style="background:var(--navy);padding:10px;border-radius:16px">${kpi.map(([t, v, n]) => `<div class="tile"><span class="tl">${esc(t)}</span><span class="tv"><span class="${/^\+/.test(v) ? "pos" : /^−/.test(v) ? "neg" : ""}">${esc(v)}</span></span><span class="tn">${esc(n)}</span></div>`).join("")}</div>
-    <div><div class="sec" style="margin:0 0 8px">PASO A PASO · LO QUE PASA CADA DÍA</div>${relato}</div>
+    <div><div class="sec" style="margin:0 0 8px">LO QUE PASA EL DÍA ${j.dia}</div>${relato}</div>
     <div><div class="sec" style="margin:0 0 8px">MAPA DE LA ESCALERA · CADA FILA UNA CUENTA, CADA COLUMNA UN DÍA</div>${mapa}
       <div style="display:flex;flex-wrap:wrap;gap:10px 16px;margin-top:10px">${leyenda}</div></div>
     <div><div class="sec" style="margin:0 0 8px">HOY, DÍA ${j.dia}: QUIÉN OPERA EN CADA GRUPO</div>${tablero}</div>
