@@ -130,11 +130,17 @@ async function checkEscalera() {
     cuentas: [f("F-1", 1, { "2026-11-17": 1600, "2026-11-18": 160 }), f("F-2", 2, { "2026-11-18": 1550 }), f("F-3", 3, {}), f("F-4", 4, {})] });
   const g = r.fondeadas.map((x) => x.cuenta + "=" + x.grupo).join(" ");
   if (g !== "F-1=B F-2=B F-3=A F-4=Cola") return [false, "ladder: " + g];
-  if (!r.resumen.includes("días mínimos F-1, F-2 con un mismo trade copiado") || !r.fondeadas[3].txt.startsWith("⏳ En cola para el día grande: hoy no se opera. Entra cuando F-3"))
-    return [false, "ladder words: " + r.resumen];
+  if (!r.resumen.includes("días mínimos F-1, F-2 copiadas en el trade del día grande") || !r.fondeadas[3].txt.startsWith("⏳ En cola para el día grande: hoy no se opera. Entra cuando F-3")
+      || !r.fondeadas[2].txt.startsWith("Tanda 1 · día grande · 5 contratos, stop 100 pts / objetivo 150 pts") || !r.fondeadas[0].txt.includes("1 contrato copiado: −200 $ / +300 $"))
+    return [false, "ladder words: " + r.resumen + " | " + r.fondeadas.map((x) => x.txt.slice(0, 60)).join(" | ")];
+  // a sixth account on minimum days opens batch 2, with a trade of its own and no second big day (option B)
+  const big = { "2026-11-10": 1600 }, siete = [1, 2, 3, 4, 5, 6].map((i) => f("M-" + i, i, big)).concat([f("M-7", 7, {})]);
+  const r2 = ts.motorReglas({ estrategia: ts.estrategiaDe({ v: 6 }), hoy: "2026-11-20", ahora: "2026-11-20T15:00:00Z", cuentas: siete });
+  if (!r2.fondeadas[5].txt.startsWith("Tanda 2 (otro trade, sin día grande)") || r2.fondeadas.filter((x) => x.grupo === "A").length !== 1 || !r2.avisos.some((a) => /abre la tanda 2 con M-6/.test(a.txt)))
+    return [false, "batch 2: " + r2.fondeadas.map((x) => x.cuenta + "=" + x.txt.slice(0, 30)).join(" | ")];
   const page = fs.readFileSync(new URL("./ipad/plan-futuros.html", import.meta.url), "utf8");
   if (!page.includes('data-esc="si"') || !page.includes("FONDEADAS · ESCALERA")) return [false, "Plan de Futuros has no ladder switch"];
-  return [true, "F-1 and F-2 (big day done) on minimum days with one copied trade, F-3 goes for the big day, F-4 waits in line"];
+  return [true, "F-3 goes for the big day with 5 contracts (100 pts stop, 150 pts target), F-1 and F-2 ride it with 1 contract (−200 $ / +300 $), F-4 waits; a 6th account on minimum days opens batch 2 with its own trade"];
 }
 async function checkAprobadas() {
   const ts = await import("./topstep-sync.mjs");
