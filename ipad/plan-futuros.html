@@ -523,7 +523,7 @@ function reglas() {
       ["Prioridad diaria", "La cuenta EN FOCO de «Hoy operas»", "Jarvis te dice cada día cuál es"],
       ["Cómo operas", grupo ? "Por grupos, copiados desde la MASTER" : "Cuenta a cuenta", grupo ? "Un stop toca a todo el grupo: avanza el doble, arriesga el doble" : "Un stop solo toca una cuenta: más lento, más seguro"]]],
     [E.escalera ? "FONDEADAS · ESCALERA (UNA A POR EL DÍA GRANDE, LAS DEMÁS EN DÍAS MÍNIMOS)" : "FONDEADAS · GRUPO A (DÍA GRANDE) Y GRUPO B (DÍAS MÍNIMOS)", [["Día grande", "Arriesgas " + m(E.fuerteSL) + " para ganar " + m(E.fuerteTP), E.escalera ? "Solo " + (Number(E.pgMax) || 1) + " cuenta a la vez; las demás sin día grande esperan en cola" : "Todas las que aún no tienen un día de +" + m(E.fuerteTP) + " o más"],
-      E.escalera ? ["Escalera", "Día 1: A día grande · Día 2: A días mínimos + B día grande · Día 3: A y B días mínimos + C día grande", "Las de días mínimos van con un mismo trade copiado; la del día grande, con el suyo"]
+      E.escalera ? ["Escalera", "Día 1: A día grande · Día 2: A días mínimos + B día grande · Día 3: A y B días mínimos + C día grande", "Las de días mínimos van copiadas en el trade del día grande con " + (E.dmContratos || 1) + " contrato y las cierras a mano en +" + m(E.minimo)]
         : ["A1 y A2, B1 y B2", "Cada grupo se parte en dos mitades", "Jarvis las reparte solo, alternando por orden: cada mitad lleva su propio trade, nunca el mismo en todas"],
       ["Si hace el día grande", "Mañana pasa al grupo B", "Jarvis la cambia de grupo solo y te avisa"],
       ["Grupo B · días mínimos", "Arriesgas " + m(E.minimoSL) + " para ganar " + m(E.minimo), "Si va en contra promedias y si va a favor también, pero toda la posición nunca pierde más de " + m(E.minimoSL)],

@@ -131,7 +131,7 @@ async function checkEscalera() {
   const g = r.fondeadas.map((x) => x.cuenta + "=" + x.grupo).join(" ");
   if (g !== "F-1=B F-2=B F-3=A F-4=Cola") return [false, "ladder: " + g];
   if (!r.resumen.includes("días mínimos F-1, F-2 copiadas en el trade del día grande") || !r.fondeadas[3].txt.startsWith("⏳ En cola para el día grande: hoy no se opera. Entra cuando F-3")
-      || !r.fondeadas[2].txt.startsWith("Tanda 1 · Nueva York · día grande · 5 contratos, stop 100 pts / objetivo 150 pts") || !r.fondeadas[0].txt.includes("1 contrato copiado: −200 $ / +300 $"))
+      || !r.fondeadas[2].txt.startsWith("Tanda 1 · Nueva York · día grande · 5 contratos, stop 100 pts / objetivo 150 pts") || !r.fondeadas[0].txt.includes("1 contrato copiado: stop −200 $, ciérrala a mano en +150 $ (75 pts)") || !r.fondeadas[0].txt.includes("la del día grande sigue en el trade"))
     return [false, "ladder words: " + r.resumen + " | " + r.fondeadas.map((x) => x.txt.slice(0, 60)).join(" | ")];
   // a sixth account on minimum days opens batch 2, with a trade of its own and no second big day (option B)
   const big = { "2026-11-10": 1600 }, siete = [1, 2, 3, 4, 5, 6].map((i) => f("M-" + i, i, big)).concat([f("M-7", 7, {})]);
@@ -140,7 +140,7 @@ async function checkEscalera() {
     return [false, "batch 2: " + r2.fondeadas.map((x) => x.cuenta + "=" + x.txt.slice(0, 30)).join(" | ")];
   const page = fs.readFileSync(new URL("./ipad/plan-futuros.html", import.meta.url), "utf8");
   if (!page.includes('data-esc="si"') || !page.includes("FONDEADAS · ESCALERA")) return [false, "Plan de Futuros has no ladder switch"];
-  return [true, "F-3 goes for the big day with 5 contracts (100 pts stop, 150 pts target), F-1 and F-2 ride it with 1 contract (−200 $ / +300 $), F-4 waits; a 6th account on minimum days opens batch 2 with its own trade"];
+  return [true, "F-3 goes for the big day with 5 contracts (100 pts stop, 150 pts target), F-1 and F-2 ride it with 1 contract (stop −200 $, closed by hand at +150 $), F-4 waits; a 6th account on minimum days opens batch 2 with its own trade"];
 }
 async function checkAprobadas() {
   const ts = await import("./topstep-sync.mjs");
