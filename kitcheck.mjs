@@ -131,26 +131,32 @@ async function checkEscalera() {
   const g = r.fondeadas.map((x) => x.cuenta + "=" + x.grupo).join(" ");
   if (g !== "F-1=B F-2=B F-3=A F-4=Cola") return [false, "ladder: " + g];
   if (!r.resumen.includes("días mínimos F-1, F-2 copiadas en el trade del día grande") || !r.fondeadas[3].txt.startsWith("⏳ En cola para el día grande: hoy no se opera. Entra cuando F-3")
-      || !r.fondeadas[2].txt.startsWith("Grupo 1 · Nueva York · día grande · 3 contratos, entrada: stop 83 pts / objetivo 83 pts · 💪 Día grande: entra arriesgando 500 $") || !r.fondeadas[0].txt.includes("1 contrato copiado: −200 $ / +150 $ (100 pts / 75 pts)") || !r.fondeadas[0].txt.includes("Día mínimo: stop −200 $, cierra en +150 $; si empuja fuerte puedes estirar") || !r.fondeadas[2].txt.includes("Promedia en esta cuenta, no en la MASTER"))
+      || !r.fondeadas[2].txt.startsWith("Grupo 1 · Londres o NY · día grande · 3 contratos, entrada: stop 83 pts / objetivo 83 pts · 💪 Día grande: busca +1.200 $") || !r.fondeadas[0].txt.includes("1 contrato copiado: −200 $ / +150 $ (100 pts / 75 pts)") || !r.fondeadas[0].txt.includes("Día mínimo: stop −200 $, cierra en +150 $; si empuja fuerte puedes estirar") || !r.fondeadas[2].txt.includes("Promedia en esta cuenta, no en la MASTER"))
     return [false, "ladder words: " + r.resumen + " | " + r.fondeadas.map((x) => x.txt.slice(0, 60)).join(" | ")];
   // a sixth account on minimum days opens batch 2, with a trade of its own and no second big day (option B)
   // eleven on minimum days: 5 ride the big day in Grupo 1, 5 in Grupo Días Mínimos 1, 1 in Grupo Días Mínimos 2
   const big = { "2026-11-10": 1600 }, siete = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => f("M-" + i, i, big)).concat([f("M-12", 12, {})]);
   const r2 = ts.motorReglas({ estrategia: ts.estrategiaDe({ v: 6 }), hoy: "2026-11-20", ahora: "2026-11-20T15:00:00Z", cuentas: siete });
-  if (!r2.fondeadas[4].txt.startsWith("Grupo 1 · Nueva York (el mismo trade del día grande)") || !r2.fondeadas[5].txt.startsWith("Grupo Días Mínimos 1 · Londres (su propio trade, sin día grande)")
-      || !r2.fondeadas[10].txt.startsWith("Grupo Días Mínimos 2 · Londres") || r2.fondeadas.filter((x) => x.grupo === "A").length !== 1
-      || !r2.avisos.some((a) => a.txt.includes("Grupo Días Mínimos 1 (M-6, M-7, M-8, M-9, M-10), Grupo Días Mínimos 2 (M-11)")) || !r2.resumen.includes("Grupo 1 en Nueva York: día grande M-12"))
+  if (!r2.fondeadas[4].txt.startsWith("Grupo 1 · Londres o NY (el mismo trade del día grande)") || !r2.fondeadas[5].txt.startsWith("Grupo Días Mínimos 1 · la otra sesión (su propio trade, sin día grande)")
+      || !r2.fondeadas[10].txt.startsWith("Grupo Días Mínimos 2 · la otra sesión") || r2.fondeadas.filter((x) => x.grupo === "A").length !== 1
+      || !r2.avisos.some((a) => a.txt.includes("Grupo Días Mínimos 1 (M-6, M-7, M-8, M-9, M-10), Grupo Días Mínimos 2 (M-11)")) || !r2.resumen.includes("Grupo 1 en Londres o NY: día grande M-12"))
     return [false, "batch 2: " + r2.fondeadas.map((x) => x.cuenta + "=" + x.txt.slice(0, 30)).join(" | ")];
   // a lost big day leaves too little margin: that account recovers apart and the next in line takes the big day
   const r3 = ts.motorReglas({ estrategia: ts.estrategiaDe({ v: 9 }), hoy: "2026-11-20", ahora: "2026-11-20T15:00:00Z",
     cuentas: [f("R-1", 1, { "2026-11-19": -500 }), f("R-2", 2, {}), f("R-3", 3, {})] });
   const g3 = r3.fondeadas.map((x) => x.cuenta + "=" + x.grupo).join(" ");
   if (g3 !== "R-1=Recup R-2=A R-3=Cola" || !r3.fondeadas[0].txt.startsWith("Recuperación · aparte") || !r3.resumen.includes("recuperando aparte: R-1")) return [false, "recovery apart: " + g3 + " | " + r3.resumen];
+  // +500 one day and +600 the next is a big day; +500 today alone leaves it half done, with a second session risking only that
+  const r4 = ts.motorReglas({ estrategia: ts.estrategiaDe({ v: 10 }), hoy: "2026-11-20", ahora: "2026-11-20T15:00:00Z",
+    cuentas: [f("S-1", 1, { "2026-11-18": 500, "2026-11-19": 600 }), f("S-2", 2, { "2026-11-20": 500 }), f("S-3", 3, {})] });
+  const s1 = r4.fondeadas.find((x) => x.cuenta === "S-1"), s2 = r4.fondeadas.find((x) => x.cuenta === "S-2");
+  if (s1.rol !== "minimos" || !s2.txt.includes("Día grande a medias: lleva +500 $ hoy, le faltan 500 $") || !s2.txt.includes("arriesgando solo lo ganado (500 $)") || !r4.avisos.some((a) => /S-2 se ha quedado en \+500 \$/.test(a.txt)))
+    return [false, "big day adds up: " + r4.fondeadas.map((x) => x.cuenta + "=" + x.rol + ":" + x.txt.slice(0, 120)).join(" | ")];
   const page = fs.readFileSync(new URL("./ipad/plan-futuros.html", import.meta.url), "utf8");
   if (!page.includes('data-esc="si"') || !page.includes("FONDEADAS · ESCALERA")) return [false, "Plan de Futuros has no ladder switch"];
   // the real funded board: groups, today per group, no made-up accounts left
   if (!page.includes("function escaleraHtml(") || !page.includes("data-escalera") || !page.includes("LO QUE TOCA HOY") || !page.includes("function sistemaExamenes(") || !page.includes("function sistemaFondeadas(") || page.includes("ejemploSim")) return [false, "Plan de Futuros has no real ladder board (or still shows the example)"];
-  return [true, "F-3 goes for the big day with 3 contracts (enters 500 $ for 500 $, averages to +1.000 $), F-1 and F-2 ride it with 1 contract at −200 $, closed at +150 $ (averaging stays in the big-day account, off the MASTER), F-4 waits, an account that lost its big day recovers apart without holding the line; past 5 on minimum days they go 5 at a time into Grupo Días Mínimos 1, 2, … with a trade of their own"];
+  return [true, "F-3 goes for the big day with 3 contracts (enters 500 $ for 500 $, averages to +1.000 $), F-1 and F-2 ride it with 1 contract at −200 $, closed at +150 $ (averaging stays in the big-day account, off the MASTER), F-4 waits, an account that lost its big day recovers apart without holding the line, the big day adds up across days and a half one gets a second session; past 5 on minimum days they go 5 at a time into Grupo Días Mínimos 1, 2, … with a trade of their own"];
 }
 async function checkAprobadas() {
   const ts = await import("./topstep-sync.mjs");
@@ -228,7 +234,7 @@ async function checkTopstepReadOnly() {
   const k = mr.avisos.map((a) => a.key.split(":").slice(1).join(":")).join(" ");
   const gr = mr.fondeadas.map((x) => x.cuenta + "=" + x.grupo).join(" ");
   if (k !== "E1:bala2 E2:tope E3:stop A:min-ok B:fuerte-ko F:fuerte-ok pausa-dia" || !mr.avisos[0].txt.includes("justos, sin trailing") || !mr.avisos[1].txt.includes("+1.500 $")
-      || gr !== "A=B1 B=A1 C=A2 D=Payout F=A1" || !mr.fondeadas[2].txt.startsWith("Grupo A2 · 💪 Día grande: entra arriesgando 500 $ para ganar 500 $. Promedia a favor o en contra hasta cerrar el día en +1.000 $ o más; toda la posición nunca pierde más de 1.000 $") || !mr.avisos[5].txt.includes("Mañana pasa al grupo B"))
+      || gr !== "A=B1 B=A1 C=A2 D=Payout F=A1" || !mr.fondeadas[2].txt.startsWith("Grupo A2 · 💪 Día grande: busca +1.200 $ (cuenta en cuanto acumule +1.000 $). Entra arriesgando 500 $ para ganar 500 $ y promedia a favor o en contra; toda la posición nunca pierde más de 1.000 $") || !mr.avisos[5].txt.includes("Mañana pasa a días mínimos"))
     return [false, "rules engine: " + k + " | " + gr];
   const next = ts.motorReglas({ estrategia: E, hoy: "2026-10-28", cuentas: [Fd("F", 5, { "2026-10-27": 1600 }), Fd("C", 3, {}), Fd("G", 6, { "2026-10-27": 1500 }), Fd("R", 7, { "2026-10-27": -1200 })] });
   const gn = next.fondeadas.map((x) => x.cuenta + "=" + x.grupo + ":" + x.rol).join(" ");
