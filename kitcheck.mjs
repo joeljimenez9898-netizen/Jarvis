@@ -131,7 +131,7 @@ async function checkEscalera() {
   const g = r.fondeadas.map((x) => x.cuenta + "=" + x.grupo).join(" ");
   if (g !== "F-1=B F-2=B F-3=A F-4=Cola") return [false, "ladder: " + g];
   if (!r.resumen.includes("días mínimos F-1, F-2 copiadas en el trade del día grande") || !r.fondeadas[3].txt.startsWith("⏳ En cola para el día grande: hoy no se opera. Entra cuando F-3")
-      || !r.fondeadas[2].txt.startsWith("Tanda 1 · Nueva York · día grande · 3 contratos, entrada: stop 83 pts / objetivo 83 pts · 💪 Día grande: entra arriesgando 500 $") || !r.fondeadas[0].txt.includes("1 contrato copiado: −150 $ / +150 $ (75 pts / 75 pts)") || !r.fondeadas[0].txt.includes("Día mínimo 1:1: cierra en +150 $ o en −150 $") || !r.fondeadas[0].txt.includes("el copiador también le añade a esta"))
+      || !r.fondeadas[2].txt.startsWith("Tanda 1 · Nueva York · día grande · 3 contratos, entrada: stop 83 pts / objetivo 83 pts · 💪 Día grande: entra arriesgando 500 $") || !r.fondeadas[0].txt.includes("1 contrato copiado: −200 $ / +300 $ (100 pts / 150 pts)") || !r.fondeadas[0].txt.includes("Día mínimo: stop −200 $, objetivo +300 $; vale desde +150 $") || !r.fondeadas[2].txt.includes("Promedia en esta cuenta, no en la MASTER"))
     return [false, "ladder words: " + r.resumen + " | " + r.fondeadas.map((x) => x.txt.slice(0, 60)).join(" | ")];
   // a sixth account on minimum days opens batch 2, with a trade of its own and no second big day (option B)
   const big = { "2026-11-10": 1600 }, siete = [1, 2, 3, 4, 5, 6].map((i) => f("M-" + i, i, big)).concat([f("M-7", 7, {})]);
@@ -140,7 +140,7 @@ async function checkEscalera() {
     return [false, "batch 2: " + r2.fondeadas.map((x) => x.cuenta + "=" + x.txt.slice(0, 30)).join(" | ")];
   const page = fs.readFileSync(new URL("./ipad/plan-futuros.html", import.meta.url), "utf8");
   if (!page.includes('data-esc="si"') || !page.includes("FONDEADAS · ESCALERA")) return [false, "Plan de Futuros has no ladder switch"];
-  return [true, "F-3 goes for the big day with 3 contracts (enters 500 $ for 500 $, averages to +1.000 $), F-1 and F-2 ride it with 1 contract at −150 $ / +150 $, F-4 waits; a 6th account on minimum days opens batch 2 with its own trade"];
+  return [true, "F-3 goes for the big day with 3 contracts (enters 500 $ for 500 $, averages to +1.000 $), F-1 and F-2 ride it with 1 contract at −200 $ / +300 $ (averaging stays in the big-day account, off the MASTER), F-4 waits; a 6th account on minimum days opens batch 2 with its own trade"];
 }
 async function checkAprobadas() {
   const ts = await import("./topstep-sync.mjs");
@@ -210,7 +210,7 @@ async function checkTopstepReadOnly() {
   // funded accounts: group A goes for the big day, group B (big day done) does the minimum days, each split in two halves;
   // old saved settings get the new numbers
   const E0 = ts.estrategiaDe({ fuerteTP: 2500, minimoSL: 300, modo: "grupo" }), E = ts.estrategiaDe({ v: 3, exModo: "balas", escalera: false }), H = "2026-10-27";
-  if (E0.fuerteTP !== 1000 || E0.fuerteIni !== 500 || E0.pgContratos !== 3 || ts.estrategiaDe({ v: 6, fuerteTP: 1500, pgContratos: 5 }).fuerteTP !== 1000 || E0.diasPayout !== 4 || ts.estrategiaDe({ v: 4, fuerteTP: 1000, diasPayout: 5 }).fuerteTP !== 1000 || E0.minimoSL !== 150 || ts.estrategiaDe({ v: 5, minimoSL: 1000 }).minimoSL !== 150 || E0.recupR !== 500 || E0.modo !== "grupo" || E0.exModo !== "londres" || E.exModo !== "balas" || E0.lonT !== 1000 || ts.estrategiaDe({ v: 3, lonT: 500, lonMax: 1000 }).lonT !== 1000) return [false, "strategy defaults: " + JSON.stringify(E0)];
+  if (E0.fuerteTP !== 1000 || E0.fuerteIni !== 500 || E0.pgContratos !== 3 || ts.estrategiaDe({ v: 6, fuerteTP: 1500, pgContratos: 5 }).fuerteTP !== 1000 || E0.diasPayout !== 4 || ts.estrategiaDe({ v: 4, fuerteTP: 1000, diasPayout: 5 }).fuerteTP !== 1000 || E0.minimoSL !== 200 || E0.dmTP !== 300 || ts.estrategiaDe({ v: 7, minimoSL: 150 }).minimoSL !== 200 || ts.estrategiaDe({ v: 5, minimoSL: 1000 }).minimoSL !== 200 || E0.recupR !== 500 || E0.modo !== "grupo" || E0.exModo !== "londres" || E.exModo !== "balas" || E0.lonT !== 1000 || ts.estrategiaDe({ v: 3, lonT: 500, lonMax: 1000 }).lonT !== 1000) return [false, "strategy defaults: " + JSON.stringify(E0)];
   const Fd = (codigo, orden, dias) => ({ codigo, tipo: "Fondeada", estado: "ACTIVA", sl: -2000, orden, dias, pnl: Object.values(dias).reduce((a, b) => a + b, 0) });
   const Ex = (codigo, t) => ({ codigo, tipo: "Challenge", estado: "EXAM", tp: 3000, sl: -2000, dias: { [H]: t.reduce((a, b) => a + b, 0) }, tradesHoy: t, pnl: t.reduce((a, b) => a + b, 0) });
   const mr = ts.motorReglas({ estrategia: E, hoy: H, cuentas: [Ex("E1", [1000]), Ex("E2", [1000, 500]), Ex("E3", [-1000]), Fd("A", 1, { "2026-10-20": 1600, "2026-10-21": 200, [H]: 200 }),
@@ -222,8 +222,8 @@ async function checkTopstepReadOnly() {
     return [false, "rules engine: " + k + " | " + gr];
   const next = ts.motorReglas({ estrategia: E, hoy: "2026-10-28", cuentas: [Fd("F", 5, { "2026-10-27": 1600 }), Fd("C", 3, {}), Fd("G", 6, { "2026-10-27": 1500 }), Fd("R", 7, { "2026-10-27": -1200 })] });
   const gn = next.fondeadas.map((x) => x.cuenta + "=" + x.grupo + ":" + x.rol).join(" ");
-  if (!next.fondeadas.find((x) => x.cuenta === "F").txt.includes("arriesga 150 $ para ganar 150 $ (1:1). Si va en contra puedes promediar y si va a favor también")) return [false, "minimum day 150 for 150: " + next.fondeadas.find((x) => x.cuenta === "F").txt];
-  if (gn !== "C=A1:fuerte F=B1:minimos G=B2:minimos R=A2:recuperacion" || !next.resumen.includes("B1 (F) y B2 (G) en días mínimos") || !next.fondeadas[3].txt.includes("arriesga 150 $"))
+  if (!next.fondeadas.find((x) => x.cuenta === "F").txt.includes("arriesga 200 $ para ganar 300 $. Si va en contra puedes promediar y si va a favor también")) return [false, "minimum day 200 for 300: " + next.fondeadas.find((x) => x.cuenta === "F").txt];
+  if (gn !== "C=A1:fuerte F=B1:minimos G=B2:minimos R=A2:recuperacion" || !next.resumen.includes("B1 (F) y B2 (G) en días mínimos") || !next.fondeadas[3].txt.includes("arriesga 200 $"))
     return [false, "funded groups next day: " + gn + " | " + next.resumen];
   // London + New York: London's profit is all New York may risk; a London stop closes the account's day; 2 stops end the day
   const LO = "2026-10-27T08:00:00Z", NYt = "2026-10-27T15:00:00Z", XL = (codigo, t) => ({ ...Ex(codigo, t.map((x) => x.pnl)), tradesHoy: t });
