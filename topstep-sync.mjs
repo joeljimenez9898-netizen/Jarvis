@@ -222,14 +222,16 @@ export function vigilancia(planCuentas, cuentasTs, at, prev) {
 // does not average the minimum-day ones. Group 1 (tanda 1) is the big-day account plus up to tandaDM minimum-day ones, in sesionT1 (New York,
 // where he wins). The rest of the minimum-day accounts go tandaDM at a time into "Grupo Días Mínimos 1, 2, …", each with a trade of its own
 // in sesionT2 and no big day (option B). As each big day is done that account joins the minimum days and the next in line steps up.
-export const ESTRATEGIA_DEF = { v: 8, modo: "individual", exModo: "londres", lonIni: 500, lonR: 1000, lonT: 1000, lonMax: 1000, opsDia: 2, b1r: 1000, b1t: 1000, b2r: 1000, b2t: 500,
-  consistencia: 50, fuerteIni: 500, fuerteTP: 1000, fuerteSL: 1000, minimo: 150, minimoSL: 200, dmTP: 300, recupR: 500, diasPayout: 4, pausaStops: 2, pausaSemana: 2000, pausaRojos: 3,
+// An account without its big day and with margin for less than two big-day stops steps aside to recover (its own trade, recupR risk),
+// so it never holds up the line: the big-day place goes to the next one with full margin.
+export const ESTRATEGIA_DEF = { v: 9, modo: "individual", exModo: "londres", lonIni: 500, lonR: 1000, lonT: 1000, lonMax: 1000, opsDia: 2, b1r: 1000, b1t: 1000, b2r: 1000, b2t: 500,
+  consistencia: 50, fuerteIni: 500, fuerteTP: 1000, fuerteSL: 1000, minimo: 150, minimoSL: 200, dmTP: 150, recupR: 500, diasPayout: 4, pausaStops: 2, pausaSemana: 2000, pausaRojos: 3,
   examCerca: 2000, cercaR: 500, escalera: true, pgMax: 1, pgContratos: 3, dmContratos: 1, tandaDM: 5, sesionT1: "Nueva York", sesionT2: "Londres" };
 // Older saved settings: before v2 the funded numbers were the old ones; before v3 there was no London + New York plan;
 // before v4 London was 1.000 for 500 with trailing, now it is 1:1; before v5 the big day was +1.000 and the payout took 5 days;
 // before v6 a minimum day risked 1.000 for 150, now 150 for 150; before v7 the big day was 1.000 for +1.500 with 5 contracts,
 // now it enters like an exam (fuerteIni for fuerteIni, 3 contracts) and averages, never past −fuerteSL, to close the day at +fuerteTP or more;
-// before v8 a minimum day was 150 for 150, now it risks 200 for 300 (it still counts from +minimo).
+// before v8 a minimum day was 150 for 150, now it risks 200; before v9 it aimed for +300, now he closes at +150 (stretching some days).
 export function estrategiaDe(guardada) {
   const g = { ...(guardada || {}) }, v = Number(g.v) || 1;
   if (v < 2) for (const k of ["fuerteTP", "fuerteSL", "minimo", "minimoSL", "recupR"]) delete g[k];
@@ -239,6 +241,7 @@ export function estrategiaDe(guardada) {
   if (v < 6) delete g.minimoSL;
   if (v < 7) { delete g.fuerteTP; delete g.pgContratos; }
   if (v < 8) delete g.minimoSL;
+  if (v < 9) delete g.dmTP;
   delete g.v;
   return { ...ESTRATEGIA_DEF, ...g };
 }
@@ -352,7 +355,8 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
   const listo = (x) => x.grande && x.d0 >= E.diasPayout, riesgo = (x, r) => (x.m0 >= 2 * r ? r : Math.max(0, Math.min(E.recupR, x.m0)));
   const mitad = {}, tanda = {};
   if (E.escalera) {
-    info.filter((x) => x.ahora > 0 && !listo(x) && !x.grande).forEach((x, i) => { mitad[x.c.codigo] = i < (Number(E.pgMax) || 1) ? "A" : "Cola"; });
+    info.filter((x) => x.ahora > 0 && !listo(x) && !x.grande && x.m0 < 2 * E.fuerteSL).forEach((x) => { mitad[x.c.codigo] = "Recup"; });
+    info.filter((x) => x.ahora > 0 && !listo(x) && !x.grande && x.m0 >= 2 * E.fuerteSL).forEach((x, i) => { mitad[x.c.codigo] = i < (Number(E.pgMax) || 1) ? "A" : "Cola"; });
     info.filter((x) => x.ahora > 0 && !listo(x) && x.grande).forEach((x, i) => { mitad[x.c.codigo] = "B"; const n = Number(E.tandaDM) || 5; tanda[x.c.codigo] = i < n ? 1 : 2 + Math.floor((i - n) / n); });
   } else for (const L of ["A", "B"]) info.filter((x) => x.ahora > 0 && !listo(x) && (L === "B") === x.grande).forEach((x, i) => { mitad[x.c.codigo] = L + (i % 2 + 1); });
   const enPG = info.filter((x) => mitad[x.c.codigo] === "A").map((x) => x.c.codigo);
@@ -373,12 +377,13 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
     const pts = (usd, n) => Math.round(usd / (2 * n)), nG = Number(E.pgContratos) || 3, ini = Number(E.fuerteIni) || 500, nD = Number(E.dmContratos) || 1;
     const s1 = E.sesionT1 || "Nueva York", s2 = E.sesionT2 || "Londres";
     const pre = E.escalera ? (sub === "A" ? "Grupo 1 · " + s1 + " · día grande · " + nG + " contratos, entrada: stop " + pts(ini, nG) + " pts / objetivo " + pts(ini, nG) + " pts · "
-      : sub === "B" ? nomG(tanda[cod]) + " · " + (tanda[cod] === 1 ? s1 + " (el mismo trade del día grande)" : s2 + " (su propio trade, sin día grande)") + " · " + nD + (nD === 1 ? " contrato" : " contratos") + " copiado: −" + m(E.minimoSL) + " / +" + m(E.dmTP || E.minimo) + " (" + pts(E.minimoSL, nD) + " pts / " + pts(E.dmTP || E.minimo, nD) + " pts) · " : "") : sub ? "Grupo " + sub + " · " : "";
+      : sub === "B" ? nomG(tanda[cod]) + " · " + (tanda[cod] === 1 ? s1 + " (el mismo trade del día grande)" : s2 + " (su propio trade, sin día grande)") + " · " + nD + (nD === 1 ? " contrato" : " contratos") + " copiado: −" + m(E.minimoSL) + " / +" + m(E.dmTP || E.minimo) + " (" + pts(E.minimoSL, nD) + " pts / " + pts(E.dmTP || E.minimo, nD) + " pts) · "
+      : sub === "Recup" ? "Recuperación · aparte, con su propio trade (no ocupa el sitio del día grande) · " : "") : sub ? "Grupo " + sub + " · " : "";
     let txt = rol === "payout" ? "💰 Tiene el día grande y " + x.d0 + " días mínimos: pide el payout."
       : rol === "fuerte" ? "💪 Día grande: entra arriesgando " + m(Math.min(E.fuerteIni || r, r)) + " para ganar " + m(Math.min(E.fuerteIni || r, r)) + ". Promedia a favor o en contra hasta cerrar el día en +" + m(E.fuerteTP) + " o más; toda la posición nunca pierde más de " + m(r) + "." + (E.escalera ? " Promedia en esta cuenta, no en la MASTER: así el copiador no promedia las de días mínimos." : "")
       : rol === "recuperacion" ? "🩹 Recuperación: arriesga " + m(r) + " para ganar " + m(E.minimo) + "; al llegar a " + sg(E.minimo) + " sube el stop a " + sg(E.minimo) +
         " y deja correr. Vuelve a por el día grande cuando tenga margen para 2 stops (le faltan " + m(2 * E.fuerteSL - x.m0) + ")."
-      : E.escalera && !suave ? "📅 Día mínimo: stop −" + m(E.minimoSL) + ", objetivo +" + m(E.dmTP || E.minimo) + "; vale desde +" + m(E.minimo) + " (lleva " + x.d0 + "/" + E.diasPayout + ")." + (tanda[cod] === 1 ? " La del día grande sigue en el trade; si promedia, que sea en su cuenta y no en la MASTER, para que esta no se promedie." : "")
+      : E.escalera && !suave ? "📅 Día mínimo: stop −" + m(E.minimoSL) + ", cierra en +" + m(E.dmTP || E.minimo) + (E.dmTP > E.minimo ? "; vale desde +" + m(E.minimo) : "; si empuja fuerte puedes estirar") + " (lleva " + x.d0 + "/" + E.diasPayout + ")." + (tanda[cod] === 1 ? " La del día grande sigue en el trade; si promedia, que sea en su cuenta y no en la MASTER, para que esta no se promedie." : "")
       : (suave ? "🩹 Día mínimo suave: " : "📅 Día mínimo: ") + "arriesga " + m(r) + " para ganar " + m(suave ? E.minimo : E.dmTP || E.minimo) + (r === (suave ? E.minimo : E.dmTP || E.minimo) ? " (1:1)" : "") +
         ". Si va en contra puedes promediar y si va a favor también, pero toda la posición nunca pierde más de " + m(r) + " (lleva " + x.d0 + "/" + E.diasPayout + ").";
     if (rol !== "minimos" && rol !== "payout" && x.h >= E.fuerteTP) { txt = "✅ Día grande hecho hoy (" + sg(x.h) + "). Mañana pasa al grupo B: días mínimos.";
@@ -400,10 +405,10 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
   const lado = (L, que) => (de(L + "1").length ? L + "1 (" + de(L + "1").join(", ") + ")" + (de(L + "2").length ? " y " + L + "2 (" + de(L + "2").join(", ") + ")" : "") + " " + que : "");
   const partes = [lado("A", "a por el día grande"), lado("B", "en días mínimos"), de("Payout").length ? "listas para el payout: " + de("Payout").join(", ") : ""].filter(Boolean);
   if (E.escalera && info.length) {
-    const B = de("B"), cola = de("Cola"), pay = de("Payout");
+    const B = de("B"), cola = de("Cola"), pay = de("Payout"), rec = de("Recup");
     out.resumen = "Fondeadas hoy (escalera): " + [enPG.length ? "Grupo 1 en " + (E.sesionT1 || "Nueva York") + ": día grande " + enPG.join(", ") + " (entra −" + m(E.fuerteIni) + " / +" + m(E.fuerteIni) + " y promedia hasta +" + m(E.fuerteTP) + ", nunca más de −" + m(E.fuerteSL) + ")" : "",
       B.length ? "días mínimos " + B.filter((k) => tanda[k] === 1).join(", ") + " copiadas en el trade del día grande (−" + m(E.minimoSL) + " / +" + m(E.dmTP || E.minimo) + ")" + "" : "", ...gruposDM.map((t) => nomG(t) + " en " + (E.sesionT2 || "Londres") + " con su propio trade: " + listaG(t).join(", ")),
-      cola.length ? "en cola para el día grande: " + cola.join(", ") : "", pay.length ? "listas para el payout: " + pay.join(", ") : ""].filter(Boolean).join(" · ") + ".";
+      rec.length ? "recuperando aparte: " + rec.join(", ") : "", cola.length ? "en cola para el día grande: " + cola.join(", ") : "", pay.length ? "listas para el payout: " + pay.join(", ") : ""].filter(Boolean).join(" · ") + ".";
   } else
   out.resumen = !info.length ? "" : !partes.length ? "Fondeadas hoy: ninguna cuenta opera." :
     "Fondeadas hoy: " + partes.join(" · ") + "." + (de("A2").length || de("B2").length ? " Cada mitad lleva su propio trade, nunca el mismo en todas." : "");

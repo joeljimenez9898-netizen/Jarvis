@@ -523,7 +523,7 @@ function reglas() {
       ["Prioridad diaria", "La cuenta EN FOCO de «Hoy operas»", "Jarvis te dice cada día cuál es"],
       ["Cómo operas", grupo ? "Por grupos, copiados desde la MASTER" : "Cuenta a cuenta", grupo ? "Un stop toca a todo el grupo: avanza el doble, arriesga el doble" : "Un stop solo toca una cuenta: más lento, más seguro"]]],
     [E.escalera ? "FONDEADAS · ESCALERA (UNA A POR EL DÍA GRANDE, LAS DEMÁS EN DÍAS MÍNIMOS)" : "FONDEADAS · GRUPO A (DÍA GRANDE) Y GRUPO B (DÍAS MÍNIMOS)", [["Día grande", "Entras con −" + m(E.fuerteIni) + " / +" + m(E.fuerteIni) + " y promedias hasta cerrar en +" + m(E.fuerteTP) + " (nunca más de −" + m(E.fuerteSL) + ")", E.escalera ? "Solo " + (Number(E.pgMax) || 1) + " cuenta a la vez; las demás sin día grande esperan en cola" : "Todas las que aún no tienen un día de +" + m(E.fuerteTP) + " o más"],
-      E.escalera ? ["Escalera", "Día 1: A día grande · Día 2: A días mínimos + B día grande · Día 3: A y B días mínimos + C día grande", "Las de días mínimos van copiadas en el trade del día grande con " + (E.dmContratos || 1) + " contrato (−" + m(E.minimoSL) + " / +" + m(E.dmTP) + "); promedias solo en la cuenta del día grande, nunca en la MASTER"]
+      E.escalera ? ["Escalera", "Día 1: A día grande · Día 2: A días mínimos + B día grande · Día 3: A y B días mínimos + C día grande", "Las de días mínimos van copiadas en el trade del día grande con " + (E.dmContratos || 1) + " contrato (−" + m(E.minimoSL) + ", cierras en +" + m(E.dmTP) + "); promedias solo en la cuenta del día grande, nunca en la MASTER"]
         : ["A1 y A2, B1 y B2", "Cada grupo se parte en dos mitades", "Jarvis las reparte solo, alternando por orden: cada mitad lleva su propio trade, nunca el mismo en todas"],
       ["Si hace el día grande", "Mañana pasa al grupo B", "Jarvis la cambia de grupo solo y te avisa"],
       ["Grupo B · días mínimos", "Arriesgas " + m(E.minimoSL) + " para ganar " + m(E.minimo), "Si va en contra promedias y si va a favor también, pero toda la posición nunca pierde más de " + m(E.minimoSL)],
@@ -990,13 +990,13 @@ function planCorto(mo, E) {
 }
 
 // ── Ejemplo de la escalera: fondeadas imaginarias, día a día, con el mismo motor y sus números, para ver cómo quedan los grupos ──
-// Nada de esto se guarda: son cuentas inventadas (F-1, F-2…) que hacen su día grande, sus días mínimos y piden el payout.
+// Nada de esto se guarda: son cuentas inventadas (TS-1, TS-2…, como él las llama) que hacen su día grande, sus días mínimos y piden el payout.
 const ejemplo = () => (S.ej ||= { n: 8, esc: "bien", dia: 1 });
 function ejemploSim(n, esc, hasta) {
   const E = { ...est(), escalera: true }, fechas = [];
   for (let t = Date.parse("2026-01-05T12:00:00Z"); fechas.length < hasta; t += 86400000) { const w = new Date(t).getUTCDay(); if (w && w < 6) fechas.push(new Date(t).toISOString().slice(0, 10)); }
   let semilla = 11; const azar = () => (semilla = (semilla * 16807) % 2147483647) / 2147483647;
-  const cs = [...Array(n)].map((_, i) => ({ codigo: "F-" + (i + 1), tipo: "Fondeada", estado: "ACTIVA", sl: -2000, orden: i + 1, grupo: "ej", pnl: 0, dias: {}, tradesHoy: [] }));
+  const cs = [...Array(n)].map((_, i) => ({ codigo: "TS-" + (i + 1), tipo: "Fondeada", estado: "ACTIVA", sl: -2000, orden: i + 1, grupo: "ej", pnl: 0, dias: {}, tradesHoy: [] }));
   let r = null, res = {}, payouts = 0;
   for (let k = 0; k < hasta; k++) {
     const hoy = fechas[k];
@@ -1015,13 +1015,13 @@ function ejemploSim(n, esc, hasta) {
 }
 function ejemploHtml() {
   const j = ejemplo(), { E, r, res, fecha, payouts } = ejemploSim(j.n, j.esc, j.dia);
-  const grupoDe = (x) => (x.grupo === "A" ? "Grupo 1" : x.grupo === "B" ? x.txt.split(" · ")[0] : x.grupo === "Cola" ? "⏳ En cola (hoy no operan)" : x.grupo === "Payout" ? "💰 Piden el payout" : "Otras");
+  const grupoDe = (x) => (x.grupo === "A" ? "Grupo 1" : x.grupo === "B" ? x.txt.split(" · ")[0] : x.grupo === "Cola" ? "⏳ En cola (hoy no operan)" : x.grupo === "Payout" ? "💰 Piden el payout" : x.grupo === "Recup" ? "🩹 Recuperando aparte" : x.rol === "quemada" ? "🔥 Quemadas (repón con un examen nuevo)" : "Otras");
   const orden = ["Grupo 1"], cajas = {};
   for (const x of r.fondeadas) { const g = grupoDe(x); (cajas[g] ||= []).push(x); if (!orden.includes(g)) orden.push(g); }
   const sesion = (g) => (g === "Grupo 1" ? " · " + (E.sesionT1 || "Nueva York") : /^Grupo Días Mínimos/.test(g) ? " · " + (E.sesionT2 || "Londres") + " · su propio trade" : "");
   const papel = (x) => (x.rol === "fuerte" ? "💪 día grande · " + E.pgContratos + " contratos · entra −" + usd(E.fuerteIni) + " / +" + usd(E.fuerteIni) + ", promedia hasta +" + usd(E.fuerteTP)
-    : x.rol === "minimos" ? "📅 día mínimo " + (x.dias + 1) + "/" + E.diasPayout + " · " + E.dmContratos + " contrato · −" + usd(E.minimoSL) + " / +" + usd(E.dmTP)
-    : x.rol === "recuperacion" ? "🩹 recuperación" : x.rol === "payout" ? "💰 4 días mínimos hechos: pide el payout" : x.rol === "cola" ? "espera su día grande" : x.rol);
+    : x.rol === "minimos" ? "📅 día mínimo " + (x.dias + 1) + "/" + E.diasPayout + " · " + E.dmContratos + " contrato · −" + usd(E.minimoSL) + " / cierra en +" + usd(E.dmTP)
+    : x.rol === "recuperacion" ? "🩹 recupera: −" + usd(E.recupR) + " / +" + usd(E.minimo) : x.rol === "payout" ? "💰 4 días mínimos hechos: pide el payout" : x.rol === "cola" ? "espera su día grande" : x.rol);
   const fila = (x) => { const v = res[x.cuenta]; return `<div style="display:flex;gap:8px;justify-content:space-between;padding:6px 0;border-top:1px solid var(--line)"><span><b>${esc(x.cuenta)}</b> <span class="hint">${esc(papel(x))}</span></span>${typeof v === "number" ? `<b style="white-space:nowrap" class="${v > 0 ? "pos" : "neg"}">${v > 0 ? "+" : "−"}${usd(Math.abs(v))}</b>` : v ? `<b>${esc(v)}</b>` : ""}</div>`; };
   const caja = (g) => `<div style="border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--card)"><b>${esc(g + sesion(g))}</b>${[...cajas[g]].sort((a, b) => (b.rol === "fuerte" || b.rol === "recuperacion") - (a.rol === "fuerte" || a.rol === "recuperacion")).map(fila).join("")}</div>`;
   const fecha2 = fecha.split("-").reverse().slice(0, 2).join("/");
