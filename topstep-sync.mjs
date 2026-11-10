@@ -440,6 +440,11 @@ export function resumenSesion(planCuentas, cuentasTs, estrategia, sesion, at) {
   return L.join("\n");
 }
 
+/** Which Topstep accounts to read: the visible (active) ones, and the inactive ones the plan links, such as a passed exam. */
+export function cuentasALeer(todas, vinculadas) {
+  return todas.filter((a) => a.isVisible !== false || vinculadas.has(String(a.id)));
+}
+
 /** The weekday session question: today's P&L per account, and what Jarvis asks. */
 export function checkin(list, sesion, at) {
   const hoy = tradingDay(at);
@@ -471,7 +476,9 @@ async function main() {
   const rules = (dir ? readDocs(dir, "fm/main/cuentas") : []).filter((c) => c.topstepId && c.estado === "activa");
   const payouts = dir ? readDocs(dir, "fm/main/payouts") : [];
   const token = login();
-  const accounts = call("/api/Account/search", { onlyActiveAccounts: true }, token).accounts || [];
+  // the active accounts, plus any account the plan links even when Topstep has made it inactive (a passed exam leaves the active list)
+  const vinculadas = new Set([...(dir ? readDocs(dir, "fm/plan/cuentas") : []), ...(dir ? readDocs(dir, "fm/main/cuentas") : [])].map((c) => String(c.topstepId || "")).filter(Boolean));
+  const accounts = cuentasALeer(call("/api/Account/search", { onlyActiveAccounts: false }, token).accounts || [], vinculadas);
   const at = new Date().toISOString(), since = new Date(Date.now() - HISTORY_DAYS * 86400000).toISOString();
   const doc = { at, desde: since.slice(0, 10), cuentas: {} };
   const opsSince = new Date(Date.now() - OPS_DAYS * 86400000).toISOString();
@@ -487,7 +494,7 @@ async function main() {
       const d = tradingDay(t.creationTimestamp);
       days[d] = Math.round(((days[d] || 0) + (Number(t.profitAndLoss) || 0) - (Number(t.fees) || 0)) * 100) / 100;
     }
-    doc.cuentas[acct.id] = { nombre: acct.name, balance: acct.balance, puedeOperar: acct.canTrade, simulada: acct.simulated, dias: days,
+    doc.cuentas[acct.id] = { nombre: acct.name, balance: acct.balance, puedeOperar: acct.canTrade, simulada: acct.simulated, activa: acct.isVisible !== false, dias: days,
                              operaciones: trades.length, sinFecha: unknown,
                              trades: operaciones(trades).filter((o) => o.cierra >= opsSince).slice(0, OPS_MAX) };
   }

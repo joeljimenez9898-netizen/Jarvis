@@ -48,6 +48,7 @@
 .pf .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px; font-size: 13px; font-weight: 700; }
 .pf .pill.tipo { background: var(--blue-bg); color: var(--blue); }
 .pf .st-ACTIVA { background: var(--green-bg); color: #15803d; } .pf .st-EXAM { background: var(--yellow-bg); color: #a16207; }
+.pf .st-APROBADA { background: #ede9fe; color: #6d28d9; }
 .pf .st-STANDBY { background: #f1f5f9; color: #475569; } .pf .st-PENDIENTE { background: #f8fafc; color: #94a3b8; } .pf .st-PERDIDA { background: var(--red-bg); color: var(--red); }
 .pf .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
 .pf .dir { background: var(--red-bg); color: var(--red); } .pf .dir.LONG { background: var(--green-bg); color: var(--green); }
@@ -156,7 +157,7 @@
 .pf .accs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 10px; }
 .pf .acc { display: grid; gap: 5px; text-align: left; border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 10px 12px; cursor: pointer; }
 .pf .acc.foco { border: 2px solid #22c55e; box-shadow: 0 2px 10px rgba(34,197,94,.18); }
-.pf .acc.muerta { opacity: .6; background: #fafafa; }
+.pf .acc.muerta { opacity: .6; background: #fafafa; } .pf .acc.aprob { opacity: 1; background: #faf5ff; border-color: #c4b5fd; }
 .pf .acc.prox { border-style: dashed; background: transparent; cursor: default; color: var(--muted); }
 .pf .acc-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; } .pf .acc-top b { font-size: 16px; }
 .pf .acc-top .live { margin-left: 0; } .pf .acc-top .pill { padding: 1px 7px; font-size: 11px; }
@@ -237,9 +238,9 @@ const fecha = (iso) => { if (!iso) return "—"; const [y, m, d] = iso.split("-"
 const iso = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 const addDays = (s, n) => { const d = new Date(s + "T12:00:00"); d.setDate(d.getDate() + n); return iso(d); };
 const monday = (s) => { const d = new Date(s + "T12:00:00"); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return iso(d); };
-const ESTADOS = ["ACTIVA", "EXAM", "STANDBY", "PENDIENTE", "PERDIDA"];
-const ESTADO_DOT = { ACTIVA: "#16a34a", EXAM: "#eab308", STANDBY: "#cbd5e1", PENDIENTE: "#e2e8f0", PERDIDA: "#dc2626" };
-const ESTADO_COLOR = { ACTIVA: "#22c55e", EXAM: "#eab308", STANDBY: "#94a3b8", PENDIENTE: "#cbd5e1", PERDIDA: "#ef4444" };
+const ESTADOS = ["ACTIVA", "EXAM", "APROBADA", "STANDBY", "PENDIENTE", "PERDIDA"];
+const ESTADO_DOT = { ACTIVA: "#16a34a", EXAM: "#eab308", APROBADA: "#7c3aed", STANDBY: "#cbd5e1", PENDIENTE: "#e2e8f0", PERDIDA: "#dc2626" };
+const ESTADO_COLOR = { ACTIVA: "#22c55e", EXAM: "#eab308", APROBADA: "#8b5cf6", STANDBY: "#94a3b8", PENDIENTE: "#cbd5e1", PERDIDA: "#ef4444" };
 const GRUPO_ESTADOS = { MAESTRA: "👑 MAESTRA", ACTIVO: "🔄 ACTIVO", PAUSADO: "⏸️ PAUSADO", RESERVA: "⚪ RESERVA" };
 const ICONO = (g, i) => (g.estado === "MAESTRA" ? "🥇" : i === 1 ? "🥈" : "📊");
 // «Bloqueo de Topstep»: the daily loss limit is set in TopstepX itself, so Topstep closes and blocks the account for the day
@@ -380,7 +381,7 @@ function grupoBox(g, days) {
     <div class="gstats"><span>Vivas <b>${s.activas}</b></span><span>Esta semana <b class="${cls(s.semana)}">${sgn(s.semana)}</b></span><span>Verdes <b>${s.verdes}</b></span><span>Rojas <b>${s.rojas}</b></span>${s.dd ? `<span>Drawdown <b>${s.dd} %</b></span>` : ""}${g.ratio ? `<span>Copia <b>${esc(g.ratio)}</b></span>` : ""}</div>
     <div class="accs">${cs.map((c) => { const foco = !!(h && h.foco && h.foco.cuentas.some((y) => y.id === c.id)), n = vivaC(c) ? tradesDia(c, dia).length : 0;
         return cuentaChip(c, { foco, estado: !h || !vivaC(c) ? "" : cerca.has(c.codigo) ? "🎯 Grupo B: aparte, un trade al día" : foco ? "▶ Hoy en foco" : n ? sgn(tradesDia(c, dia).reduce((a, y) => a + y.pnl, 0)) + " hoy" : "En espera",
-          cuando: c.quemada ? "quemada el " + c.quemada.split("-").reverse().join("/") + (c.reemplazada && c.reemplazada !== "no" ? " · la sustituye " + c.reemplazada : "") : c.sustituye ? "entró en lugar de " + c.sustituye : "" }); }).join("")}
+          cuando: c.aprobada ? "aprobada el " + c.aprobada.split("-").reverse().join("/") : c.quemada ? "quemada el " + c.quemada.split("-").reverse().join("/") + (c.reemplazada && c.reemplazada !== "no" ? " · la sustituye " + c.reemplazada : "") : c.sustituye ? "entró en lugar de " + c.sustituye : "" }); }).join("")}
       ${prox.map((x) => `<div class="acc prox"><span class="acc-top"><b>${esc(x.codigo)}</b></span><span class="acc-meta">por comprar${x.estado ? " · " + esc(x.estado) : ""}</span><span class="acc-when">Jarvis la registra aquí sola</span></div>`).join("")}
       ${!cs.length && !prox.length ? '<p class="hint" style="margin:0">Sin cuentas.</p>' : ""}</div></div>`;
 }
@@ -544,13 +545,16 @@ function reglas() {
   ];
 }
 function ahoraHtml({ extra = "", plegable = false, nAlertas = 0 } = {}) {
-  const r = motor(), L = r.avisos.map((a) => a.txt), n = L.length + nAlertas;
+  const hace7 = iso(new Date(Date.now() - 7 * 86400000));
+  const aprobadas = cuentas().filter((c) => c.estado === "APROBADA" && (c.aprobada || "") >= hace7).map((c) => "🏆 " + c.codigo.replace(/ aprobada$/i, "") + " aprobada el " + String(c.aprobada).split("-").reverse().join("/") +
+    (c.pnlFinal ? " con " + sgn(c.pnlFinal) : "") + ". ¡Enhorabuena! Pide la cuenta fondeada en Topstep; cuando aparezca, Jarvis la registra sola como fondeada.");
+  const r = motor(), L = [...aprobadas, ...r.avisos.map((a) => a.txt)], n = L.length + nAlertas;
   // on the dashboard it folds: closed, the title still says how many warnings there are
   if (plegable) return `<details class="card ahora" data-ahora ${S.ahoraAbierto !== false ? "open" : ""}><summary><h3>🔔 Lo que te toca ahora</h3><span class="cuenta ${n ? "hay" : ""}">${n ? n + (n === 1 ? " aviso" : " avisos") : "todo en orden"}</span><span class="plegar"></span></summary>
-    ${L.length ? L.map((t) => `<div class="banner warn" style="margin-bottom:8px">${esc(t)}</div>`).join("") : '<div class="banner ok" style="margin-bottom:8px">✅ Nada que hacer ahora: ninguna regla ha saltado hoy.</div>'}
+    ${L.length ? L.map((t) => `<div class="banner ${/^🏆/.test(t) ? "ok" : "warn"}" style="margin-bottom:8px">${esc(t)}</div>`).join("") : '<div class="banner ok" style="margin-bottom:8px">✅ Nada que hacer ahora: ninguna regla ha saltado hoy.</div>'}
     ${extra}${r.resumen ? `<p class="hint" style="margin-top:4px">${esc(r.resumen)}</p>` : ""}</details>`;
   return `<div class="card" style="margin-bottom:18px;border:2px solid #f59e0b"><h3>🔔 Lo que te toca ahora</h3><p class="hint">Jarvis aplica tus reglas a tus cuentas de Topstep. Estos mismos avisos te llegan al móvil cada hora, y al cerrar Londres (11:57) te llega el resumen de la sesión.</p>
-    ${L.length ? L.map((t) => `<div class="banner warn" style="margin-bottom:8px">${esc(t)}</div>`).join("") : '<div class="banner ok">✅ Nada que hacer ahora: ninguna regla ha saltado hoy.</div>'}
+    ${L.length ? L.map((t) => `<div class="banner ${/^🏆/.test(t) ? "ok" : "warn"}" style="margin-bottom:8px">${esc(t)}</div>`).join("") : '<div class="banner ok">✅ Nada que hacer ahora: ninguna regla ha saltado hoy.</div>'}
     ${r.resumen ? `<p class="hint" style="margin-top:8px">${esc(r.resumen)}</p>` : ""}</div>`;
 }
 V.reglas = () => ahoraHtml() + `<div class="card"><h3>📜 Reglas del Sistema</h3>${eleccion("reglas", "✨ Mis reglas (mi estrategia)", "📜 Reglas de antes")}
@@ -805,7 +809,7 @@ async function registrarTs(lista) {
 async function autoSuplente() {
   if (!S.db || !S.ready || S.supBusy) return;
   const activos = new Set(rotan().map((g) => g.id)), reserva = new Set(grupos().filter((g) => g.estado === "RESERVA").map((g) => g.id));
-  const huecos = cuentas().filter((c) => activos.has(c.grupo) && !c.reemplazada && (c.estado === "PERDIDA" || (c.estado === "EXAM" && c.tipo !== "Fondeada" && pnl(c) >= (Number(c.tp) || 3000))))
+  const huecos = cuentas().filter((c) => activos.has(c.grupo) && !c.reemplazada && (c.estado === "PERDIDA" || c.estado === "APROBADA" || (c.estado === "EXAM" && c.tipo !== "Fondeada" && pnl(c) >= (Number(c.tp) || 3000))))
     .sort((a, b) => cuentas().filter((x) => x.grupo === a.grupo && vivaC(x)).length - cuentas().filter((x) => x.grupo === b.grupo && vivaC(x)).length);
   const sups = cuentas().filter((c) => reserva.has(c.grupo) && c.estado === "STANDBY" && !quemadaTs(c)).sort((a, b) => (Number(a.orden) || 0) - (Number(b.orden) || 0));
   if (!huecos.length || !sups.length) return;
@@ -823,6 +827,23 @@ async function autoSuplente() {
     if (hechos.length) toast("🔁 " + hechos.join("; ") + ". Repón la reserva: compra otro examen para Suplentes.");
   } catch (err) { toast("No he podido meter la suplente: " + (err.message || "error")); }
   finally { S.supBusy = false; }
+}
+async function autoAprobadas() {
+  if (!S.db || !S.ready || !S.topstep || S.aprobBusy) return;
+  const l = cuentas().filter((c) => c.estado === "EXAM" && c.tipo !== "Fondeada" && ts(c) && pnl(c) >= (Number(c.tp) || 3000));
+  if (!l.length) return;
+  S.aprobBusy = true;
+  try {
+    const hoy = tradingDay(Date.now()), dm = dayMap();
+    for (const c of l) {
+      const dia = Object.keys(dm[c.id] || {}).filter((d) => d <= hoy).sort().pop() || hoy, codigo = /aprobada$/i.test(c.codigo) ? c.codigo : c.codigo + " aprobada";
+      await S.db.doc("fm/plan").collection("cuentas").doc(c.id).update({ estado: "APROBADA", aprobada: dia, codigo, pnlFinal: pnl(c) });
+      if (c.topstepId) { try { await S.db.doc("fm/main").collection("cuentas").doc("ts-auto-" + c.topstepId).update({ estado: "aprobada", alias: codigo }); } catch {} }
+    }
+    setTimeout(autoSuplente, 1500);
+    toast("🏆 " + l.map((c) => c.codigo + " aprobada (" + sgn(pnl(c)) + ")").join(" y ") + ". ¡Enhorabuena, Joel! Pide la fondeada en Topstep: Jarvis la registra sola.");
+  } catch (err) { toast("No he podido marcar el examen aprobado: " + (err.message || "error")); }
+  finally { S.aprobBusy = false; }
 }
 async function autoQuemadas() {
   if (!S.db || !S.ready || !S.topstep || S.quemBusy) return;
@@ -954,8 +975,8 @@ function sesiones() {
 function cuentaChip(c, { foco = false, estado = "", cuando = "" } = {}) {
   const p = pnl(c), tp = Number(c.tp) || 0, sl = Math.abs(Number(c.sl) || 0), muerta = !vivaC(c);
   const w = p >= 0 ? (tp ? Math.min(100, (p / tp) * 100) : 0) : (sl ? Math.min(100, (-p / sl) * 100) : 0);
-  return `<button type="button" class="acc${foco ? " foco" : ""}${muerta ? " muerta" : ""}" data-edit="cuenta" data-id="${esc(c.id)}" title="Editar ${esc(c.codigo)}">
-    <span class="acc-top"><b>${esc(c.codigo)}</b>${foco ? '<span class="live">EN FOCO</span>' : ""}${muerta ? `<span class="pill st-${esc(c.estado)}">${c.estado === "PERDIDA" ? "🔥 quemada" : esc(c.estado)}</span>` : ""}<span class="acc-pnl ${cls(p)}">${sgn(p)}</span></span>
+  return `<button type="button" class="acc${foco ? " foco" : ""}${muerta ? " muerta" : ""}${c.estado === "APROBADA" ? " aprob" : ""}" data-edit="cuenta" data-id="${esc(c.id)}" title="Editar ${esc(c.codigo)}">
+    <span class="acc-top"><b>${esc(c.codigo)}</b>${foco ? '<span class="live">EN FOCO</span>' : ""}${muerta ? `<span class="pill st-${esc(c.estado)}">${c.estado === "PERDIDA" ? "🔥 quemada" : c.estado === "APROBADA" ? "🏆 aprobada" : esc(c.estado)}</span>` : ""}<span class="acc-pnl ${cls(p)}">${sgn(p)}</span></span>
     <span class="acc-bar"><i class="${p < 0 ? "r" : "g"}" style="width:${w.toFixed(1)}%"></i></span>
     <span class="acc-meta">${muerta ? "" : tp && c.tipo !== "Fondeada" ? `${p >= 0 ? "faltan " + usd(Math.max(0, tp - p)) : "drawdown " + Math.round(w) + " %"}` : esc(c.tipo || "")}</span>
     ${c.dllTopstep && !muerta ? `<span class="acc-when">🔒 Topstep corta a −${usd(c.dll || 1000)}</span>` : ""}
@@ -1513,7 +1534,7 @@ window.PLAN = { contexto, render, vista, onCambio: (f) => { oyentes.add(f); retu
   if (!db) { S.ready = true; render(); return; }
   const plan = db.doc("fm/plan"), pend = new Set(["grupos", "cuentas", "operaciones", "semanas", "revisiones", "topstep"]);
   const editando = () => { const a = ROOT.activeElement; return a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName) && a.closest("#pf-view"); };
-  const done = (k) => { pend.delete(k); if (!pend.size && !S.ready) { S.ready = true; } if (k === "topstep" || k === "cuentas") { setTimeout(autoRegistro, 500); setTimeout(autoQuemadas, 800); setTimeout(autoSuplente, 2500); } if (editando()) { S.renderLuego = true; return; } render(); };
+  const done = (k) => { pend.delete(k); if (!pend.size && !S.ready) { S.ready = true; } if (k === "topstep" || k === "cuentas") { setTimeout(autoRegistro, 500); setTimeout(autoQuemadas, 800); setTimeout(autoAprobadas, 1100); setTimeout(autoSuplente, 2500); } if (editando()) { S.renderLuego = true; return; } render(); };
   root.addEventListener("focusout", () => setTimeout(() => { if (S.renderLuego && !editando()) { S.renderLuego = false; render(); } }, 50));
   const sub = (col, map) => plan.collection(col).onSnapshot((snap) => { map.clear(); for (const d of snap.docs) map.set(d.id, d.data()); if (col === "revisiones" && S.rev && !S.revisiones.has(S.rev.id)) {} done(col); }, () => done(col));
   btSub(plan);

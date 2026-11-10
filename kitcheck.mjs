@@ -119,6 +119,22 @@ async function checkSnapshotContainment() {
 // The market replay: its Topstep reader can only log in, find the contract and read price bars; New York midnight follows the
 // clock change; a day is packed as minutes since that midnight; the Plan page replays it and blocks like his plan does.
 // Two exams burned this week and marked PERDIDA: their losses still count for the week pause, and they get no plan of their own
+// A passed exam leaves Topstep's active list: the sync still reads it when the plan links it, the engine says it passed,
+// and the app marks it APROBADA by itself and celebrates it in «Lo que te toca ahora»
+async function checkAprobadas() {
+  const ts = await import("./topstep-sync.mjs");
+  const todas = [{ id: 1, name: "50KTC-A", isVisible: true }, { id: 29360149, name: "50KTC-SKU-V2-DLL-X", isVisible: false }, { id: 7, name: "50KTC-OLD", isVisible: false }];
+  const leer = ts.cuentasALeer(todas, new Set(["29360149"])).map((a) => a.id).join();
+  if (leer !== "1,29360149") return [false, "accounts read: " + leer + " (the passed exam the plan links must stay, old inactive ones must not)"];
+  const r = ts.motorReglas({ estrategia: ts.estrategiaDe({}), hoy: "2026-11-10", ahora: "2026-11-10T15:00:00Z",
+    cuentas: [{ codigo: "TS-1", tipo: "Challenge", estado: "EXAM", tp: 3000, sl: -2000, grupo: "g1", pnl: 3006.66,
+      dias: { "2026-11-04": 1145.62, "2026-11-05": 1123.14, "2026-11-06": 40.78, "2026-11-09": 592.34, "2026-11-10": 115.78 }, tradesHoy: [] }] });
+  if (!r.avisos.some((a) => /TS-1 ha llegado al objetivo del examen/.test(a.txt))) return [false, "no passed-exam warning: " + r.avisos.map((a) => a.txt).join(" | ")];
+  const page = fs.readFileSync(new URL("./ipad/plan-futuros.html", import.meta.url), "utf8");
+  for (const s of ["async function autoAprobadas(", "setTimeout(autoAprobadas, 1100)", '"APROBADA"', '🏆 " + c.codigo.replace(/ aprobada$/i'])
+    if (!page.includes(s)) return [false, "Plan de Futuros is missing: " + s];
+  return [true, "an inactive passed exam the plan links is still read; +3.006,66 $ says «ha llegado al objetivo»; the app marks it APROBADA and celebrates it"];
+}
 async function checkPausaQuemadas() {
   const ts = await import("./topstep-sync.mjs");
   const c = (codigo, estado, dias) => ({ codigo, tipo: "Challenge", estado, tp: 3000, sl: -2000, grupo: "g1", pnl: Object.values(dias).reduce((a, b) => a + b, 0), dias, tradesHoy: [] });
@@ -370,6 +386,7 @@ export const CHECKS = [["spoken addresses parse", checkAddresses],
                        ["Topstep sync is read-only", checkTopstepReadOnly],
                        ["Market replay reads bars only", checkReplay],
                        ["Week pause counts burned accounts", checkPausaQuemadas],
+                       ["Passed exams stay in sight", checkAprobadas],
                        ["iPad Jarvis: app stars, Miro read-only", checkIpadApps]];
 
 export async function run() {
