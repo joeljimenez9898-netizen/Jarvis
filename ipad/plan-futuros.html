@@ -522,8 +522,9 @@ function reglas() {
       ["Día con stop", "Mañana opera " + (grupo ? "el siguiente grupo" : "la siguiente cuenta"), "Jarvis lo mueve solo en «Hoy operas»"],
       ["Prioridad diaria", "La cuenta EN FOCO de «Hoy operas»", "Jarvis te dice cada día cuál es"],
       ["Cómo operas", grupo ? "Por grupos, copiados desde la MASTER" : "Cuenta a cuenta", grupo ? "Un stop toca a todo el grupo: avanza el doble, arriesga el doble" : "Un stop solo toca una cuenta: más lento, más seguro"]]],
-    ["FONDEADAS · GRUPO A (DÍA GRANDE) Y GRUPO B (DÍAS MÍNIMOS)", [["Grupo A · día grande", "Arriesgas " + m(E.fuerteSL) + " para ganar " + m(E.fuerteTP), "Todas las que aún no tienen un día de +" + m(E.fuerteTP) + " o más"],
-      ["A1 y A2, B1 y B2", "Cada grupo se parte en dos mitades", "Jarvis las reparte solo, alternando por orden: cada mitad lleva su propio trade, nunca el mismo en todas"],
+    [E.escalera ? "FONDEADAS · ESCALERA (UNA A POR EL DÍA GRANDE, LAS DEMÁS EN DÍAS MÍNIMOS)" : "FONDEADAS · GRUPO A (DÍA GRANDE) Y GRUPO B (DÍAS MÍNIMOS)", [["Día grande", "Arriesgas " + m(E.fuerteSL) + " para ganar " + m(E.fuerteTP), E.escalera ? "Solo " + (Number(E.pgMax) || 1) + " cuenta a la vez; las demás sin día grande esperan en cola" : "Todas las que aún no tienen un día de +" + m(E.fuerteTP) + " o más"],
+      E.escalera ? ["Escalera", "Día 1: A día grande · Día 2: A días mínimos + B día grande · Día 3: A y B días mínimos + C día grande", "Las de días mínimos van con un mismo trade copiado; la del día grande, con el suyo"]
+        : ["A1 y A2, B1 y B2", "Cada grupo se parte en dos mitades", "Jarvis las reparte solo, alternando por orden: cada mitad lleva su propio trade, nunca el mismo en todas"],
       ["Si hace el día grande", "Mañana pasa al grupo B", "Jarvis la cambia de grupo solo y te avisa"],
       ["Grupo B · días mínimos", "Arriesgas " + m(E.minimoSL) + " para ganar " + m(E.minimo), "Si va en contra promedias y si va a favor también, pero toda la posición nunca pierde más de " + m(E.minimoSL)],
       ["Si le queda poco margen", "Recuperación: arriesgas " + m(E.recupR) + " para ganar " + m(E.minimo), "Vuelve a por el día grande cuando tenga margen para 2 stops"],
@@ -1032,10 +1033,11 @@ function hoyHtml() {
     ${hero}
     ${otras.map((l) => `<div class="banner ok" style="margin:10px 0 0">${esc(l)}</div>`).join("")}
     <button type="button" class="btn" data-bt="ir-consulta" style="margin:14px 0 4px">🔎 ¿Puedo entrar? Foto del gráfico al profesor</button>
-    ${h.fondeadas.length ? `<div class="sec">FONDEADAS · GRUPO A (DÍA GRANDE) + GRUPO B (DÍAS MÍNIMOS)</div><p class="hint">${esc(m.resumen)}</p>${[...h.fondeadas].sort((a, b) => (a.grupo || "Z").localeCompare(b.grupo || "Z")).map((f) => `<div class="rule"><b>${esc(f.cuenta)}${f.grupo ? ` <span class="live">${esc(f.grupo)}</span>` : ""}</b><span class="v" style="grid-column:span 2">${esc(f.txt)}</span></div>`).join("")}` : ""}
+    ${h.fondeadas.length ? `<div class="sec">${E.escalera ? "FONDEADAS · ESCALERA" : "FONDEADAS · GRUPO A (DÍA GRANDE) + GRUPO B (DÍAS MÍNIMOS)"}</div>
+      <span class="seg mini" style="margin-bottom:8px"><button type="button" data-esc="si" aria-pressed="${!!E.escalera}">Escalera (una a por el día grande)</button><button type="button" data-esc="no" aria-pressed="${!E.escalera}">Todas a la vez (A1/A2, B1/B2)</button></span><p class="hint">${esc(m.resumen)}</p>${[...h.fondeadas].sort((a, b) => (a.grupo || "Z").localeCompare(b.grupo || "Z")).map((f) => `<div class="rule"><b>${esc(f.cuenta)}${f.grupo ? ` <span class="live">${esc(f.grupo)}</span>` : ""}</b><span class="v" style="grid-column:span 2">${esc(f.txt)}</span></div>`).join("")}` : ""}
     <details style="margin-top:14px"><summary class="hint" style="cursor:pointer">Ajustar la estrategia</summary><div class="filters" style="margin-top:10px">
       ${[...(modosEnUso().includes("londres") ? [["lonIni", "Londres · riesgo de entrada"], ["lonR", "Londres · riesgo máximo promediando"], ["lonT", "Londres · objetivo promediando"], ["lonMax", "Londres · buscar con trailing"]] : []),
-        ...(modosEnUso().includes("balas") ? [["b1r", "Bala 1 · riesgo"], ["b1t", "Bala 1 · objetivo"], ["b2r", "Bala 2 · riesgo"], ["b2t", "Bala 2 · objetivo"], ["opsDia", "Operaciones al día"]] : []), ["examCerca", "Examen · grupo B desde (+$)"], ["cercaR", "Grupo B · riesgo"], ["fuerteSL", "Día grande · riesgo"], ["fuerteTP", "Día grande · objetivo"], ["minimoSL", "Día mínimo · riesgo"], ["minimo", "Día mínimo · ganar"], ["recupR", "Recuperación · riesgo"], ["diasPayout", "Días mínimos tras el día grande"], ["pausaStops", "Pausa · stops en un día"], ["pausaSemana", "Pausa · pérdida en la semana"], ["pausaRojos", "Pausa · días en rojo"]]
+        ...(modosEnUso().includes("balas") ? [["b1r", "Bala 1 · riesgo"], ["b1t", "Bala 1 · objetivo"], ["b2r", "Bala 2 · riesgo"], ["b2t", "Bala 2 · objetivo"], ["opsDia", "Operaciones al día"]] : []), ["examCerca", "Examen · grupo B desde (+$)"], ["cercaR", "Grupo B · riesgo"], ["fuerteSL", "Día grande · riesgo"], ["fuerteTP", "Día grande · objetivo"], ["minimoSL", "Día mínimo · riesgo"], ["minimo", "Día mínimo · ganar"], ["recupR", "Recuperación · riesgo"], ["diasPayout", "Días mínimos tras el día grande"], ["pgMax", "Escalera · cuentas a la vez en el día grande"], ["pausaStops", "Pausa · stops en un día"], ["pausaSemana", "Pausa · pérdida en la semana"], ["pausaRojos", "Pausa · días en rojo"]]
         .map(([k, l]) => `<label style="display:grid;gap:4px;font-size:12px;color:var(--muted)">${l}<input type="number" data-est="${k}" value="${E[k]}" style="width:120px"></label>`).join("")}</div></details></div>`;
 }
 
@@ -1436,6 +1438,7 @@ root.addEventListener("click", async (e) => {
     toast("Revisión guardada."); return;
   }
   if (d.modo) { await guardarEst({ modo: d.modo }); return; }
+  if (d.esc) { await guardarEst({ escalera: d.esc === "si" }); return; }
   if (d.gmodo) { const [g, v] = d.gmodo.split(":"); await guardarEst({ modos: { ...(est().modos || {}), [g]: v } }); return; }
   if (d.ver) { const [k, v] = d.ver.split(":"); await guardarEst({ [k]: v }); return; }
   if (d.act === "repartir") {

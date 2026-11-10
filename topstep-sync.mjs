@@ -215,9 +215,11 @@ export function vigilancia(planCuentas, cuentasTs, at, prev) {
 // Funded: group A goes for the big day (+fuerteTP), group B (big day done) does diasPayout minimum days (risk minimoSL for
 // minimo, 1:1, averaging in against or in favor without passing −minimoSL) and asks for the payout; each group splits in two halves that never take the same
 // trade. An account with margin for less than two stops trades in recovery (recupR risk) until it has it again.
+// The ladder (escalera, his default): only pgMax accounts at a time go for the big day, the next ones wait in line, and all the
+// accounts on minimum days take one same trade, copied. A big day today moves the account to minimum days tomorrow and the next in line steps up.
 export const ESTRATEGIA_DEF = { v: 6, modo: "individual", exModo: "londres", lonIni: 500, lonR: 1000, lonT: 1000, lonMax: 1000, opsDia: 2, b1r: 1000, b1t: 1000, b2r: 1000, b2t: 500,
   consistencia: 50, fuerteTP: 1500, fuerteSL: 1000, minimo: 150, minimoSL: 150, recupR: 500, diasPayout: 4, pausaStops: 2, pausaSemana: 2000, pausaRojos: 3,
-  examCerca: 2000, cercaR: 500 };
+  examCerca: 2000, cercaR: 500, escalera: true, pgMax: 1 };
 // Older saved settings: before v2 the funded numbers were the old ones; before v3 there was no London + New York plan;
 // before v4 London was 1.000 for 500 with trailing, now it is 1:1; before v5 the big day was +1.000 and the payout took 5 days;
 // before v6 a minimum day risked 1.000 for 150, now 150 for 150.
@@ -340,14 +342,20 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
     return { c, ...g, grande: i >= 0, d0, d: d0 + (i >= 0 && g.h >= E.minimo ? 1 : 0) }; });
   const listo = (x) => x.grande && x.d0 >= E.diasPayout, riesgo = (x, r) => (x.m0 >= 2 * r ? r : Math.max(0, Math.min(E.recupR, x.m0)));
   const mitad = {};
-  for (const L of ["A", "B"]) info.filter((x) => x.ahora > 0 && !listo(x) && (L === "B") === x.grande).forEach((x, i) => { mitad[x.c.codigo] = L + (i % 2 + 1); });
+  if (E.escalera) {
+    info.filter((x) => x.ahora > 0 && !listo(x) && !x.grande).forEach((x, i) => { mitad[x.c.codigo] = i < (Number(E.pgMax) || 1) ? "A" : "Cola"; });
+    info.filter((x) => x.ahora > 0 && !listo(x) && x.grande).forEach((x) => { mitad[x.c.codigo] = "B"; });
+  } else for (const L of ["A", "B"]) info.filter((x) => x.ahora > 0 && !listo(x) && (L === "B") === x.grande).forEach((x, i) => { mitad[x.c.codigo] = L + (i % 2 + 1); });
+  const enPG = info.filter((x) => mitad[x.c.codigo] === "A").map((x) => x.c.codigo);
   for (const x of info) {
     const cod = x.c.codigo, sub = mitad[cod];
     if (x.ahora <= 0) { av(cod + ":quemada", "🔥 " + cod + " se ha quemado. Sale de su grupo; repón la cuenta con un examen nuevo del fondo de exámenes.");
       out.fondeadas.push({ cuenta: cod, rol: "quemada", grupo: "", txt: "🔥 Cuenta quemada.", hoy: x.h, pnl: Number(x.c.pnl) || 0, margen: x.ahora, dias: x.d }); continue; }
+    // waiting in line for the big day: not traded today
+    if (sub === "Cola") { out.fondeadas.push({ cuenta: cod, rol: "cola", grupo: "Cola", txt: "⏳ En cola para el día grande: hoy no se opera. Entra cuando " + (enPG.join(" y ") || "la de delante") + " haga su día grande.", hoy: x.h, pnl: Number(x.c.pnl) || 0, margen: x.ahora, dias: x.d }); continue; }
     const rol = listo(x) ? "payout" : x.grande ? "minimos" : x.m0 < 2 * E.fuerteSL ? "recuperacion" : "fuerte";
     const r = rol === "fuerte" ? riesgo(x, E.fuerteSL) : riesgo(x, E.minimoSL), suave = r < (rol === "fuerte" ? E.fuerteSL : E.minimoSL);
-    const pre = sub ? "Grupo " + sub + " · " : "";
+    const pre = E.escalera ? (sub === "A" ? "Escalera · día grande · " : sub === "B" ? "Escalera · días mínimos (un trade copiado) · " : "") : sub ? "Grupo " + sub + " · " : "";
     let txt = rol === "payout" ? "💰 Tiene el día grande y " + x.d0 + " días mínimos: pide el payout."
       : rol === "fuerte" ? "💪 Día grande: arriesga " + m(r) + " para ganar " + m(E.fuerteTP) + "."
       : rol === "recuperacion" ? "🩹 Recuperación: arriesga " + m(r) + " para ganar " + m(E.minimo) + "; al llegar a " + sg(E.minimo) + " sube el stop a " + sg(E.minimo) +
@@ -372,6 +380,12 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
   const de = (g) => out.fondeadas.filter((f) => f.grupo === g).map((f) => f.cuenta);
   const lado = (L, que) => (de(L + "1").length ? L + "1 (" + de(L + "1").join(", ") + ")" + (de(L + "2").length ? " y " + L + "2 (" + de(L + "2").join(", ") + ")" : "") + " " + que : "");
   const partes = [lado("A", "a por el día grande"), lado("B", "en días mínimos"), de("Payout").length ? "listas para el payout: " + de("Payout").join(", ") : ""].filter(Boolean);
+  if (E.escalera && info.length) {
+    const B = de("B"), cola = de("Cola"), pay = de("Payout");
+    out.resumen = "Fondeadas hoy (escalera): " + [enPG.length ? "día grande " + enPG.join(", ") + " (−" + m(E.fuerteSL) + " / +" + m(E.fuerteTP) + ")" : "",
+      B.length ? "días mínimos " + B.join(", ") + (B.length > 1 ? " con un mismo trade copiado" : "") + " (−" + m(E.minimoSL) + " / +" + m(E.minimo) + ")" : "",
+      cola.length ? "en cola para el día grande: " + cola.join(", ") : "", pay.length ? "listas para el payout: " + pay.join(", ") : ""].filter(Boolean).join(" · ") + ".";
+  } else
   out.resumen = !info.length ? "" : !partes.length ? "Fondeadas hoy: ninguna cuenta opera." :
     "Fondeadas hoy: " + partes.join(" · ") + "." + (de("A2").length || de("B2").length ? " Cada mitad lleva su propio trade, nunca el mismo en todas." : "");
   // the pause: stops today across all accounts, and the week so far (Monday to today) across all accounts
