@@ -131,16 +131,19 @@ async function checkEscalera() {
   const g = r.fondeadas.map((x) => x.cuenta + "=" + x.grupo).join(" ");
   if (g !== "F-1=B F-2=B F-3=A F-4=Cola") return [false, "ladder: " + g];
   if (!r.resumen.includes("días mínimos F-1, F-2 copiadas en el trade del día grande") || !r.fondeadas[3].txt.startsWith("⏳ En cola para el día grande: hoy no se opera. Entra cuando F-3")
-      || !r.fondeadas[2].txt.startsWith("Tanda 1 · Nueva York · día grande · 3 contratos, entrada: stop 83 pts / objetivo 83 pts · 💪 Día grande: entra arriesgando 500 $") || !r.fondeadas[0].txt.includes("1 contrato copiado: −200 $ / +300 $ (100 pts / 150 pts)") || !r.fondeadas[0].txt.includes("Día mínimo: stop −200 $, objetivo +300 $; vale desde +150 $") || !r.fondeadas[2].txt.includes("Promedia en esta cuenta, no en la MASTER"))
+      || !r.fondeadas[2].txt.startsWith("Grupo 1 · Nueva York · día grande · 3 contratos, entrada: stop 83 pts / objetivo 83 pts · 💪 Día grande: entra arriesgando 500 $") || !r.fondeadas[0].txt.includes("1 contrato copiado: −200 $ / +300 $ (100 pts / 150 pts)") || !r.fondeadas[0].txt.includes("Día mínimo: stop −200 $, objetivo +300 $; vale desde +150 $") || !r.fondeadas[2].txt.includes("Promedia en esta cuenta, no en la MASTER"))
     return [false, "ladder words: " + r.resumen + " | " + r.fondeadas.map((x) => x.txt.slice(0, 60)).join(" | ")];
   // a sixth account on minimum days opens batch 2, with a trade of its own and no second big day (option B)
-  const big = { "2026-11-10": 1600 }, siete = [1, 2, 3, 4, 5, 6].map((i) => f("M-" + i, i, big)).concat([f("M-7", 7, {})]);
+  // eleven on minimum days: 5 ride the big day in Grupo 1, 5 in Grupo Días Mínimos 1, 1 in Grupo Días Mínimos 2
+  const big = { "2026-11-10": 1600 }, siete = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => f("M-" + i, i, big)).concat([f("M-12", 12, {})]);
   const r2 = ts.motorReglas({ estrategia: ts.estrategiaDe({ v: 6 }), hoy: "2026-11-20", ahora: "2026-11-20T15:00:00Z", cuentas: siete });
-  if (!r2.fondeadas[5].txt.startsWith("Tanda 2 · Londres (otro trade, sin día grande)") || r2.fondeadas.filter((x) => x.grupo === "A").length !== 1 || !r2.avisos.some((a) => /abre la tanda 2 con M-6/.test(a.txt)))
+  if (!r2.fondeadas[4].txt.startsWith("Grupo 1 · Nueva York (el mismo trade del día grande)") || !r2.fondeadas[5].txt.startsWith("Grupo Días Mínimos 1 · Londres (su propio trade, sin día grande)")
+      || !r2.fondeadas[10].txt.startsWith("Grupo Días Mínimos 2 · Londres") || r2.fondeadas.filter((x) => x.grupo === "A").length !== 1
+      || !r2.avisos.some((a) => a.txt.includes("Grupo Días Mínimos 1 (M-6, M-7, M-8, M-9, M-10), Grupo Días Mínimos 2 (M-11)")) || !r2.resumen.includes("Grupo 1 en Nueva York: día grande M-12"))
     return [false, "batch 2: " + r2.fondeadas.map((x) => x.cuenta + "=" + x.txt.slice(0, 30)).join(" | ")];
   const page = fs.readFileSync(new URL("./ipad/plan-futuros.html", import.meta.url), "utf8");
   if (!page.includes('data-esc="si"') || !page.includes("FONDEADAS · ESCALERA")) return [false, "Plan de Futuros has no ladder switch"];
-  return [true, "F-3 goes for the big day with 3 contracts (enters 500 $ for 500 $, averages to +1.000 $), F-1 and F-2 ride it with 1 contract at −200 $ / +300 $ (averaging stays in the big-day account, off the MASTER), F-4 waits; a 6th account on minimum days opens batch 2 with its own trade"];
+  return [true, "F-3 goes for the big day with 3 contracts (enters 500 $ for 500 $, averages to +1.000 $), F-1 and F-2 ride it with 1 contract at −200 $ / +300 $ (averaging stays in the big-day account, off the MASTER), F-4 waits; past 5 on minimum days they go 5 at a time into Grupo Días Mínimos 1, 2, … with a trade of their own"];
 }
 async function checkAprobadas() {
   const ts = await import("./topstep-sync.mjs");

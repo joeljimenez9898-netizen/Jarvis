@@ -219,8 +219,9 @@ export function vigilancia(planCuentas, cuentasTs, at, prev) {
 // accounts on minimum days take one same trade, copied. A big day today moves the account to minimum days tomorrow and the next in line steps up.
 // With the copier (option 1): one same trade from the MASTER; the big-day account trades pgContratos, the minimum-day ones dmContratos
 // at −minimoSL / +dmTP (the day counts from +minimo). Averaging is done in the big-day account itself, never on the MASTER, so the copier
-// does not average the minimum-day ones. A batch (tanda) is the big-day account plus up to tandaDM minimum-day ones; past that, the rest go in
-// batch 2 with a trade of their own (no second big day: option B). Batch 1 trades in sesionT1 (New York, where he wins), batch 2 in sesionT2.
+// does not average the minimum-day ones. Group 1 (tanda 1) is the big-day account plus up to tandaDM minimum-day ones, in sesionT1 (New York,
+// where he wins). The rest of the minimum-day accounts go tandaDM at a time into "Grupo Días Mínimos 1, 2, …", each with a trade of its own
+// in sesionT2 and no big day (option B). As each big day is done that account joins the minimum days and the next in line steps up.
 export const ESTRATEGIA_DEF = { v: 8, modo: "individual", exModo: "londres", lonIni: 500, lonR: 1000, lonT: 1000, lonMax: 1000, opsDia: 2, b1r: 1000, b1t: 1000, b2r: 1000, b2t: 500,
   consistencia: 50, fuerteIni: 500, fuerteTP: 1000, fuerteSL: 1000, minimo: 150, minimoSL: 200, dmTP: 300, recupR: 500, diasPayout: 4, pausaStops: 2, pausaSemana: 2000, pausaRojos: 3,
   examCerca: 2000, cercaR: 500, escalera: true, pgMax: 1, pgContratos: 3, dmContratos: 1, tandaDM: 5, sesionT1: "Nueva York", sesionT2: "Londres" };
@@ -352,11 +353,15 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
   const mitad = {}, tanda = {};
   if (E.escalera) {
     info.filter((x) => x.ahora > 0 && !listo(x) && !x.grande).forEach((x, i) => { mitad[x.c.codigo] = i < (Number(E.pgMax) || 1) ? "A" : "Cola"; });
-    info.filter((x) => x.ahora > 0 && !listo(x) && x.grande).forEach((x, i) => { mitad[x.c.codigo] = "B"; tanda[x.c.codigo] = i < (Number(E.tandaDM) || 5) ? 1 : 2; });
+    info.filter((x) => x.ahora > 0 && !listo(x) && x.grande).forEach((x, i) => { mitad[x.c.codigo] = "B"; const n = Number(E.tandaDM) || 5; tanda[x.c.codigo] = i < n ? 1 : 2 + Math.floor((i - n) / n); });
   } else for (const L of ["A", "B"]) info.filter((x) => x.ahora > 0 && !listo(x) && (L === "B") === x.grande).forEach((x, i) => { mitad[x.c.codigo] = L + (i % 2 + 1); });
   const enPG = info.filter((x) => mitad[x.c.codigo] === "A").map((x) => x.c.codigo);
-  const t2 = Object.keys(tanda).filter((k) => tanda[k] === 2);
-  if (E.escalera && t2.length) av("tanda2", "📣 Tienes más de " + (Number(E.tandaDM) || 5) + " cuentas en días mínimos: abre la tanda 2 con " + t2.join(", ") + ". Van en " + (E.sesionT2 || "Londres") + ", con otro trade distinto al del día grande, 1 contrato cada una.");
+  // the name of each group: Grupo 1 (big day + its minimum days), then Grupo Días Mínimos 1, 2, …
+  const nomG = (t) => (t === 1 ? "Grupo 1" : "Grupo Días Mínimos " + (t - 1));
+  const gruposDM = [...new Set(Object.values(tanda).filter((t) => t > 1))].sort((a, b) => a - b);
+  const listaG = (t) => Object.keys(tanda).filter((k) => tanda[k] === t);
+  if (E.escalera && gruposDM.length) av("tanda2", "📣 Tienes más de " + (Number(E.tandaDM) || 5) + " cuentas en días mínimos: " + gruposDM.map((t) => nomG(t) + " (" + listaG(t).join(", ") + ")").join(", ") +
+    ". Cada grupo va en " + (E.sesionT2 || "Londres") + " con su propio trade, sin día grande, 1 contrato cada cuenta.");
   for (const x of info) {
     const cod = x.c.codigo, sub = mitad[cod];
     if (x.ahora <= 0) { av(cod + ":quemada", "🔥 " + cod + " se ha quemado. Sale de su grupo; repón la cuenta con un examen nuevo del fondo de exámenes.");
@@ -367,8 +372,8 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
     const r = rol === "fuerte" ? riesgo(x, E.fuerteSL) : riesgo(x, E.minimoSL), suave = r < (rol === "fuerte" ? E.fuerteSL : E.minimoSL);
     const pts = (usd, n) => Math.round(usd / (2 * n)), nG = Number(E.pgContratos) || 3, ini = Number(E.fuerteIni) || 500, nD = Number(E.dmContratos) || 1;
     const s1 = E.sesionT1 || "Nueva York", s2 = E.sesionT2 || "Londres";
-    const pre = E.escalera ? (sub === "A" ? "Tanda 1 · " + s1 + " · día grande · " + nG + " contratos, entrada: stop " + pts(ini, nG) + " pts / objetivo " + pts(ini, nG) + " pts · "
-      : sub === "B" ? "Tanda " + tanda[cod] + " · " + (tanda[cod] === 1 ? s1 + " (el mismo trade del día grande)" : s2 + " (otro trade, sin día grande)") + " · " + nD + (nD === 1 ? " contrato" : " contratos") + " copiado: −" + m(E.minimoSL) + " / +" + m(E.dmTP || E.minimo) + " (" + pts(E.minimoSL, nD) + " pts / " + pts(E.dmTP || E.minimo, nD) + " pts) · " : "") : sub ? "Grupo " + sub + " · " : "";
+    const pre = E.escalera ? (sub === "A" ? "Grupo 1 · " + s1 + " · día grande · " + nG + " contratos, entrada: stop " + pts(ini, nG) + " pts / objetivo " + pts(ini, nG) + " pts · "
+      : sub === "B" ? nomG(tanda[cod]) + " · " + (tanda[cod] === 1 ? s1 + " (el mismo trade del día grande)" : s2 + " (su propio trade, sin día grande)") + " · " + nD + (nD === 1 ? " contrato" : " contratos") + " copiado: −" + m(E.minimoSL) + " / +" + m(E.dmTP || E.minimo) + " (" + pts(E.minimoSL, nD) + " pts / " + pts(E.dmTP || E.minimo, nD) + " pts) · " : "") : sub ? "Grupo " + sub + " · " : "";
     let txt = rol === "payout" ? "💰 Tiene el día grande y " + x.d0 + " días mínimos: pide el payout."
       : rol === "fuerte" ? "💪 Día grande: entra arriesgando " + m(Math.min(E.fuerteIni || r, r)) + " para ganar " + m(Math.min(E.fuerteIni || r, r)) + ". Promedia a favor o en contra hasta cerrar el día en +" + m(E.fuerteTP) + " o más; toda la posición nunca pierde más de " + m(r) + "." + (E.escalera ? " Promedia en esta cuenta, no en la MASTER: así el copiador no promedia las de días mínimos." : "")
       : rol === "recuperacion" ? "🩹 Recuperación: arriesga " + m(r) + " para ganar " + m(E.minimo) + "; al llegar a " + sg(E.minimo) + " sube el stop a " + sg(E.minimo) +
@@ -396,8 +401,8 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
   const partes = [lado("A", "a por el día grande"), lado("B", "en días mínimos"), de("Payout").length ? "listas para el payout: " + de("Payout").join(", ") : ""].filter(Boolean);
   if (E.escalera && info.length) {
     const B = de("B"), cola = de("Cola"), pay = de("Payout");
-    out.resumen = "Fondeadas hoy (escalera): " + [enPG.length ? "tanda 1 en " + (E.sesionT1 || "Nueva York") + ": día grande " + enPG.join(", ") + " (entra −" + m(E.fuerteIni) + " / +" + m(E.fuerteIni) + " y promedia hasta +" + m(E.fuerteTP) + ", nunca más de −" + m(E.fuerteSL) + ")" : "",
-      B.length ? "días mínimos " + B.filter((k) => tanda[k] === 1).join(", ") + " copiadas en el trade del día grande (−" + m(E.minimoSL) + " / +" + m(E.dmTP || E.minimo) + ")" + (B.some((k) => tanda[k] === 2) ? "; tanda 2 en " + (E.sesionT2 || "Londres") + " con otro trade: " + B.filter((k) => tanda[k] === 2).join(", ") : "") : "",
+    out.resumen = "Fondeadas hoy (escalera): " + [enPG.length ? "Grupo 1 en " + (E.sesionT1 || "Nueva York") + ": día grande " + enPG.join(", ") + " (entra −" + m(E.fuerteIni) + " / +" + m(E.fuerteIni) + " y promedia hasta +" + m(E.fuerteTP) + ", nunca más de −" + m(E.fuerteSL) + ")" : "",
+      B.length ? "días mínimos " + B.filter((k) => tanda[k] === 1).join(", ") + " copiadas en el trade del día grande (−" + m(E.minimoSL) + " / +" + m(E.dmTP || E.minimo) + ")" + "" : "", ...gruposDM.map((t) => nomG(t) + " en " + (E.sesionT2 || "Londres") + " con su propio trade: " + listaG(t).join(", ")),
       cola.length ? "en cola para el día grande: " + cola.join(", ") : "", pay.length ? "listas para el payout: " + pay.join(", ") : ""].filter(Boolean).join(" · ") + ".";
   } else
   out.resumen = !info.length ? "" : !partes.length ? "Fondeadas hoy: ninguna cuenta opera." :
