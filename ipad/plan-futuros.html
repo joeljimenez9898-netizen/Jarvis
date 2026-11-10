@@ -1000,13 +1000,14 @@ function ejemploSim(n, esc, hasta) {
   const hist = [], k_ = { payouts: 0, grandes: 0, minimos: 0, ganado: 0, malos: 0 };
   let r = null;
   for (let k = 0; k < hasta; k++) {
-    const hoy = fechas[k], dia = {};
+    const hoy = fechas[k], dia = {}, tiro = {};   // one draw per group: the accounts of a group share one copied trade
     r = motorReglas({ estrategia: E, cuentas: cs.map((c) => ({ ...c, dias: { ...c.dias } })), hoy, ahora: hoy + "T15:00:00Z" });
     for (const x of r.fondeadas) {
       const c = cs.find((y) => y.codigo === x.cuenta), g = x.grupo === "B" ? x.txt.split(" · ")[0] : x.grupo === "A" ? "Grupo 1" : x.grupo;
       if (x.rol === "payout") { dia[c.codigo] = { rol: "payout", g }; k_.payouts++; c.dias = {}; c.pnl = 0; c.orden = 100 + k; continue; }
       if (x.rol === "cola" || x.rol === "quemada") { dia[c.codigo] = { rol: x.rol, g }; continue; }
-      const ok = esc === "bien" || azar() < (x.rol === "minimos" ? 0.7 : 0.5);
+      // "atraso": every big day comes off but the minimum days fail often, so they pile up past 5 and the Grupos Días Mínimos open
+      const ok = esc === "bien" || (esc === "atraso" ? x.rol !== "minimos" || (tiro[g + x.rol] ??= azar() < 0.45) : (tiro[g + x.rol] ??= azar() < (x.rol === "minimos" ? 0.7 : 0.5)));
       const p = x.rol === "minimos" ? (ok ? E.dmTP : -E.minimoSL) : x.rol === "recuperacion" ? (ok ? E.minimo : -E.recupR) : (ok ? E.fuerteTP : -E.fuerteIni);
       c.dias[hoy] = p; c.pnl += p; k_.ganado += p; if (!ok) k_.malos++;
       if (ok && x.rol === "fuerte") k_.grandes++; if (ok && x.rol === "minimos") k_.minimos++;
@@ -1059,12 +1060,17 @@ function ejemploHtml() {
   const lista = (xs) => xs.length < 2 ? xs.join("") : xs.slice(0, -1).join(", ") + " y " + xs.at(-1);
   const frase = (d, i) => { const de = (f) => cods.filter((c) => d[c] && f(d[c]));
     const g = de((x) => x.rol === "fuerte"), m = de((x) => x.rol === "minimos"), p = de((x) => x.rol === "payout"), c = de((x) => x.rol === "cola"), rc = de((x) => x.rol === "recuperacion");
-    const L = [];
-    for (const k of g) L.push(`<b>${k}</b> va a por el día grande (${E.pgContratos} contratos) y ${d[k].ok ? `<span class="pos">lo hace: +${usd(E.fuerteTP)}</span>. Mañana pasa a días mínimos` : `<span class="neg">falla: −${usd(E.fuerteIni)}</span>. Se aparta a recuperar`}.`);
-    const mOk = m.filter((k) => d[k].ok), mKo = m.filter((k) => !d[k].ok);
-    if (mOk.length) L.push(`${lista(mOk.map((k) => "<b>" + k + "</b> (" + d[k].n + "/" + E.diasPayout + ")"))} ${mOk.length > 1 ? "hacen" : "hace"} su día mínimo copiando el mismo trade con 1 contrato: <span class="pos">+${usd(E.dmTP)}</span>.`);
-    if (mKo.length) L.push(`${lista(mKo.map((k) => "<b>" + k + "</b>"))} ${mKo.length > 1 ? "hacen" : "hace"} stop en el día mínimo: <span class="neg">−${usd(E.minimoSL)}</span>, lo repite mañana.`);
-    if (rc.length) L.push(`${lista(rc.map((k) => "<b>" + k + "</b>"))} recupera aparte: ${rc.map((k) => (d[k].p > 0 ? "+" : "−") + usd(Math.abs(d[k].p))).join(", ")}.`);
+    const L = [], gs = [...new Set([...g, ...m].map((k) => d[k].g))].sort((x, y) => (x === "Grupo 1" ? -1 : y === "Grupo 1" ? 1 : x.localeCompare(y, "es", { numeric: true })));
+    // one line per group: they share one copied trade, so they win or stop together
+    for (const gr of gs) {
+      const big = g.filter((k) => d[k].g === gr), mi = m.filter((k) => d[k].g === gr), ok = mi.length && d[mi[0]].ok;
+      const ses = gr === "Grupo 1" ? E.sesionT1 || "Nueva York" : E.sesionT2 || "Londres";
+      L.push(`<span style="display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:800;color:#fff;background:${gr === "Grupo 1" ? "#1d4ed8" : "#16a34a"}">${esc(gr)} · ${esc(ses)}${gr === "Grupo 1" ? "" : " · su propio trade"}</span> ` +
+        big.map((k) => `<b>${k}</b> 💪 día grande (${E.pgContratos} contratos): ${d[k].ok ? `<span class="pos">+${usd(E.fuerteTP)}</span>, mañana a días mínimos` : `<span class="neg">−${usd(E.fuerteIni)}</span>, se aparta a recuperar`}`).join("") +
+        (big.length && mi.length ? " · " : "") +
+        (mi.length ? `${lista(mi.map((k) => "<b>" + k + "</b> " + d[k].n + "/" + E.diasPayout))} en días mínimos (1 contrato): ${ok ? `<span class="pos">+${usd(E.dmTP)}</span> cada una` : `<span class="neg">stop −${usd(E.minimoSL)}</span>, lo repiten mañana`}` : ""));
+    }
+    if (rc.length) L.push(`🩹 ${lista(rc.map((k) => "<b>" + k + "</b>"))} recupera aparte: ${rc.map((k) => (d[k].p > 0 ? "+" : "−") + usd(Math.abs(d[k].p))).join(", ")}.`);
     if (p.length) L.push(`💰 ${lista(p.map((k) => "<b>" + k + "</b>"))} ya ${p.length > 1 ? "tienen" : "tiene"} el día grande y los ${E.diasPayout} días mínimos: <b>pide el payout</b> y vuelve a la cola.`);
     if (c.length) L.push(`<span style="color:var(--muted)">${lista(c.map((k) => k))} ${c.length > 1 ? "esperan" : "espera"} su turno.</span>`);
     return `<div style="display:grid;grid-template-columns:64px 1fr;gap:10px;padding:10px 12px;border-radius:12px;background:${i === hist.length - 1 ? "#eff6ff" : "var(--soft)"};border:1px solid ${i === hist.length - 1 ? "#bfdbfe" : "var(--line)"}">
@@ -1075,14 +1081,14 @@ function ejemploHtml() {
     <div style="display:grid;gap:14px;margin-top:12px">
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
       <span class="seg mini"><button type="button" data-ej="n-">−</button><button type="button" disabled>${j.n} fondeadas</button><button type="button" data-ej="n+">+</button></span>
-      <span class="seg mini"><button type="button" data-ej="bien" aria-pressed="${j.esc === "bien"}">Todo sale bien</button><button type="button" data-ej="real" aria-pressed="${j.esc === "real"}">Con días malos</button></span>
+      <span class="seg mini"><button type="button" data-ej="bien" aria-pressed="${j.esc === "bien"}">Todo sale bien</button><button type="button" data-ej="real" aria-pressed="${j.esc === "real"}">Con días malos</button><button type="button" data-ej="atraso" aria-pressed="${j.esc === "atraso"}">Se atrasan los mínimos</button></span>
       <span class="seg mini"><button type="button" data-ej="d-">◀</button><button type="button" disabled>Día ${j.dia} · ${f2(fechas[j.dia - 1])}</button><button type="button" data-ej="d+">▶</button></span></div>
     <div class="tiles" style="background:var(--navy);padding:10px;border-radius:16px">${kpi.map(([t, v, n]) => `<div class="tile"><span class="tl">${esc(t)}</span><span class="tv"><span class="${/^\+/.test(v) ? "pos" : /^−/.test(v) ? "neg" : ""}">${esc(v)}</span></span><span class="tn">${esc(n)}</span></div>`).join("")}</div>
     <div><div class="sec" style="margin:0 0 8px">PASO A PASO · LO QUE PASA CADA DÍA</div>${relato}</div>
     <div><div class="sec" style="margin:0 0 8px">MAPA DE LA ESCALERA · CADA FILA UNA CUENTA, CADA COLUMNA UN DÍA</div>${mapa}
       <div style="display:flex;flex-wrap:wrap;gap:10px 16px;margin-top:10px">${leyenda}</div></div>
     <div><div class="sec" style="margin:0 0 8px">HOY, DÍA ${j.dia}: QUIÉN OPERA EN CADA GRUPO</div>${tablero}</div>
-    <p class="hint" style="margin:0">Con ${E.pgMax || 1} cuenta a la vez en el día grande y ${E.diasPayout} días mínimos, si todo sale bien nunca hay más de ${E.diasPayout} cuentas en días mínimos y cada día sale un payout desde el día ${E.diasPayout + 2}. Los Grupos Días Mínimos solo aparecen cuando se atrasan días mínimos.</p></div></details>`;
+    <p class="hint" style="margin:0">Con ${E.pgMax || 1} cuenta a la vez en el día grande y ${E.diasPayout} días mínimos, si todo sale bien nunca hay más de ${E.diasPayout} cuentas en días mínimos y cada día sale un payout desde el día ${E.diasPayout + 2}. Si se atrasan (stops en días mínimos) y pasan de ${E.tandaDM || 5}, las demás van de ${E.tandaDM || 5} en ${E.tandaDM || 5} a los Grupos Días Mínimos 1, 2…, en ${E.sesionT2 || "Londres"} y con su propio trade: pulsa «Se atrasan los mínimos».</p></div></details>`;
 }
 function hoyHtml() {
   const E = est(), h = hoyOperas(), m = motor(), ses = sesiones(), dia = h.dia || tradingDay(Date.now());
@@ -1538,7 +1544,8 @@ root.addEventListener("click", async (e) => {
   if (d.esc) { await guardarEst({ escalera: d.esc === "si" }); return; }
   if (d.ej) { const j = ejemplo(); j.abierto = true;
     if (d.ej === "n-") j.n = Math.max(1, j.n - 1); else if (d.ej === "n+") j.n = Math.min(30, j.n + 1);
-    else if (d.ej === "d-") j.dia = Math.max(1, j.dia - 1); else if (d.ej === "d+") j.dia = Math.min(60, j.dia + 1); else j.esc = d.ej;
+    else if (d.ej === "d-") j.dia = Math.max(1, j.dia - 1); else if (d.ej === "d+") j.dia = Math.min(60, j.dia + 1);
+    else { j.esc = d.ej; if (d.ej === "atraso") { j.n = Math.max(j.n, 12); j.dia = Math.max(j.dia, 12); } }
     render(); return; }
   if (d.gmodo) { const [g, v] = d.gmodo.split(":"); await guardarEst({ modos: { ...(est().modos || {}), [g]: v } }); return; }
   if (d.ver) { const [k, v] = d.ver.split(":"); await guardarEst({ [k]: v }); return; }
