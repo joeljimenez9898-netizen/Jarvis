@@ -219,10 +219,10 @@ export function vigilancia(planCuentas, cuentasTs, at, prev) {
 // accounts on minimum days take one same trade, copied. A big day today moves the account to minimum days tomorrow and the next in line steps up.
 // With the copier (option 1): one entry, the same stop and target in points for all; the big-day account trades pgContratos, the
 // minimum-day ones dmContratos. A batch (tanda) is the big-day account plus up to tandaDM minimum-day ones; past that, the rest go in
-// batch 2 with a trade of their own (no second big day: option B).
+// batch 2 with a trade of their own (no second big day: option B). Batch 1 trades in sesionT1 (New York, where he wins), batch 2 in sesionT2.
 export const ESTRATEGIA_DEF = { v: 6, modo: "individual", exModo: "londres", lonIni: 500, lonR: 1000, lonT: 1000, lonMax: 1000, opsDia: 2, b1r: 1000, b1t: 1000, b2r: 1000, b2t: 500,
   consistencia: 50, fuerteTP: 1500, fuerteSL: 1000, minimo: 150, minimoSL: 150, recupR: 500, diasPayout: 4, pausaStops: 2, pausaSemana: 2000, pausaRojos: 3,
-  examCerca: 2000, cercaR: 500, escalera: true, pgMax: 1, pgContratos: 5, dmContratos: 1, tandaDM: 5 };
+  examCerca: 2000, cercaR: 500, escalera: true, pgMax: 1, pgContratos: 5, dmContratos: 1, tandaDM: 5, sesionT1: "Nueva York", sesionT2: "Londres" };
 // Older saved settings: before v2 the funded numbers were the old ones; before v3 there was no London + New York plan;
 // before v4 London was 1.000 for 500 with trailing, now it is 1:1; before v5 the big day was +1.000 and the payout took 5 days;
 // before v6 a minimum day risked 1.000 for 150, now 150 for 150.
@@ -351,7 +351,7 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
   } else for (const L of ["A", "B"]) info.filter((x) => x.ahora > 0 && !listo(x) && (L === "B") === x.grande).forEach((x, i) => { mitad[x.c.codigo] = L + (i % 2 + 1); });
   const enPG = info.filter((x) => mitad[x.c.codigo] === "A").map((x) => x.c.codigo);
   const t2 = Object.keys(tanda).filter((k) => tanda[k] === 2);
-  if (E.escalera && t2.length) av("tanda2", "📣 Tienes más de " + (Number(E.tandaDM) || 5) + " cuentas en días mínimos: abre la tanda 2 con " + t2.join(", ") + ". Van con otro trade distinto al del día grande (por ejemplo, la otra sesión), 1 contrato cada una.");
+  if (E.escalera && t2.length) av("tanda2", "📣 Tienes más de " + (Number(E.tandaDM) || 5) + " cuentas en días mínimos: abre la tanda 2 con " + t2.join(", ") + ". Van en " + (E.sesionT2 || "Londres") + ", con otro trade distinto al del día grande, 1 contrato cada una.");
   for (const x of info) {
     const cod = x.c.codigo, sub = mitad[cod];
     if (x.ahora <= 0) { av(cod + ":quemada", "🔥 " + cod + " se ha quemado. Sale de su grupo; repón la cuenta con un examen nuevo del fondo de exámenes.");
@@ -361,8 +361,9 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
     const rol = listo(x) ? "payout" : x.grande ? "minimos" : x.m0 < 2 * E.fuerteSL ? "recuperacion" : "fuerte";
     const r = rol === "fuerte" ? riesgo(x, E.fuerteSL) : riesgo(x, E.minimoSL), suave = r < (rol === "fuerte" ? E.fuerteSL : E.minimoSL);
     const pts = (usd, n) => Math.round(usd / (2 * n)), sP = pts(E.fuerteSL, E.pgContratos || 5), tP = pts(E.fuerteTP, E.pgContratos || 5), nD = Number(E.dmContratos) || 1;
-    const pre = E.escalera ? (sub === "A" ? "Tanda 1 · día grande · " + (E.pgContratos || 5) + " contratos, stop " + sP + " pts / objetivo " + tP + " pts · "
-      : sub === "B" ? "Tanda " + tanda[cod] + (tanda[cod] === 1 ? " (el mismo trade del día grande)" : " (otro trade, sin día grande)") + " · " + nD + (nD === 1 ? " contrato" : " contratos") + " copiado: −" + m(sP * 2 * nD) + " / +" + m(tP * 2 * nD) + " · " : "") : sub ? "Grupo " + sub + " · " : "";
+    const s1 = E.sesionT1 || "Nueva York", s2 = E.sesionT2 || "Londres";
+    const pre = E.escalera ? (sub === "A" ? "Tanda 1 · " + s1 + " · día grande · " + (E.pgContratos || 5) + " contratos, stop " + sP + " pts / objetivo " + tP + " pts · "
+      : sub === "B" ? "Tanda " + tanda[cod] + " · " + (tanda[cod] === 1 ? s1 + " (el mismo trade del día grande)" : s2 + " (otro trade, sin día grande)") + " · " + nD + (nD === 1 ? " contrato" : " contratos") + " copiado: −" + m(sP * 2 * nD) + " / +" + m(tP * 2 * nD) + " · " : "") : sub ? "Grupo " + sub + " · " : "";
     let txt = rol === "payout" ? "💰 Tiene el día grande y " + x.d0 + " días mínimos: pide el payout."
       : rol === "fuerte" ? "💪 Día grande: arriesga " + m(r) + " para ganar " + m(E.fuerteTP) + "."
       : rol === "recuperacion" ? "🩹 Recuperación: arriesga " + m(r) + " para ganar " + m(E.minimo) + "; al llegar a " + sg(E.minimo) + " sube el stop a " + sg(E.minimo) +
@@ -390,8 +391,8 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
   const partes = [lado("A", "a por el día grande"), lado("B", "en días mínimos"), de("Payout").length ? "listas para el payout: " + de("Payout").join(", ") : ""].filter(Boolean);
   if (E.escalera && info.length) {
     const B = de("B"), cola = de("Cola"), pay = de("Payout");
-    out.resumen = "Fondeadas hoy (escalera): " + [enPG.length ? "día grande " + enPG.join(", ") + " (−" + m(E.fuerteSL) + " / +" + m(E.fuerteTP) + ")" : "",
-      B.length ? "días mínimos " + B.filter((k) => tanda[k] === 1).join(", ") + " copiadas en el trade del día grande" + (B.some((k) => tanda[k] === 2) ? "; tanda 2 con otro trade: " + B.filter((k) => tanda[k] === 2).join(", ") : "") : "",
+    out.resumen = "Fondeadas hoy (escalera): " + [enPG.length ? "tanda 1 en " + (E.sesionT1 || "Nueva York") + ": día grande " + enPG.join(", ") + " (−" + m(E.fuerteSL) + " / +" + m(E.fuerteTP) + ")" : "",
+      B.length ? "días mínimos " + B.filter((k) => tanda[k] === 1).join(", ") + " copiadas en el trade del día grande" + (B.some((k) => tanda[k] === 2) ? "; tanda 2 en " + (E.sesionT2 || "Londres") + " con otro trade: " + B.filter((k) => tanda[k] === 2).join(", ") : "") : "",
       cola.length ? "en cola para el día grande: " + cola.join(", ") : "", pay.length ? "listas para el payout: " + pay.join(", ") : ""].filter(Boolean).join(" · ") + ".";
   } else
   out.resumen = !info.length ? "" : !partes.length ? "Fondeadas hoy: ninguna cuenta opera." :
