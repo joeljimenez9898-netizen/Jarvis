@@ -143,6 +143,8 @@ async function checkEscalera() {
     return [false, "batch 2: " + r2.fondeadas.map((x) => x.cuenta + "=" + x.txt.slice(0, 30)).join(" | ")];
   const page = fs.readFileSync(new URL("./ipad/plan-futuros.html", import.meta.url), "utf8");
   if (!page.includes('data-esc="si"') || !page.includes("FONDEADAS · ESCALERA")) return [false, "Plan de Futuros has no ladder switch"];
+  // the day-by-day example of the ladder (made-up accounts run through the same engine)
+  if (!page.includes("function ejemploSim(") || !page.includes("data-ejemplo") || !page.includes('data-ej="d+"') || !page.includes('data-ej="real"')) return [false, "Plan de Futuros has no ladder example"];
   return [true, "F-3 goes for the big day with 3 contracts (enters 500 $ for 500 $, averages to +1.000 $), F-1 and F-2 ride it with 1 contract at −200 $ / +300 $ (averaging stays in the big-day account, off the MASTER), F-4 waits; past 5 on minimum days they go 5 at a time into Grupo Días Mínimos 1, 2, … with a trade of their own"];
 }
 async function checkAprobadas() {

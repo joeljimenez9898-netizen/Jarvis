@@ -988,6 +988,52 @@ function planCorto(mo, E) {
   return mo === "londres" ? `Entra −${usd(E.lonIni)} / +${usd(Math.round(E.lonIni * E.lonT / E.lonR))} · promedia hasta −${usd(E.lonR)} / +${usd(E.lonT)} · NY solo con lo de Londres`
     : `Bala 1 −${usd(E.b1r)} / +${usd(E.b1t)} · si gana, Bala 2 −${usd(E.b2r)} / +${usd(E.b2t)} justos`;
 }
+
+// ── Ejemplo de la escalera: fondeadas imaginarias, día a día, con el mismo motor y sus números, para ver cómo quedan los grupos ──
+// Nada de esto se guarda: son cuentas inventadas (F-1, F-2…) que hacen su día grande, sus días mínimos y piden el payout.
+const ejemplo = () => (S.ej ||= { n: 8, esc: "bien", dia: 1 });
+function ejemploSim(n, esc, hasta) {
+  const E = { ...est(), escalera: true }, fechas = [];
+  for (let t = Date.parse("2026-01-05T12:00:00Z"); fechas.length < hasta; t += 86400000) { const w = new Date(t).getUTCDay(); if (w && w < 6) fechas.push(new Date(t).toISOString().slice(0, 10)); }
+  let semilla = 11; const azar = () => (semilla = (semilla * 16807) % 2147483647) / 2147483647;
+  const cs = [...Array(n)].map((_, i) => ({ codigo: "F-" + (i + 1), tipo: "Fondeada", estado: "ACTIVA", sl: -2000, orden: i + 1, grupo: "ej", pnl: 0, dias: {}, tradesHoy: [] }));
+  let r = null, res = {}, payouts = 0;
+  for (let k = 0; k < hasta; k++) {
+    const hoy = fechas[k];
+    r = motorReglas({ estrategia: E, cuentas: cs.map((c) => ({ ...c, dias: { ...c.dias } })), hoy, ahora: hoy + "T15:00:00Z" });
+    res = {};
+    for (const x of r.fondeadas) {
+      const c = cs.find((y) => y.codigo === x.cuenta);
+      if (x.rol === "payout") { res[c.codigo] = "💰 payout"; payouts++; c.dias = {}; c.pnl = 0; c.orden = 100 + k; continue; }
+      if (x.rol === "cola" || x.rol === "quemada") continue;
+      const ok = esc === "bien" || azar() < (x.rol === "minimos" ? 0.7 : 0.5);
+      const p = x.rol === "minimos" ? (ok ? E.dmTP : -E.minimoSL) : x.rol === "recuperacion" ? (ok ? E.minimo : -E.recupR) : (ok ? E.fuerteTP : -E.fuerteIni);
+      c.dias[hoy] = p; c.pnl += p; res[c.codigo] = p;
+    }
+  }
+  return { E, r, res, fecha: fechas[hasta - 1], payouts };
+}
+function ejemploHtml() {
+  const j = ejemplo(), { E, r, res, fecha, payouts } = ejemploSim(j.n, j.esc, j.dia);
+  const grupoDe = (x) => (x.grupo === "A" ? "Grupo 1" : x.grupo === "B" ? x.txt.split(" · ")[0] : x.grupo === "Cola" ? "⏳ En cola (hoy no operan)" : x.grupo === "Payout" ? "💰 Piden el payout" : "Otras");
+  const orden = ["Grupo 1"], cajas = {};
+  for (const x of r.fondeadas) { const g = grupoDe(x); (cajas[g] ||= []).push(x); if (!orden.includes(g)) orden.push(g); }
+  const sesion = (g) => (g === "Grupo 1" ? " · " + (E.sesionT1 || "Nueva York") : /^Grupo Días Mínimos/.test(g) ? " · " + (E.sesionT2 || "Londres") + " · su propio trade" : "");
+  const papel = (x) => (x.rol === "fuerte" ? "💪 día grande · " + E.pgContratos + " contratos · entra −" + usd(E.fuerteIni) + " / +" + usd(E.fuerteIni) + ", promedia hasta +" + usd(E.fuerteTP)
+    : x.rol === "minimos" ? "📅 día mínimo " + (x.dias + 1) + "/" + E.diasPayout + " · " + E.dmContratos + " contrato · −" + usd(E.minimoSL) + " / +" + usd(E.dmTP)
+    : x.rol === "recuperacion" ? "🩹 recuperación" : x.rol === "payout" ? "💰 4 días mínimos hechos: pide el payout" : x.rol === "cola" ? "espera su día grande" : x.rol);
+  const fila = (x) => { const v = res[x.cuenta]; return `<div style="display:flex;gap:8px;justify-content:space-between;padding:6px 0;border-top:1px solid var(--line)"><span><b>${esc(x.cuenta)}</b> <span class="hint">${esc(papel(x))}</span></span>${typeof v === "number" ? `<b style="white-space:nowrap" class="${v > 0 ? "pos" : "neg"}">${v > 0 ? "+" : "−"}${usd(Math.abs(v))}</b>` : v ? `<b>${esc(v)}</b>` : ""}</div>`; };
+  const caja = (g) => `<div style="border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--card)"><b>${esc(g + sesion(g))}</b>${[...cajas[g]].sort((a, b) => (b.rol === "fuerte" || b.rol === "recuperacion") - (a.rol === "fuerte" || a.rol === "recuperacion")).map(fila).join("")}</div>`;
+  const fecha2 = fecha.split("-").reverse().slice(0, 2).join("/");
+  return `<details data-ejemplo style="margin-top:14px" ${j.abierto ? "open" : ""}><summary class="hint" style="cursor:pointer">👀 Ver un ejemplo de la escalera día a día (cuentas inventadas)</summary>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0">
+      <span class="seg mini"><button type="button" data-ej="n-">−</button><button type="button" disabled>${j.n} fondeadas</button><button type="button" data-ej="n+">+</button></span>
+      <span class="seg mini"><button type="button" data-ej="bien" aria-pressed="${j.esc === "bien"}">Todo sale bien</button><button type="button" data-ej="real" aria-pressed="${j.esc === "real"}">Con días malos</button></span>
+      <span class="seg mini"><button type="button" data-ej="d-">◀</button><button type="button" disabled>Día ${j.dia} (${fecha2})</button><button type="button" data-ej="d+">▶</button></span></div>
+    <p class="hint">${esc(r.resumen)}</p>
+    <div style="display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">${orden.filter((g) => cajas[g]).map(caja).join("")}</div>
+    <p class="hint" style="margin-top:8px">A la derecha, lo que hizo cada cuenta ese día en el ejemplo. Payouts pedidos hasta el día ${j.dia}: <b>${payouts}</b>. Con ${E.pgMax || 1} cuenta a la vez en el día grande y ${E.diasPayout} días mínimos, si todo sale bien nunca hay más de ${E.diasPayout} cuentas en días mínimos; los Grupos Días Mínimos aparecen cuando se atrasan días mínimos (prueba «Con días malos» y muchas cuentas).</p></details>`;
+}
 function hoyHtml() {
   const E = est(), h = hoyOperas(), m = motor(), ses = sesiones(), dia = h.dia || tradingDay(Date.now());
   const fc = h.foco && h.foco.cuentas[0], x = fc && m.examenes.find((y) => y.cuenta === fc.codigo), lon = fc && modoG(fc.grupo) === "londres";
@@ -1035,6 +1081,7 @@ function hoyHtml() {
     <button type="button" class="btn" data-bt="ir-consulta" style="margin:14px 0 4px">🔎 ¿Puedo entrar? Foto del gráfico al profesor</button>
     ${h.fondeadas.length ? `<div class="sec">${E.escalera ? "FONDEADAS · ESCALERA" : "FONDEADAS · GRUPO A (DÍA GRANDE) + GRUPO B (DÍAS MÍNIMOS)"}</div>
       <span class="seg mini" style="margin-bottom:8px"><button type="button" data-esc="si" aria-pressed="${!!E.escalera}">Escalera (una a por el día grande)</button><button type="button" data-esc="no" aria-pressed="${!E.escalera}">Todas a la vez (A1/A2, B1/B2)</button></span><p class="hint">${esc(m.resumen)}</p>${[...h.fondeadas].sort((a, b) => (a.grupo || "Z").localeCompare(b.grupo || "Z")).map((f) => `<div class="rule"><b>${esc(f.cuenta)}${f.grupo ? ` <span class="live">${esc(f.grupo)}</span>` : ""}</b><span class="v" style="grid-column:span 2">${esc(f.txt)}</span></div>`).join("")}` : ""}
+    ${E.escalera ? ejemploHtml() : ""}
     <details style="margin-top:14px"><summary class="hint" style="cursor:pointer">Ajustar la estrategia</summary><div class="filters" style="margin-top:10px">
       ${[...(modosEnUso().includes("londres") ? [["lonIni", "Londres · riesgo de entrada"], ["lonR", "Londres · riesgo máximo promediando"], ["lonT", "Londres · objetivo promediando"], ["lonMax", "Londres · buscar con trailing"]] : []),
         ...(modosEnUso().includes("balas") ? [["b1r", "Bala 1 · riesgo"], ["b1t", "Bala 1 · objetivo"], ["b2r", "Bala 2 · riesgo"], ["b2t", "Bala 2 · objetivo"], ["opsDia", "Operaciones al día"]] : []), ["examCerca", "Examen · grupo B desde (+$)"], ["cercaR", "Grupo B · riesgo"], ["fuerteIni", "Día grande · entrada (stop y objetivo)"], ["fuerteSL", "Día grande · riesgo máximo promediando"], ["fuerteTP", "Día grande · cerrar el día en"], ["minimoSL", "Día mínimo · riesgo"], ["dmTP", "Día mínimo · objetivo"], ["minimo", "Día mínimo · vale desde (+$)"], ["recupR", "Recuperación · riesgo"], ["diasPayout", "Días mínimos tras el día grande"], ["pgMax", "Escalera · cuentas a la vez en el día grande"], ["pgContratos", "Escalera · contratos día grande"], ["dmContratos", "Escalera · contratos días mínimos"], ["tandaDM", "Escalera · días mínimos por tanda"], ["pausaStops", "Pausa · stops en un día"], ["pausaSemana", "Pausa · pérdida en la semana"], ["pausaRojos", "Pausa · días en rojo"]]
@@ -1439,6 +1486,10 @@ root.addEventListener("click", async (e) => {
   }
   if (d.modo) { await guardarEst({ modo: d.modo }); return; }
   if (d.esc) { await guardarEst({ escalera: d.esc === "si" }); return; }
+  if (d.ej) { const j = ejemplo(); j.abierto = true;
+    if (d.ej === "n-") j.n = Math.max(1, j.n - 1); else if (d.ej === "n+") j.n = Math.min(30, j.n + 1);
+    else if (d.ej === "d-") j.dia = Math.max(1, j.dia - 1); else if (d.ej === "d+") j.dia = Math.min(60, j.dia + 1); else j.esc = d.ej;
+    render(); return; }
   if (d.gmodo) { const [g, v] = d.gmodo.split(":"); await guardarEst({ modos: { ...(est().modos || {}), [g]: v } }); return; }
   if (d.ver) { const [k, v] = d.ver.split(":"); await guardarEst({ [k]: v }); return; }
   if (d.act === "repartir") {
