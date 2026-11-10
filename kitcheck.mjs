@@ -148,8 +148,8 @@ async function checkEscalera() {
   if (g3 !== "R-1=Recup R-2=A R-3=Cola" || !r3.fondeadas[0].txt.startsWith("Recuperación · aparte") || !r3.resumen.includes("recuperando aparte: R-1")) return [false, "recovery apart: " + g3 + " | " + r3.resumen];
   const page = fs.readFileSync(new URL("./ipad/plan-futuros.html", import.meta.url), "utf8");
   if (!page.includes('data-esc="si"') || !page.includes("FONDEADAS · ESCALERA")) return [false, "Plan de Futuros has no ladder switch"];
-  // the day-by-day example of the ladder (made-up accounts run through the same engine)
-  if (!page.includes("function ejemploSim(") || !page.includes("data-ejemplo") || !page.includes('data-ej="d+"') || !page.includes('data-ej="real"') || !page.includes('data-ej="atraso"')) return [false, "Plan de Futuros has no ladder example"];
+  // the real funded board: groups, today per group, no made-up accounts left
+  if (!page.includes("function escaleraHtml(") || !page.includes("data-escalera") || !page.includes("LO QUE TOCA HOY") || page.includes("ejemploSim")) return [false, "Plan de Futuros has no real ladder board (or still shows the example)"];
   return [true, "F-3 goes for the big day with 3 contracts (enters 500 $ for 500 $, averages to +1.000 $), F-1 and F-2 ride it with 1 contract at −200 $, closed at +150 $ (averaging stays in the big-day account, off the MASTER), F-4 waits, an account that lost its big day recovers apart without holding the line; past 5 on minimum days they go 5 at a time into Grupo Días Mínimos 1, 2, … with a trade of their own"];
 }
 async function checkAprobadas() {
