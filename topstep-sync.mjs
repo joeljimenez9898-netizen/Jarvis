@@ -412,7 +412,7 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
     const ko = r && x.h <= -0.9 * r && rol !== "payout";
     if (!ko && x.ahora > 0 && x.ahora <= Math.max(E.fuerteSL, E.minimoSL) && x.m0 > Math.max(E.fuerteSL, E.minimoSL))
       av(cod + ":margen", "⚠️ A " + cod + " solo le quedan " + m(x.ahora) + " de margen: le cabe un stop más. Mañana opera en recuperación.");
-    out.fondeadas.push({ cuenta: cod, rol, grupo: sub || (rol === "payout" ? "Payout" : ""), txt: pre + txt, hoy: x.h, pnl: Number(x.c.pnl) || 0, margen: x.ahora, dias: x.d });
+    out.fondeadas.push({ cuenta: cod, rol, grupo: sub || (rol === "payout" ? "Payout" : ""), txt: pre + txt, hoy: x.h, pnl: Number(x.c.pnl) || 0, margen: x.ahora, dias: x.d, acc: x.acc });
   }
   const de = (g) => out.fondeadas.filter((f) => f.grupo === g).map((f) => f.cuenta);
   const lado = (L, que) => (de(L + "1").length ? L + "1 (" + de(L + "1").join(", ") + ")" + (de(L + "2").length ? " y " + L + "2 (" + de(L + "2").join(", ") + ")" : "") + " " + que : "");
