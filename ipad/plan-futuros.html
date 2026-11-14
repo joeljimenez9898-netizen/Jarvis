@@ -170,6 +170,7 @@
 .pf .hz-in [data-sistema]:first-child { margin-top: 0 !important; }
 .pf .hz-modos { display: flex; flex-wrap: wrap; gap: 10px; }
 .pf .hz-in .filters { display: flex; flex-wrap: wrap; gap: 12px; }
+.pf .hz-ej { margin: 0 0 10px; padding: 8px 12px; border-radius: 10px; background: #fef9c3; border: 1px solid #fde68a; color: #92400e; font-size: 12px; font-weight: 700; }
 .pf .seg.mini button { padding: 6px 11px; font-size: 13px; }
 .pf .seg .seglab { align-self: center; padding: 0 9px; font-size: 11px; font-weight: 800; letter-spacing: .08em; color: var(--muted); background: var(--soft); border-right: 1px solid var(--line); }
 .pf .hero { display: grid; grid-template-columns: minmax(260px, 1fr) 2fr; gap: 18px; background: linear-gradient(135deg, #0f172a, #1e293b); color: #f8fafc; border-radius: 16px; padding: 20px 22px; }
@@ -1113,8 +1114,8 @@ function hoyHtml() {
   // Hoy operas, compact: every account as a card with its ring, the next payout, "¿Puedo entrar?",
   // and three folded buttons (mode of each group, his system, strategy numbers) that open full width and remember how he left them.
   const otras = fc ? h.lineas.filter((l) => !l.startsWith("Opera ")) : h.lineas;
-  const abierto = (k) => { try { return localStorage.getItem("pf-hz-" + k) === "1"; } catch { return false; } };
-  const hz = (k, t, body) => `<details class="hz-d" data-hz="${k}"${abierto(k) ? " open" : ""}><summary>${t}</summary><div class="hz-in">${body}</div></details>`;
+  const abierto = (k, def = false) => { try { const v = localStorage.getItem("pf-hz-" + k); return v == null ? def : v === "1"; } catch { return def; } };
+  const hz = (k, t, body, def) => `<details class="hz-d" data-hz="${k}"${abierto(k, def) ? " open" : ""}><summary>${t}</summary><div class="hz-in">${body}</div></details>`;
   const anillo = (pct, col, lab) => { const r = 23, L = 2 * Math.PI * r, p = Math.max(0, Math.min(1, pct || 0));
     return `<span class="hz-ring"><svg viewBox="0 0 56 56" width="56" height="56" aria-hidden="true"><circle cx="28" cy="28" r="${r}" fill="none" stroke="#e2e8f0" stroke-width="6"/>${p > 0 ? `<circle cx="28" cy="28" r="${r}" fill="none" stroke="${col}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${(L * p).toFixed(1)} ${L.toFixed(1)}" transform="rotate(-90 28 28)"/>` : `<circle cx="28" cy="5" r="3" fill="#94a3b8"/>`}</svg><b>${lab}</b></span>`; };
   const n0 = (v) => usd(v).replace(/ \$$/, ""), sn0 = (v) => (Math.round(v) > 0 ? "+" : "") + n0(v);
@@ -1156,10 +1157,17 @@ function hoyHtml() {
     : nyMin < 630 ? "Nueva York abre en " + dur(630 - nyMin) : nyMin < 720 ? "Nueva York abierta, cierra en " + dur(720 - nyMin) : "Londres abre en " + dur(1440 - nyMin + 120);
   const como = E.escalera && fs.some((f) => f.grupo === "A") ? "Grupo 1, un solo trade desde la MASTER" : E.modo === "grupo" ? "por grupos, copiadas desde la MASTER" : "cuenta a cuenta";
   const fecha = (() => { const s = new Intl.DateTimeFormat("es-ES", { timeZone: "Europe/Madrid", weekday: "long", day: "numeric", month: "short" }).format(new Date()).replace(",", "").replace(/\.$/, ""); return s.charAt(0).toUpperCase() + s.slice(1); })();
+  // an example with made-up accounts, so he can see how it looks before his own accounts are in
+  const ejemplo = `<p class="hz-ej">EJEMPLO · las cuentas TS-1, TS-2… son inventadas, no son tuyas. Así se verán las tuyas.</p><div class="hz-list">${[
+      { cod: "TS-1", rol: "fuerte", badge: "Día grande", ring: anillo(0.5, "#f59e0b", "50%"), sub: `${E.pgContratos} contratos · −${n0(E.fuerteIni)} / +${n0(E.fuerteIni)} · lleva +500 de +${n0(E.fuerteTP || 1000)}`, val: "+500 $", vcls: "pos", txt: "Ejemplo: va a por el día grande y ya lleva +500." },
+      { cod: "TS-2", rol: "minimos", badge: "Días mínimos", ring: anillo(2 / E.diasPayout, "#22c55e", "2/" + E.diasPayout), extra: dots(2, E.diasPayout), sub: `${E.dmContratos} contrato · −${n0(E.minimoSL)} / cierra en +${n0(E.dmTP || E.minimo)}`, val: "+150 $", vcls: "pos", txt: "Ejemplo: lleva 2 días mínimos hechos." },
+      { cod: "TS-5", rol: "examen", badge: "Examen", ring: anillo(0.2, "#2563eb", "20%"), sub: `+600 de +3.000 · Londres −${n0(E.lonIni)} / +${n0(E.lonIni)}`, val: "0 $", vcls: "mut", txt: "Ejemplo: examen con +600 de +3.000." },
+      { cod: "TS-3", rol: "cola", badge: "En cola", ring: anillo(0, "", "·"), sub: "Espera su día grande", val: "—", vcls: "mut", txt: "Ejemplo: espera su turno." }].map(tarj).join("")}</div>
+    <div class="hz-pay"><span class="hz-pi">💰</span><span><b>Próximo payout en ${E.diasPayout - 2} días</b><small>TS-2 lleva 2 de ${E.diasPayout} días mínimos</small><i class="hz-bar"><i style="width:${(2 / E.diasPayout * 100).toFixed(0)}%"></i></i></span></div>`;
   const vacio = !cards.length ? `<p class="hint">${esc(h.lineas[0] || "Aún no hay cuentas vivas.")}</p>` : "";
   return `<div class="card hoy"><div class="hoy-head"><h3>🎯 Hoy operas</h3><span class="hz-date">${esc(fecha)}</span></div>
     <p class="hz-top">${esc(reloj)} · ${esc(como)}</p>
-    <div class="hz-list">${cards.map(tarj).join("")}</div>${vacio}
+    <div class="hz-list">${cards.map(tarj).join("")}</div>
     ${pago}
     ${otras.map((l) => `<div class="banner ok" style="margin:10px 0 0">${esc(l)}</div>`).join("")}
     <button type="button" class="hz-btn" data-bt="ir-consulta">🔎 ¿Puedo entrar? Foto del gráfico al profesor</button>
@@ -1169,6 +1177,7 @@ function hoyHtml() {
       ${hz("ajustar", "Ajustar la estrategia", `<div class="filters">      ${[...(modosEnUso().includes("londres") ? [["lonIni", "Londres · riesgo de entrada"], ["lonR", "Londres · riesgo máximo promediando"], ["lonT", "Londres · objetivo promediando"], ["lonMax", "Londres · buscar con trailing"]] : []),
         ...(modosEnUso().includes("balas") ? [["b1r", "Bala 1 · riesgo"], ["b1t", "Bala 1 · objetivo"], ["b2r", "Bala 2 · riesgo"], ["b2t", "Bala 2 · objetivo"], ["opsDia", "Operaciones al día"]] : []), ["examCerca", "Examen · grupo B desde (+$)"], ["cercaR", "Grupo B · riesgo"], ["fuerteIni", "Día grande · entrada (stop y objetivo)"], ["fuerteSL", "Día grande · riesgo máximo promediando"], ["fuerteMeta", "Día grande · buscar (+$)"], ["fuerteTP", "Día grande · cuenta desde (+$)"], ["minimoSL", "Día mínimo · riesgo"], ["dmTP", "Día mínimo · objetivo"], ["minimo", "Día mínimo · vale desde (+$)"], ["recupR", "Recuperación · riesgo"], ["diasPayout", "Días mínimos tras el día grande"], ["pgMax", "Escalera · cuentas a la vez en el día grande"], ["pgContratos", "Escalera · contratos día grande"], ["dmContratos", "Escalera · contratos días mínimos"], ["tandaDM", "Escalera · días mínimos por tanda"], ["pausaStops", "Pausa · stops en un día"], ["pausaSemana", "Pausa · pérdida en la semana"], ["pausaRojos", "Pausa · días en rojo"]]
         .map(([k, l]) => `<label style="display:grid;gap:4px;font-size:12px;color:var(--muted)">${l}<input type="number" data-est="${k}" value="${E[k]}" style="width:120px"></label>`).join("")}</div>`)}
+      ${hz("ejemplo", "👁 Ver un ejemplo", ejemplo, !cards.length)}
     </div></div>`;
 }
 
