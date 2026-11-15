@@ -171,6 +171,24 @@
 .pf .hz-modos { display: flex; flex-wrap: wrap; gap: 10px; }
 .pf .hz-in .filters { display: flex; flex-wrap: wrap; gap: 12px; }
 .pf .hz-ej { margin: 0 0 10px; padding: 8px 12px; border-radius: 10px; background: #fef9c3; border: 1px solid #fde68a; color: #92400e; font-size: 12px; font-weight: 700; }
+.pf .hz-planbox { margin: 0 0 12px; }
+.pf .hz-planbox .hz-d > summary { font-size: 15px; color: var(--ink); }
+.pf .hz-plan { border: 2px solid var(--ink); border-radius: 16px; padding: 12px; margin: 0 0 12px; background: var(--card); }
+.pf .hz-plan-h { font-size: 16px; font-weight: 800; margin-bottom: 10px; }
+.pf .hz-ses { border-radius: 12px; padding: 11px 12px; background: var(--soft); border: 1px solid var(--line); margin-bottom: 8px; }
+.pf .hz-ses.now, .pf .hz-ses.next { background: #f0fdf4; border-color: #86efac; }
+.pf .hz-ses.done { opacity: .55; }
+.pf .hz-ses-t { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 15px; margin-bottom: 6px; }
+.pf .hz-ses-t .t { margin-left: auto; font-size: 11px; font-weight: 800; letter-spacing: .05em; border-radius: 999px; padding: 2px 9px; background: #e2e8f0; color: #334155; white-space: nowrap; }
+.pf .hz-ses.now .t, .pf .hz-ses.next .t { background: #16a34a; color: #fff; }
+.pf .hz-ses.done .t { background: #0f172a; color: #fff; }
+.pf .hz-row { font-size: 14px; line-height: 1.45; margin: 4px 0; }
+.pf .hz-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
+.pf .hz-chip { font-size: 12px; font-weight: 700; border-radius: 8px; padding: 4px 8px; border: 1px solid; }
+.pf .hz-chip.f { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
+.pf .hz-chip.m { background: #f0fdf4; border-color: #86efac; color: #166534; }
+.pf .hz-off { font-size: 13px; color: var(--muted); line-height: 1.5; padding: 4px 2px 0; }
+.pf .hz-off b { color: var(--ink); }
 .pf .seg.mini button { padding: 6px 11px; font-size: 13px; }
 .pf .seg .seglab { align-self: center; padding: 0 9px; font-size: 11px; font-weight: 800; letter-spacing: .08em; color: var(--muted); background: var(--soft); border-right: 1px solid var(--line); }
 .pf .hero { display: grid; grid-template-columns: minmax(260px, 1fr) 2fr; gap: 18px; background: linear-gradient(135deg, #0f172a, #1e293b); color: #f8fafc; border-radius: 16px; padding: 20px 22px; }
@@ -1156,6 +1174,29 @@ function hoyHtml() {
   const reloj = nyMin < 120 ? "Londres abre en " + dur(120 - nyMin) : nyMin < 300 ? "Londres abierta, cierra en " + dur(300 - nyMin)
     : nyMin < 630 ? "Nueva York abre en " + dur(630 - nyMin) : nyMin < 720 ? "Nueva York abierta, cierra en " + dur(720 - nyMin) : "Londres abre en " + dur(1440 - nyMin + 120);
   const como = E.escalera && fs.some((f) => f.grupo === "A") ? "Grupo 1, un solo trade desde la MASTER" : E.modo === "grupo" ? "por grupos, copiadas desde la MASTER" : "cuenta a cuenta";
+  // today's plan, session by session (Madrid hours): which group trades, which accounts copy it, which exam, and what he leaves alone
+  const sh = sesiones(), ses1 = E.sesionT1 || "Nueva York", ses2 = E.sesionT2 || "Londres", PB = { Londres: [], "Nueva York": [], Fond: [], Aparte: [] }, noToca = [];
+  const sesDe = (x) => (/^londres$/i.test(x) ? "Londres" : /^(nueva york|ny)$/i.test(x) ? "Nueva York" : null), s1 = sesDe(ses1), s2 = s1 ? (s1 === "Londres" ? "Nueva York" : "Londres") : null;
+  const fila = (t) => `<div class="hz-row">${t}</div>`, lst = (xs) => (xs.length < 2 ? xs.join("") : xs.slice(0, -1).join(", ") + " y " + xs.at(-1));
+  const chipF = (f) => `<span class="hz-chip ${f.rol === "fuerte" ? "f" : "m"}">${esc(f.cuenta)} · ${f.rol === "fuerte" ? `día grande · ${E.pgContratos} contratos` : `mínimos · ${E.dmContratos} ${E.dmContratos == 1 ? "contrato" : "contratos"}`}</span>`;
+  { const gr = {}; for (const f of fs) if (f.rol === "fuerte" || f.rol === "minimos") (gr[escGrupo(f)] ||= []).push(f);
+    for (const g of Object.keys(gr).sort((a, b) => (a === "Grupo 1" ? -1 : b === "Grupo 1" ? 1 : a.localeCompare(b, "es", { numeric: true })))) {
+      const xs = gr[g].sort((a, b) => (b.rol === "fuerte") - (a.rol === "fuerte"));
+      PB[(g === "Grupo 1" ? s1 : s2) || "Fond"].push(fila(`<b>${esc(g)}</b> · ${xs.length > 1 ? "un trade desde la MASTER, copian:" : "su trade:"}`) + `<div class="hz-chips">${xs.map(chipF).join("")}</div>`); } }
+  for (const f of fs.filter((f) => f.rol === "recuperacion")) PB.Aparte.push(fila(`🩹 <b>${esc(f.cuenta)}</b> recupera aparte · −${n0(E.recupR)} / +${n0(E.minimo)}`));
+  { const ps = fs.filter((f) => f.rol === "payout"); if (ps.length) PB.Aparte.push(fila(`💰 <b>${esc(lst(ps.map((f) => f.cuenta)))}</b>: pide el payout`)); }
+  if (h.foco) { const codes = h.foco.cuentas.map((c) => c.codigo), quien = E.modo === "grupo" && codes.length > 1 ? `${esc(h.foco.nombre)} (${esc(codes.join(", "))}, copiadas desde la MASTER)` : esc(lst(codes));
+    if (modoG(h.foco.cuentas[0].grupo) === "londres") { PB.Londres.push(fila(`🎯 <b>Examen ${quien}</b> · −${n0(E.lonIni)} / +${n0(Math.round(E.lonIni * E.lonT / E.lonR))}, promedia hasta −${n0(E.lonR)} / +${n0(E.lonT)}`));
+      PB["Nueva York"].push(fila(`🎯 <b>Examen ${quien}</b> · solo si Londres no llegó al objetivo, 1:1 con lo ganado en Londres`)); }
+    else PB.Aparte.push(fila(`🎯 <b>Examen ${quien}</b> · 2 balas · Bala 1 −${n0(E.b1r)} / +${n0(E.b1t)}; si gana, Bala 2 −${n0(E.b2r)} / +${n0(E.b2t)}`));
+    for (const { u } of h.unidades || []) for (const c of u.cuentas) if (!codes.includes(c.codigo)) noToca.push(c.codigo + " (espera su turno)"); }
+  { const b = cercaB(); if (b.length) PB.Aparte.push(fila(`🎯 <b>Grupo B: ${esc(lst(b.map((x) => x.cuenta)))}</b> · aparte, una a una, un trade de −${n0(E.cercaR)}`)); }
+  for (const f of fs.filter((f) => f.rol === "cola")) noToca.push(f.cuenta + " (en cola)");
+  const estSes = (ini, fin, hora) => (nyMin >= fin ? ["done", "TERMINADA ✓"] : nyMin >= ini ? ["now", "AHORA"] : ini - nyMin <= 180 ? ["next", "EMPIEZA EN " + dur(ini - nyMin).toUpperCase()] : ["", hora]);
+  const bloque = (t, xs, [cl, tag]) => (xs.length ? `<div class="hz-ses ${cl}"><div class="hz-ses-t">${t}<span class="t">${esc(tag)}</span></div>${xs.join("")}</div>` : "");
+  const planHoy = PB.Londres.length + PB["Nueva York"].length + PB.Fond.length + PB.Aparte.length + noToca.length ? bloque(`🇬🇧 Londres · ${sh.lon}`, PB.Londres, estSes(120, 300, sh.lon.split("–")[0]))
+    + bloque(`🗽 Nueva York · ${sh.ny}`, PB["Nueva York"], estSes(630, 720, sh.ny.split("–")[0])) + bloque("💼 Fondeadas · Londres o NY", PB.Fond, ["", "LA QUE ELIJAS"]) + bloque("📌 Aparte", PB.Aparte, ["", "EN SU MOMENTO"])
+    + (noToca.length ? `<div class="hz-off">⏸ <b>Hoy no tocas:</b> ${esc(noToca.join(" · "))}</div>` : "") : "";
   const fecha = (() => { const s = new Intl.DateTimeFormat("es-ES", { timeZone: "Europe/Madrid", weekday: "long", day: "numeric", month: "short" }).format(new Date()).replace(",", "").replace(/\.$/, ""); return s.charAt(0).toUpperCase() + s.slice(1); })();
   // an example with made-up accounts, so he can see how it looks before his own accounts are in
   const ejemplo = (() => { const F = E.fuerteTP || 1000, D = E.diasPayout, lon = `Londres −${n0(E.lonIni)} / +${n0(E.lonIni)}`;
@@ -1165,13 +1206,21 @@ function hoyHtml() {
     const lista = [
       { cod: "TS-1", rol: "fuerte", badge: "Día grande", ring: anillo(0.5, "#f59e0b", "50%"), sub: `${E.pgContratos} contratos · −${n0(E.fuerteIni)} / +${n0(E.fuerteIni)} · lleva +500 de +${n0(F)}`, val: "+500 $", vcls: "pos", txt: "Ejemplo: va a por el día grande y ya lleva +500." },
       mn("TS-2", 3, 150), mn("TS-4", 1, 150),
-      ex("TS-5", 1350, 500, "", true), ex("TS-6", 2100, 0, "B"), ex("TS-7", 600, 0), ex("TS-8", 300, 0, `Bala 1 −${n0(E.b1r)} / +${n0(E.b1t)}`, true), ex("TS-9", -400, 0), ex("TS-10", 0, 0),
+      ex("TS-5", 1350, 500, "", true), ex("TS-6", 2100, 0, "B"), ex("TS-7", 600, 0), ex("TS-8", 300, 0, `Bala 1 −${n0(E.b1r)} / +${n0(E.b1t)}`), ex("TS-9", -400, 0), ex("TS-10", 0, 0),
       { cod: "TS-3", rol: "cola", badge: "En cola", ring: anillo(0, "", "·"), sub: "Espera su día grande", val: "—", vcls: "mut", txt: "Ejemplo: espera su turno." }];
-    return `<p class="hz-ej">EJEMPLO con 10 cuentas (4 fondeadas y 6 exámenes) · son inventadas, no son tuyas. Así se verán las tuyas.</p><div class="hz-list">${lista.map(tarj).join("")}</div>
+    const ses1e = sesDe(E.sesionT1 || "Nueva York") || "", sh2 = sesiones(), gr1 = fila(`<b>Grupo 1</b> · un trade desde la MASTER, copian:`) + `<div class="hz-chips"><span class="hz-chip f">TS-1 · día grande · ${E.pgContratos} contratos</span><span class="hz-chip m">TS-2 · mínimos · ${E.dmContratos} contrato</span><span class="hz-chip m">TS-4 · mínimos · ${E.dmContratos} contrato</span></div>`;
+    const exL = fila(`🎯 <b>Examen TS-5</b> · −${n0(E.lonIni)} / +${n0(E.lonIni)}, promedia hasta −${n0(E.lonR)} / +${n0(E.lonT)}`), exN = fila(`🎯 <b>Examen TS-5</b> · solo si Londres no llegó al objetivo, 1:1 con lo ganado en Londres`);
+    const planEj = `<div class="hz-ses next"><div class="hz-ses-t">🇬🇧 Londres · ${sh2.lon}<span class="t">EMPIEZA EN 1 H</span></div>${ses1e === "Londres" ? gr1 : ""}${exL}</div>
+      <div class="hz-ses"><div class="hz-ses-t">🗽 Nueva York · ${sh2.ny}<span class="t">${sh2.ny.split("–")[0]}</span></div>${ses1e === "Nueva York" ? gr1 : ""}${exN}</div>
+      ${ses1e !== "Londres" && ses1e !== "Nueva York" ? `<div class="hz-ses"><div class="hz-ses-t">💼 Fondeadas · Londres o NY<span class="t">LA QUE ELIJAS</span></div>${gr1}</div>` : ""}
+      <div class="hz-ses"><div class="hz-ses-t">📌 Aparte<span class="t">EN SU MOMENTO</span></div>${fila(`🎯 <b>Grupo B: TS-6</b> · aparte, una a una, un trade de −${n0(E.cercaR)}`)}</div>
+      <div class="hz-off">⏸ <b>Hoy no tocas:</b> TS-7, TS-8, TS-9, TS-10 (esperan su turno) · TS-3 (en cola)</div>`;
+    return `<p class="hz-ej">EJEMPLO con 10 cuentas (4 fondeadas y 6 exámenes) · son inventadas, no son tuyas. Así se verán las tuyas.</p><div class="hz-plan"><div class="hz-plan-h">📋 Tu plan de hoy</div>${planEj}</div><div class="hz-list">${lista.map(tarj).join("")}</div>
     <div class="hz-pay"><span class="hz-pi">💰</span><span><b>Próximo payout en ${D - 3} ${D - 3 === 1 ? "día" : "días"}</b><small>TS-2 lleva 3 de ${D} días mínimos</small><i class="hz-bar"><i style="width:${(3 / D * 100).toFixed(0)}%"></i></i></span></div>`; })();
   const vacio = !cards.length ? `<p class="hint">${esc(h.lineas[0] || "Aún no hay cuentas vivas.")}</p>` : "";
   return `<div class="card hoy"><div class="hoy-head"><h3>🎯 Hoy operas</h3><span class="hz-date">${esc(fecha)}</span></div>
     <p class="hz-top">${esc(reloj)} · ${esc(como)}</p>
+    ${planHoy ? `<div class="hz-more hz-planbox">${hz("plan", "📋 Tu plan de hoy", planHoy, true)}</div>` : ""}
     <div class="hz-list">${cards.map(tarj).join("")}</div>
     ${pago}
     ${otras.map((l) => `<div class="banner ok" style="margin:10px 0 0">${esc(l)}</div>`).join("")}
