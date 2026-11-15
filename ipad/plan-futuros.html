@@ -1158,12 +1158,17 @@ function hoyHtml() {
   const como = E.escalera && fs.some((f) => f.grupo === "A") ? "Grupo 1, un solo trade desde la MASTER" : E.modo === "grupo" ? "por grupos, copiadas desde la MASTER" : "cuenta a cuenta";
   const fecha = (() => { const s = new Intl.DateTimeFormat("es-ES", { timeZone: "Europe/Madrid", weekday: "long", day: "numeric", month: "short" }).format(new Date()).replace(",", "").replace(/\.$/, ""); return s.charAt(0).toUpperCase() + s.slice(1); })();
   // an example with made-up accounts, so he can see how it looks before his own accounts are in
-  const ejemplo = `<p class="hz-ej">EJEMPLO · las cuentas TS-1, TS-2… son inventadas, no son tuyas. Así se verán las tuyas.</p><div class="hz-list">${[
-      { cod: "TS-1", rol: "fuerte", badge: "Día grande", ring: anillo(0.5, "#f59e0b", "50%"), sub: `${E.pgContratos} contratos · −${n0(E.fuerteIni)} / +${n0(E.fuerteIni)} · lleva +500 de +${n0(E.fuerteTP || 1000)}`, val: "+500 $", vcls: "pos", txt: "Ejemplo: va a por el día grande y ya lleva +500." },
-      { cod: "TS-2", rol: "minimos", badge: "Días mínimos", ring: anillo(2 / E.diasPayout, "#22c55e", "2/" + E.diasPayout), extra: dots(2, E.diasPayout), sub: `${E.dmContratos} contrato · −${n0(E.minimoSL)} / cierra en +${n0(E.dmTP || E.minimo)}`, val: "+150 $", vcls: "pos", txt: "Ejemplo: lleva 2 días mínimos hechos." },
-      { cod: "TS-5", rol: "examen", badge: "Examen", ring: anillo(0.2, "#2563eb", "20%"), sub: `+600 de +3.000 · Londres −${n0(E.lonIni)} / +${n0(E.lonIni)}`, val: "0 $", vcls: "mut", txt: "Ejemplo: examen con +600 de +3.000." },
-      { cod: "TS-3", rol: "cola", badge: "En cola", ring: anillo(0, "", "·"), sub: "Espera su día grande", val: "—", vcls: "mut", txt: "Ejemplo: espera su turno." }].map(tarj).join("")}</div>
-    <div class="hz-pay"><span class="hz-pi">💰</span><span><b>Próximo payout en ${E.diasPayout - 2} días</b><small>TS-2 lleva 2 de ${E.diasPayout} días mínimos</small><i class="hz-bar"><i style="width:${(2 / E.diasPayout * 100).toFixed(0)}%"></i></i></span></div>`;
+  const ejemplo = (() => { const F = E.fuerteTP || 1000, D = E.diasPayout, lon = `Londres −${n0(E.lonIni)} / +${n0(E.lonIni)}`;
+    const ex = (cod, p, hoyV, extra, hoyEs) => ({ cod, rol: "examen", badge: hoyEs ? "Examen · opera hoy" : extra === "B" ? "Examen · grupo B" : "Examen", ring: anillo(pct(p, 3000), "#2563eb", Math.round(pct(p, 3000) * 100) + "%"),
+      sub: `${sn0(p)} de +3.000 · ${extra === "B" ? `grupo B · un trade de −${n0(E.cercaR)}` : extra || lon}`, val: sgn0(hoyV), vcls: hoyV > 0 ? "pos" : hoyV < 0 ? "neg" : "mut", txt: "Ejemplo de examen." });
+    const mn = (cod, n, hoyV) => ({ cod, rol: "minimos", badge: "Días mínimos", ring: anillo(n / D, "#22c55e", n + "/" + D), extra: dots(n, D), sub: `${E.dmContratos} contrato · −${n0(E.minimoSL)} / cierra en +${n0(E.dmTP || E.minimo)}`, val: sgn0(hoyV), vcls: hoyV > 0 ? "pos" : "mut", txt: `Ejemplo: lleva ${n} de ${D} días mínimos.` });
+    const lista = [
+      { cod: "TS-1", rol: "fuerte", badge: "Día grande", ring: anillo(0.5, "#f59e0b", "50%"), sub: `${E.pgContratos} contratos · −${n0(E.fuerteIni)} / +${n0(E.fuerteIni)} · lleva +500 de +${n0(F)}`, val: "+500 $", vcls: "pos", txt: "Ejemplo: va a por el día grande y ya lleva +500." },
+      mn("TS-2", 3, 150), mn("TS-4", 1, 150),
+      ex("TS-5", 1350, 500, "", true), ex("TS-6", 2100, 0, "B"), ex("TS-7", 600, 0), ex("TS-8", 300, 0, `Bala 1 −${n0(E.b1r)} / +${n0(E.b1t)}`, true), ex("TS-9", -400, 0), ex("TS-10", 0, 0),
+      { cod: "TS-3", rol: "cola", badge: "En cola", ring: anillo(0, "", "·"), sub: "Espera su día grande", val: "—", vcls: "mut", txt: "Ejemplo: espera su turno." }];
+    return `<p class="hz-ej">EJEMPLO con 10 cuentas (4 fondeadas y 6 exámenes) · son inventadas, no son tuyas. Así se verán las tuyas.</p><div class="hz-list">${lista.map(tarj).join("")}</div>
+    <div class="hz-pay"><span class="hz-pi">💰</span><span><b>Próximo payout en ${D - 3} ${D - 3 === 1 ? "día" : "días"}</b><small>TS-2 lleva 3 de ${D} días mínimos</small><i class="hz-bar"><i style="width:${(3 / D * 100).toFixed(0)}%"></i></i></span></div>`; })();
   const vacio = !cards.length ? `<p class="hint">${esc(h.lineas[0] || "Aún no hay cuentas vivas.")}</p>` : "";
   return `<div class="card hoy"><div class="hoy-head"><h3>🎯 Hoy operas</h3><span class="hz-date">${esc(fecha)}</span></div>
     <p class="hz-top">${esc(reloj)} · ${esc(como)}</p>
