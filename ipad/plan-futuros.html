@@ -1173,7 +1173,7 @@ function hoyHtml() {
   const dur = (n) => (n >= 60 ? Math.floor(n / 60) + " h " + String(n % 60).padStart(2, "0") + " min" : n + " min");
   const reloj = nyMin < 120 ? "Londres abre en " + dur(120 - nyMin) : nyMin < 300 ? "Londres abierta, cierra en " + dur(300 - nyMin)
     : nyMin < 630 ? "Nueva York abre en " + dur(630 - nyMin) : nyMin < 720 ? "Nueva York abierta, cierra en " + dur(720 - nyMin) : "Londres abre en " + dur(1440 - nyMin + 120);
-  const como = E.escalera && fs.some((f) => f.grupo === "A") ? "Grupo 1, un solo trade desde la MASTER" : E.modo === "grupo" ? "por grupos, copiadas desde la MASTER" : "cuenta a cuenta";
+  const como = E.escalera && fs.some((f) => f.grupo === "A") ? "fondeadas en escalera, un solo trade desde la MASTER" : E.modo === "grupo" ? "por grupos, copiadas desde la MASTER" : "cuenta a cuenta";
   // today's plan, session by session (Madrid hours): which group trades, which accounts copy it, which exam, and what he leaves alone
   const sh = sesiones(), ses1 = E.sesionT1 || "Nueva York", ses2 = E.sesionT2 || "Londres", PB = { Londres: [], "Nueva York": [], Fond: [], Aparte: [] }, noToca = [];
   const sesDe = (x) => (/^londres$/i.test(x) ? "Londres" : /^(nueva york|ny)$/i.test(x) ? "Nueva York" : null), s1 = sesDe(ses1), s2 = s1 ? (s1 === "Londres" ? "Nueva York" : "Londres") : null;
@@ -1182,7 +1182,7 @@ function hoyHtml() {
   { const gr = {}; for (const f of fs) if (f.rol === "fuerte" || f.rol === "minimos") (gr[escGrupo(f)] ||= []).push(f);
     for (const g of Object.keys(gr).sort((a, b) => (a === "Grupo 1" ? -1 : b === "Grupo 1" ? 1 : a.localeCompare(b, "es", { numeric: true })))) {
       const xs = gr[g].sort((a, b) => (b.rol === "fuerte") - (a.rol === "fuerte"));
-      PB[(g === "Grupo 1" ? s1 : s2) || "Fond"].push(fila(`<b>${esc(g)}</b> · ${xs.length > 1 ? "un trade desde la MASTER, copian:" : "su trade:"}`) + `<div class="hz-chips">${xs.map(chipF).join("")}</div>`); } }
+      PB[(g === "Grupo 1" ? s1 : s2) || "Fond"].push(fila(`<b>${esc(g === "Grupo 1" ? "Fondeadas · escalera" : g)}</b> · ${xs.length > 1 ? "un trade desde la MASTER, copian:" : "su trade:"}`) + `<div class="hz-chips">${xs.map(chipF).join("")}</div>`); } }
   for (const f of fs.filter((f) => f.rol === "recuperacion")) PB.Aparte.push(fila(`🩹 <b>${esc(f.cuenta)}</b> recupera aparte · −${n0(E.recupR)} / +${n0(E.minimo)}`));
   { const ps = fs.filter((f) => f.rol === "payout"); if (ps.length) PB.Aparte.push(fila(`💰 <b>${esc(lst(ps.map((f) => f.cuenta)))}</b>: pide el payout`)); }
   if (h.foco) { const codes = h.foco.cuentas.map((c) => c.codigo), quien = E.modo === "grupo" && codes.length > 1 ? `${esc(h.foco.nombre)} (${esc(codes.join(", "))}, copiadas desde la MASTER)` : esc(lst(codes));
@@ -1208,7 +1208,7 @@ function hoyHtml() {
       mn("TS-2", 3, 150), mn("TS-4", 1, 150),
       ex("TS-5", 1350, 500, "", true), ex("TS-6", 2100, 0, "B"), ex("TS-7", 600, 0), ex("TS-8", 300, 0, `Bala 1 −${n0(E.b1r)} / +${n0(E.b1t)}`), ex("TS-9", -400, 0), ex("TS-10", 0, 0),
       { cod: "TS-3", rol: "cola", badge: "En cola", ring: anillo(0, "", "·"), sub: "Espera su día grande", val: "—", vcls: "mut", txt: "Ejemplo: espera su turno." }];
-    const ses1e = sesDe(E.sesionT1 || "Nueva York") || "", sh2 = sesiones(), gr1 = fila(`<b>Grupo 1</b> · un trade desde la MASTER, copian:`) + `<div class="hz-chips"><span class="hz-chip f">TS-1 · día grande · ${E.pgContratos} contratos</span><span class="hz-chip m">TS-2 · mínimos · ${E.dmContratos} contrato</span><span class="hz-chip m">TS-4 · mínimos · ${E.dmContratos} contrato</span></div>`;
+    const ses1e = sesDe(E.sesionT1 || "Nueva York") || "", sh2 = sesiones(), gr1 = fila(`<b>Fondeadas · escalera</b> · un trade desde la MASTER, copian:`) + `<div class="hz-chips"><span class="hz-chip f">TS-1 · día grande · ${E.pgContratos} contratos</span><span class="hz-chip m">TS-2 · mínimos · ${E.dmContratos} contrato</span><span class="hz-chip m">TS-4 · mínimos · ${E.dmContratos} contrato</span></div>`;
     const exL = fila(`🎯 <b>Examen TS-5</b> · −${n0(E.lonIni)} / +${n0(E.lonIni)}, promedia hasta −${n0(E.lonR)} / +${n0(E.lonT)}`), exN = fila(`🎯 <b>Examen TS-5</b> · solo si Londres no llegó al objetivo, 1:1 con lo ganado en Londres`);
     const planEj = `<div class="hz-ses next"><div class="hz-ses-t">🇬🇧 Londres · ${sh2.lon}<span class="t">EMPIEZA EN 1 H</span></div>${ses1e === "Londres" ? gr1 : ""}${exL}</div>
       <div class="hz-ses"><div class="hz-ses-t">🗽 Nueva York · ${sh2.ny}<span class="t">${sh2.ny.split("–")[0]}</span></div>${ses1e === "Nueva York" ? gr1 : ""}${exN}</div>
