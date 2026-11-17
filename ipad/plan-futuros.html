@@ -1190,7 +1190,7 @@ function hoyHtml() {
       PB["Nueva York"].push(fila(`🎯 <b>Examen ${quien}</b> · solo si Londres no llegó al objetivo, 1:1 con lo ganado en Londres`)); }
     else PB.Aparte.push(fila(`🎯 <b>Examen ${quien}</b> · 2 balas · Bala 1 −${n0(E.b1r)} / +${n0(E.b1t)}; si gana, Bala 2 −${n0(E.b2r)} / +${n0(E.b2t)}`));
     for (const { u } of h.unidades || []) for (const c of u.cuentas) if (!codes.includes(c.codigo)) noToca.push(c.codigo + " (espera su turno)"); }
-  { const b = cercaB(); if (b.length) PB.Aparte.push(fila(`🎯 <b>Grupo B: ${esc(lst(b.map((x) => x.cuenta)))}</b> · aparte, una a una, un trade de −${n0(E.cercaR)}`)); }
+  { const b = cercaB(); if (b.length) PB.Aparte.push(fila(`🎯 <b>Grupo B: ${esc(lst(b.map((x) => x.cuenta)))}</b> (cuentas con +${n0(E.examCerca)} o más de ganancia) · aparte, una a una, un trade de −${n0(E.cercaR)}`)); }
   for (const f of fs.filter((f) => f.rol === "cola")) noToca.push(f.cuenta + " (en cola)");
   const estSes = (ini, fin, hora) => (nyMin >= fin ? ["done", "TERMINADA ✓"] : nyMin >= ini ? ["now", "AHORA"] : ini - nyMin <= 180 ? ["next", "EMPIEZA EN " + dur(ini - nyMin).toUpperCase()] : ["", hora]);
   const bloque = (t, xs, [cl, tag]) => (xs.length ? `<div class="hz-ses ${cl}"><div class="hz-ses-t">${t}<span class="t">${esc(tag)}</span></div>${xs.join("")}</div>` : "");
@@ -1213,7 +1213,7 @@ function hoyHtml() {
     const planEj = `<div class="hz-ses next"><div class="hz-ses-t">🇬🇧 Londres · ${sh2.lon}<span class="t">EMPIEZA EN 1 H</span></div>${ses1e === "Londres" ? gr1 : ""}${exL}</div>
       <div class="hz-ses"><div class="hz-ses-t">🗽 Nueva York · ${sh2.ny}<span class="t">${sh2.ny.split("–")[0]}</span></div>${ses1e === "Nueva York" ? gr1 : ""}${exN}</div>
       ${ses1e !== "Londres" && ses1e !== "Nueva York" ? `<div class="hz-ses"><div class="hz-ses-t">💼 Fondeadas · Londres o NY<span class="t">LA QUE ELIJAS</span></div>${gr1}</div>` : ""}
-      <div class="hz-ses"><div class="hz-ses-t">📌 Aparte<span class="t">EN SU MOMENTO</span></div>${fila(`🎯 <b>Grupo B: TS-6</b> · aparte, una a una, un trade de −${n0(E.cercaR)}`)}</div>
+      <div class="hz-ses"><div class="hz-ses-t">📌 Aparte<span class="t">EN SU MOMENTO</span></div>${fila(`🎯 <b>Grupo B: TS-6</b> (cuentas con +${n0(E.examCerca)} o más de ganancia) · aparte, una a una, un trade de −${n0(E.cercaR)}`)}</div>
       <div class="hz-off">⏸ <b>Hoy no tocas:</b> TS-7, TS-8, TS-9, TS-10 (esperan su turno) · TS-3 (en cola)</div>`;
     return `<p class="hz-ej">EJEMPLO con 10 cuentas (4 fondeadas y 6 exámenes) · son inventadas, no son tuyas. Así se verán las tuyas.</p><div class="hz-plan"><div class="hz-plan-h">📋 Tu plan de hoy</div>${planEj}</div><div class="hz-list">${lista.map(tarj).join("")}</div>
     <div class="hz-pay"><span class="hz-pi">💰</span><span><b>Próximo payout en ${D - 3} ${D - 3 === 1 ? "día" : "días"}</b><small>TS-2 lleva 3 de ${D} días mínimos</small><i class="hz-bar"><i style="width:${(3 / D * 100).toFixed(0)}%"></i></i></span></div>`; })();
