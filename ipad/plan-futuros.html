@@ -189,6 +189,10 @@
 .pf .hz-chip.m { background: #f0fdf4; border-color: #86efac; color: #166534; }
 .pf .hz-off { font-size: 13px; color: var(--muted); line-height: 1.5; padding: 4px 2px 0; }
 .pf .hz-off b { color: var(--ink); }
+.pf .hz-auto { border: 1px dashed #94a3b8; border-radius: 12px; padding: 10px 12px; margin: 0 0 10px; background: #f8fafc; }
+.pf .hz-auto.on { border-style: solid; border-color: #86efac; background: #f0fdf4; }
+.pf .hz-btn.go { text-align: center; background: #16a34a; color: #fff; border-color: #16a34a; margin-top: 10px; }
+.pf .hz-note { font-size: 13px; color: var(--muted); }
 .pf .seg.mini button { padding: 6px 11px; font-size: 13px; }
 .pf .seg .seglab { align-self: center; padding: 0 9px; font-size: 11px; font-weight: 800; letter-spacing: .08em; color: var(--muted); background: var(--soft); border-right: 1px solid var(--line); }
 .pf .hero { display: grid; grid-template-columns: minmax(260px, 1fr) 2fr; gap: 18px; background: linear-gradient(135deg, #0f172a, #1e293b); color: #f8fafc; border-radius: 16px; padding: 20px 22px; }
@@ -953,7 +957,29 @@ async function autoRegistro() {
 // A winning or flat day keeps the same account in focus; a losing day moves the focus on.
 // ESTRATEGIA_DEF, estrategiaDe() and motorReglas() come from topstep-sync.mjs (the hourly watch), copied in by build-space.mjs.
 /*@motor-reglas@*/
-const est = () => estrategiaDe(S.estrategia);
+// Modo automático: con "auto" puesto, Jarvis elige el modo según los exámenes vivos (3 o más: por grupos copiadas; 1 o 2: cuenta a cuenta)
+// y propone el reparto en grupos de 3 (nunca uno solo: 4 = 2+2, 5 = 3+2, 10 = 3+3+2+2). Los grupos los mueve él solo si lo confirmas.
+const AUTO_MIN = { fondeadas: 2, examenes: 6 };
+const autoTam = (n) => { if (n < 3) return []; const r = n % 3, t = Math.floor(n / 3); return r === 0 ? Array(t).fill(3) : r === 2 ? [...Array(t).fill(3), 2] : [...Array(t - 1).fill(3), 2, 2]; };
+const autoExamenes = () => { const ids = rotan().map((g) => g.id); return cuentas().filter((c) => vivaC(c) && c.tipo !== "Fondeada" && ids.includes(c.grupo)); };
+const autoModo = () => (autoExamenes().length >= 3 ? "grupo" : "individual");
+const est = () => { const e = estrategiaDe(S.estrategia); return e.auto ? { ...e, modo: autoModo() } : e; };
+function autoPlan() {
+  const gs = rotan(), ex = autoExamenes(), n = ex.length, nF = cuentas().filter((c) => vivaC(c) && c.tipo === "Fondeada").length;
+  const tam = autoTam(n), r = { n, nF, modo: n >= 3 ? "grupo" : "individual", corto: nF < AUTO_MIN.fondeadas || n < AUTO_MIN.examenes, grupos: [], mueve: [], faltan: 0 };
+  if (!tam.length) return r;
+  const num = (a, b) => String(a.codigo).localeCompare(String(b.codigo), "es", { numeric: true });
+  const porG = gs.map((g) => ({ g, cs: ex.filter((c) => c.grupo === g.id).sort((a, b) => progreso(b) - progreso(a) || num(a, b)) }))
+    .sort((a, b) => b.cs.length - a.cs.length || (a.g.orden ?? 99) - (b.g.orden ?? 99));
+  const slots = tam.map((t, i) => ({ t, g: porG[i] ? porG[i].g : null, nombre: porG[i] ? porG[i].g.nombre : "GRUPO " + (i + 1), cs: [] })), pool = [];
+  porG.forEach((p, i) => { const sl = slots[i]; if (!sl) pool.push(...p.cs); else { sl.cs.push(...p.cs.slice(0, sl.t)); pool.push(...p.cs.slice(sl.t)); } });
+  pool.sort((a, b) => progreso(a) - progreso(b));
+  for (const sl of slots) while (sl.cs.length < sl.t && pool.length) sl.cs.push(pool.shift());
+  r.faltan = slots.filter((x) => !x.g).length;
+  r.grupos = slots.map((x) => ({ id: x.g ? x.g.id : null, nombre: x.nombre, nuevo: !x.g, codigos: x.cs.slice().sort(num).map((c) => c.codigo) }));
+  for (const x of slots) for (const c of x.cs) if (!x.g || c.grupo !== x.g.id) r.mueve.push({ id: c.id, codigo: c.codigo, de: gName(c.grupo), a: x.nombre, aId: x.g ? x.g.id : null });
+  return r;
+}
 // each group can play its own exam plan: Londres + Nueva York or 2 balas
 const modoG = (g) => (est().modos || {})[g] || est().exModo;
 const modosEnUso = () => { const s = [...new Set(rotan().map((g) => modoG(g.id)))]; return s.length ? s : [est().exModo]; };
@@ -1132,6 +1158,13 @@ function hoyHtml() {
   // Hoy operas, compact: every account as a card with its ring, the next payout, "¿Puedo entrar?",
   // and three folded buttons (mode of each group, his system, strategy numbers) that open full width and remember how he left them.
   const otras = fc ? h.lineas.filter((l) => !l.startsWith("Opera ")) : h.lineas;
+  const AP = autoPlan(), autoOn = !!estrategiaDe(S.estrategia).auto;
+  const lstG = (xs) => xs.map((g) => `<b>${esc(g.nombre)}</b> (${esc(g.codigos.join(", "))})${g.nuevo ? " · grupo nuevo" : ""}`).join(" · ");
+  const propuesta = AP.modo === "grupo" ? `Por grupos (copiadas): ${lstG(AP.grupos)}` : "Cuenta a cuenta (con menos de 3 exámenes no se copia)";
+  const autoCorto = AP.corto ? `<div class="hz-row">⚠️ <b>Vas corto de cuentas.</b> Mínimo recomendado: ${AUTO_MIN.fondeadas} fondeadas y ${AUTO_MIN.examenes} exámenes (tienes ${AP.nF} y ${AP.n}).</div>` : "";
+  const autoMover = AP.mueve.length ? `<div class="hz-row">↔ <b>Para dejarlo así:</b> ${esc(AP.mueve.map((x) => `${x.codigo}: ${x.de} → ${x.a}`).join(" · "))}. Cambia también el copiador de Topstep.</div>${AP.faltan ? `<div class="hz-row">➕ Antes, crea ${AP.faltan} ${AP.faltan === 1 ? "grupo nuevo" : "grupos nuevos"} en <b>Grupos</b> (estado ACTIVO).</div>` : ""}<button type="button" class="hz-btn" data-act="auto-repartir">Aplicar el reparto</button>` : "";
+  const autoBox = AP.n ? (autoOn ? `<div class="hz-auto on"><div class="hz-row">🤖 <b>Automático</b> · ${propuesta}</div>${autoCorto}${autoMover}</div>`
+    : `<div class="hz-auto"><div class="hz-row">🤖 <b>Propuesta de Jarvis</b> · ${propuesta}</div>${autoCorto}${autoMover}<button type="button" class="hz-btn go" data-auto="si">Activar el modo automático</button></div>`) : "";
   const abierto = (k, def = false) => { try { const v = localStorage.getItem("pf-hz-" + k); return v == null ? def : v === "1"; } catch { return def; } };
   const hz = (k, t, body, def) => `<details class="hz-d" data-hz="${k}"${abierto(k, def) ? " open" : ""}><summary>${t}</summary><div class="hz-in">${body}</div></details>`;
   const anillo = (pct, col, lab) => { const r = 23, L = 2 * Math.PI * r, p = Math.max(0, Math.min(1, pct || 0));
@@ -1189,7 +1222,7 @@ function hoyHtml() {
     if (modoG(h.foco.cuentas[0].grupo) === "londres") { PB.Londres.push(fila(`🎯 <b>Examen ${quien}</b> · −${n0(E.lonIni)} / +${n0(Math.round(E.lonIni * E.lonT / E.lonR))}, promedia hasta −${n0(E.lonR)} / +${n0(E.lonT)}`));
       PB["Nueva York"].push(fila(`🎯 <b>Examen ${quien}</b> · solo si Londres no llegó al objetivo, 1:1 con lo ganado en Londres`)); }
     else PB.Aparte.push(fila(`🎯 <b>Examen ${quien}</b> · 2 balas · Bala 1 −${n0(E.b1r)} / +${n0(E.b1t)}; si gana, Bala 2 −${n0(E.b2r)} / +${n0(E.b2t)}`));
-    for (const { u } of h.unidades || []) for (const c of u.cuentas) if (!codes.includes(c.codigo)) noToca.push(c.codigo + " (espera su turno)"); }
+    for (const { u } of h.unidades || []) { const rest = u.cuentas.filter((c) => !codes.includes(c.codigo)); if (!rest.length) continue; if (E.modo === "grupo" && rest.length > 1) noToca.push(`${u.nombre} (${rest.map((c) => c.codigo).join(", ")}) espera su turno`); else for (const c of rest) noToca.push(c.codigo + " (espera su turno)"); } }
   { const b = cercaB(); if (b.length) PB.Aparte.push(fila(`🎯 <b>Grupo B: ${esc(lst(b.map((x) => x.cuenta)))}</b> (cuentas con +${n0(E.examCerca)} o más de ganancia) · aparte, una a una, un trade de −${n0(E.cercaR)}`)); }
   for (const f of fs.filter((f) => f.rol === "cola")) noToca.push(f.cuenta + " (en cola)");
   const estSes = (ini, fin, hora) => (nyMin >= fin ? ["done", "TERMINADA ✓"] : nyMin >= ini ? ["now", "AHORA"] : ini - nyMin <= 180 ? ["next", "EMPIEZA EN " + dur(ini - nyMin).toUpperCase()] : ["", hora]);
@@ -1220,13 +1253,13 @@ function hoyHtml() {
   const vacio = !cards.length ? `<p class="hint">${esc(h.lineas[0] || "Aún no hay cuentas vivas.")}</p>` : "";
   return `<div class="card hoy"><div class="hoy-head"><h3>🎯 Hoy operas</h3><span class="hz-date">${esc(fecha)}</span></div>
     <p class="hz-top">${esc(reloj)} · ${esc(como)}</p>
-    ${planHoy ? `<div class="hz-more hz-planbox">${hz("plan", "📋 Tu plan de hoy", planHoy, true)}</div>` : ""}
+    ${planHoy ? `<div class="hz-more hz-planbox">${hz("plan", "📋 Tu plan de hoy", autoBox + planHoy, true)}</div>` : ""}
     <div class="hz-list">${cards.map(tarj).join("")}</div>
     ${pago}
     ${otras.map((l) => `<div class="banner ok" style="margin:10px 0 0">${esc(l)}</div>`).join("")}
     <button type="button" class="hz-btn" data-bt="ir-consulta">🔎 ¿Puedo entrar? Foto del gráfico al profesor</button>
     <div class="hz-more">
-      ${hz("modo", "Modo de cada grupo", `<div class="hz-modos">${modos}<span class="seg mini"><button type="button" data-modo="individual" aria-pressed="${E.modo === "individual"}">Cuenta a cuenta</button><button type="button" data-modo="grupo" aria-pressed="${E.modo === "grupo"}">Por grupos (copiadas)</button></span>${h.fondeadas.length || E.escalera ? `<span class="seg mini"><span class="seglab">FONDEADAS</span><button type="button" data-esc="si" aria-pressed="${!!E.escalera}">Escalera</button><button type="button" data-esc="no" aria-pressed="${!E.escalera}">Todas a la vez</button></span>` : ""}</div>`)}
+      ${hz("modo", "Modo de cada grupo", `<div class="hz-modos"><span class="seg mini"><span class="seglab">🤖 AUTOMÁTICO</span><button type="button" data-auto="si" aria-pressed="${autoOn}">Activado</button><button type="button" data-auto="no" aria-pressed="${!autoOn}">Manual</button></span>${modos}${autoOn ? `<span class="hz-note">Jarvis elige el modo solo: ahora ${E.modo === "grupo" ? "Por grupos (copiadas)" : "Cuenta a cuenta"}.</span>` : `<span class="seg mini"><button type="button" data-modo="individual" aria-pressed="${E.modo === "individual"}">Cuenta a cuenta</button><button type="button" data-modo="grupo" aria-pressed="${E.modo === "grupo"}">Por grupos (copiadas)</button></span>`}${h.fondeadas.length || E.escalera ? `<span class="seg mini"><span class="seglab">FONDEADAS</span><button type="button" data-esc="si" aria-pressed="${!!E.escalera}">Escalera</button><button type="button" data-esc="no" aria-pressed="${!E.escalera}">Todas a la vez</button></span>` : ""}</div>`)}
       ${hz("sistema", "Tu sistema", sistemaExamenes(E) + (E.escalera ? sistemaFondeadas(E) : h.fondeadas.length ? `<div data-sistema style="margin-top:10px;font-size:12px;line-height:1.55;color:var(--muted)">${esc(m.resumen || "")}</div>` : ""))}
       ${hz("ajustar", "Ajustar la estrategia", `<div class="filters">      ${[...(modosEnUso().includes("londres") ? [["lonIni", "Londres · riesgo de entrada"], ["lonR", "Londres · riesgo máximo promediando"], ["lonT", "Londres · objetivo promediando"], ["lonMax", "Londres · buscar con trailing"]] : []),
         ...(modosEnUso().includes("balas") ? [["b1r", "Bala 1 · riesgo"], ["b1t", "Bala 1 · objetivo"], ["b2r", "Bala 2 · riesgo"], ["b2t", "Bala 2 · objetivo"], ["opsDia", "Operaciones al día"]] : []), ["examCerca", "Examen · grupo B desde (+$)"], ["cercaR", "Grupo B · riesgo"], ["fuerteIni", "Día grande · entrada (stop y objetivo)"], ["fuerteSL", "Día grande · riesgo máximo promediando"], ["fuerteMeta", "Día grande · buscar (+$)"], ["fuerteTP", "Día grande · cuenta desde (+$)"], ["minimoSL", "Día mínimo · riesgo"], ["dmTP", "Día mínimo · objetivo"], ["minimo", "Día mínimo · vale desde (+$)"], ["recupR", "Recuperación · riesgo"], ["diasPayout", "Días mínimos tras el día grande"], ["pgMax", "Escalera · cuentas a la vez en el día grande"], ["pgContratos", "Escalera · contratos día grande"], ["dmContratos", "Escalera · contratos días mínimos"], ["tandaDM", "Escalera · días mínimos por tanda"], ["pausaStops", "Pausa · stops en un día"], ["pausaSemana", "Pausa · pérdida en la semana"], ["pausaRojos", "Pausa · días en rojo"]]
@@ -1632,6 +1665,14 @@ root.addEventListener("click", async (e) => {
     toast("Revisión guardada."); return;
   }
   if (d.modo) { await guardarEst({ modo: d.modo }); return; }
+  if (d.auto) { await guardarEst(d.auto === "si" ? { auto: true, modo: autoModo() } : { auto: false, modo: est().modo }); return; }
+  if (d.act === "auto-repartir") {
+    if (!S.db) return toast("Abre el Plan dentro de Claude para guardar.");
+    const p = autoPlan(); if (p.faltan) return toast("Primero crea " + p.faltan + (p.faltan === 1 ? " grupo nuevo" : " grupos nuevos") + " en Grupos (estado ACTIVO).");
+    if (!dosToques(t, "¿Aplicar? Toca otra vez")) return;
+    for (const x of p.mueve) await S.db.doc("fm/plan").collection("cuentas").doc(x.id).update({ grupo: x.aId });
+    toast(p.mueve.length ? "Reparto aplicado: " + p.mueve.map((x) => x.codigo + " → " + x.a).join(", ") + ". Cambia también el copiador de Topstep." : "Ya estaban repartidos."); return;
+  }
   if (d.esc) { await guardarEst({ escalera: d.esc === "si" }); return; }
   if (d.gmodo) { const [g, v] = d.gmodo.split(":"); await guardarEst({ modos: { ...(est().modos || {}), [g]: v } }); return; }
   if (d.ver) { const [k, v] = d.ver.split(":"); await guardarEst({ [k]: v }); return; }
