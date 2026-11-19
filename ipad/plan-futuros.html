@@ -193,6 +193,8 @@
 .pf .hz-auto.on { border-style: solid; border-color: #86efac; background: #f0fdf4; }
 .pf .hz-btn.go { text-align: center; background: #16a34a; color: #fff; border-color: #16a34a; margin-top: 10px; }
 .pf .hz-note { font-size: 13px; color: var(--muted); }
+.pf .hz-gt { font-weight: 700; font-size: 13px; margin: 12px 0 4px; color: var(--ink); }
+.pf .hz-gt:first-child { margin-top: 0; }
 .pf .seg.mini button { padding: 6px 11px; font-size: 13px; }
 .pf .seg .seglab { align-self: center; padding: 0 9px; font-size: 11px; font-weight: 800; letter-spacing: .08em; color: var(--muted); background: var(--soft); border-right: 1px solid var(--line); }
 .pf .hero { display: grid; grid-template-columns: minmax(260px, 1fr) 2fr; gap: 18px; background: linear-gradient(135deg, #0f172a, #1e293b); color: #f8fafc; border-radius: 16px; padding: 20px 22px; }
@@ -1170,6 +1172,14 @@ function hoyHtml() {
   const anillo = (pct, col, lab) => { const r = 23, L = 2 * Math.PI * r, p = Math.max(0, Math.min(1, pct || 0));
     return `<span class="hz-ring"><svg viewBox="0 0 56 56" width="56" height="56" aria-hidden="true"><circle cx="28" cy="28" r="${r}" fill="none" stroke="#e2e8f0" stroke-width="6"/>${p > 0 ? `<circle cx="28" cy="28" r="${r}" fill="none" stroke="${col}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${(L * p).toFixed(1)} ${L.toFixed(1)}" transform="rotate(-90 28 28)"/>` : `<circle cx="28" cy="5" r="3" fill="#94a3b8"/>`}</svg><b>${lab}</b></span>`; };
   const n0 = (v) => usd(v).replace(/ \$$/, ""), sn0 = (v) => (Math.round(v) > 0 ? "+" : "") + n0(v);
+  const guiaP = (t, xs) => `<div class="hz-gt">${t}</div>${xs.map((x) => `<div class="hz-row">${x}</div>`).join("")}`;
+  const guia = guiaP("1 · Cada día", ["Abre <b>Hoy operas</b> y mira <b>📋 Tu plan de hoy</b>: te dice qué cuentas operas, en qué sesión y qué no tocas.", "Opera <b>solo eso</b>. Cierras al llegar al tope del día, al stop o cuando termines tú."])
+    + guiaP("2 · Exámenes (objetivo 3.000)", [`Tope del día: <b>+${n0(3000 * E.consistencia / 100)}</b>. Nunca más, por la consistencia.`, "Cada día opera la cuenta (o grupo) <b>EN FOCO</b>. Si gana o queda en 0, mañana sigue la misma. Si toca stop, mañana la siguiente.", `Desde <b>+${n0(E.examCerca)}</b> pasa al <b>Grupo B</b>: aparte, una a una, un solo trade de −${n0(E.cercaR)}. Pasado el examen, a por la fondeada.`])
+    + guiaP("3 · Cuántas cuentas y cómo copiarlas", ["<b>1 o 2 exámenes:</b> cuenta a cuenta.", "<b>3 o más:</b> grupos de 3 copiados desde la MASTER (4 = 2+2, 5 = 3+2, 10 = 3+3+2+2). Nunca una cuenta sola.", `Mínimo recomendado: <b>${AUTO_MIN.fondeadas} fondeadas y ${AUTO_MIN.examenes} exámenes</b>. Por debajo Jarvis te avisa, pero sigue funcionando.`])
+    + guiaP("3b · Londres y Nueva York cada día", ["Las <b>fondeadas tienen prioridad</b>: eliges si hoy van en Londres o en Nueva York y el examen usa la otra sesión.", "Sin fondeadas hoy: un grupo de examen en Londres y otro en Nueva York.", "<b>Grupo B</b> (examen cerca de pasar): va antes que los demás exámenes, ocupa la sesión de examen y opera cuenta a cuenta, un solo trade."])
+    + guiaP("4 · Fondeadas (escalera)", [`Una cuenta a la vez hace el <b>día grande</b>: ${E.pgContratos} contratos, busca +${n0(E.fuerteTP)}.`, `Las demás van en <b>días mínimos</b>: ${E.dmContratos} contrato copiado, stop −${n0(E.minimoSL)}, cierras en +${n0(E.dmTP)}.`, `Día grande + <b>${E.diasPayout} días mínimos</b> = pides el <b>payout</b>. Al cobrar, díselo a Jarvis y él lo reparte.`])
+    + guiaP("5 · Cuándo paras", [`<b>${E.pausaStops} stops</b> en un día (entre todas las cuentas): se acabó el día.`, `<b>−${n0(E.pausaSemana)}</b> en la semana o <b>${E.pausaRojos} días en rojo</b>: mañana no operas, copiador apagado y revisas qué falló.`])
+    + guiaP("6 · Los botones del modo automático", ["<b>Activar el modo automático:</b> Jarvis elige solo cuenta a cuenta o por grupos. No mueve cuentas.", "<b>Aplicar el reparto:</b> mueve las cuentas a los grupos propuestos (toca dos veces). Después cambia lo mismo en el copiador de Topstep. Si faltan grupos, créalos antes en Grupos (ACTIVO)."]);
   const pct = (v, t) => (t > 0 ? Math.max(0, v) / t : 0), sgn0 = (v) => (Math.round(v) ? sgn(v) : "0 $");
   const dots = (n, de) => `<span class="hz-dots">${[...Array(de)].map((_, i) => `<i${i < n ? ' class="on"' : ""}></i>`).join("")}</span>`;
   const tarj = ({ cod, rol, badge, ring, sub, extra = "", val, vcls = "", txt = "" }) => `<details class="hz-acc ${rol}"><summary>${ring}<span class="hz-body"><span class="hz-name"><b>${esc(cod)}</b><span class="hz-b ${rol}">${badge}</span></span>${extra}<span class="hz-sub">${sub}</span></span><b class="hz-val ${vcls}">${val}</b></summary>${txt ? `<p>${esc(txt)}</p>` : ""}</details>`;
@@ -1209,7 +1219,8 @@ function hoyHtml() {
   const como = E.escalera && fs.some((f) => f.grupo === "A") ? "fondeadas en escalera, un solo trade desde la MASTER" : E.modo === "grupo" ? "por grupos, copiadas desde la MASTER" : "cuenta a cuenta";
   // today's plan, session by session (Madrid hours): which group trades, which accounts copy it, which exam, and what he leaves alone
   const sh = sesiones(), ses1 = E.sesionT1 || "Nueva York", ses2 = E.sesionT2 || "Londres", PB = { Londres: [], "Nueva York": [], Fond: [], Aparte: [] }, noToca = [];
-  const sesDe = (x) => (/^londres$/i.test(x) ? "Londres" : /^(nueva york|ny)$/i.test(x) ? "Nueva York" : null), s1 = sesDe(ses1), s2 = s1 ? (s1 === "Londres" ? "Nueva York" : "Londres") : null;
+  const fondSes = (E.fondDia && E.fondDia.d === dia && (E.fondDia.s === "Londres" || E.fondDia.s === "Nueva York")) ? E.fondDia.s : null;
+  const sesDe = (x) => (/^londres$/i.test(x) ? "Londres" : /^(nueva york|ny)$/i.test(x) ? "Nueva York" : null), s1 = fondSes || sesDe(ses1), s2 = s1 ? (s1 === "Londres" ? "Nueva York" : "Londres") : null;
   const fila = (t) => `<div class="hz-row">${t}</div>`, lst = (xs) => (xs.length < 2 ? xs.join("") : xs.slice(0, -1).join(", ") + " y " + xs.at(-1));
   const chipF = (f) => `<span class="hz-chip ${f.rol === "fuerte" ? "f" : "m"}">${esc(f.cuenta)} · ${f.rol === "fuerte" ? `día grande · ${E.pgContratos} contratos` : `mínimos · ${E.dmContratos} ${E.dmContratos == 1 ? "contrato" : "contratos"}`}</span>`;
   { const gr = {}; for (const f of fs) if (f.rol === "fuerte" || f.rol === "minimos") (gr[escGrupo(f)] ||= []).push(f);
@@ -1218,15 +1229,35 @@ function hoyHtml() {
       PB[(g === "Grupo 1" ? s1 : s2) || "Fond"].push(fila(`<b>${esc(g === "Grupo 1" ? "Fondeadas · escalera" : g)}</b> · ${xs.length > 1 ? "un trade desde la MASTER, copian:" : "su trade:"}`) + `<div class="hz-chips">${xs.map(chipF).join("")}</div>`); } }
   for (const f of fs.filter((f) => f.rol === "recuperacion")) PB.Aparte.push(fila(`🩹 <b>${esc(f.cuenta)}</b> recupera aparte · −${n0(E.recupR)} / +${n0(E.minimo)}`));
   { const ps = fs.filter((f) => f.rol === "payout"); if (ps.length) PB.Aparte.push(fila(`💰 <b>${esc(lst(ps.map((f) => f.cuenta)))}</b>: pide el payout`)); }
+  let seg = null;
+  // grupo B (cerca de pasar): tiene prioridad y ocupa la sesión de examen del día
+  const sinFondG = !fs.some((f) => f.rol === "fuerte" || f.rol === "minimos");
+  const bSes = cercaB().length ? (sinFondG ? "Londres" : fondSes === "Londres" ? "Nueva York" : fondSes === "Nueva York" ? "Londres" : null) : null;
   if (h.foco) { const codes = h.foco.cuentas.map((c) => c.codigo), quien = E.modo === "grupo" && codes.length > 1 ? `${esc(h.foco.nombre)} (${esc(codes.join(", "))}, copiadas desde la MASTER)` : esc(lst(codes));
-    if (modoG(h.foco.cuentas[0].grupo) === "londres") { PB.Londres.push(fila(`🎯 <b>Examen ${quien}</b> · −${n0(E.lonIni)} / +${n0(Math.round(E.lonIni * E.lonT / E.lonR))}, promedia hasta −${n0(E.lonR)} / +${n0(E.lonT)}`));
-      PB["Nueva York"].push(fila(`🎯 <b>Examen ${quien}</b> · solo si Londres no llegó al objetivo, 1:1 con lo ganado en Londres`)); }
+    if (modoG(h.foco.cuentas[0].grupo) === "londres") {
+      const nyMeta = Number(E.nyMeta) || 1200;
+      // sin fondeadas hoy: un grupo de examen en Londres y otro en Nueva York
+      const sinFond = !fs.some((f) => f.rol === "fuerte" || f.rol === "minimos"), us2 = (h.unidades || []).map((x) => x.u), k0 = us2.findIndex((u) => u.id === h.foco.id);
+      seg = sinFond && !bSes && us2.length > 1 ? us2[(k0 + 1) % us2.length] : null;
+      const quien2 = seg ? (E.modo === "grupo" && seg.cuentas.length > 1 ? `${esc(seg.nombre)} (${esc(seg.cuentas.map((c) => c.codigo).join(", "))}, copiadas desde la MASTER)` : esc(lst(seg.cuentas.map((c) => c.codigo)))) : "";
+      if (bSes && sinFond) {
+        PB["Nueva York"].push(fila(`🎯 <b>Examen ${quien}</b> · −${n0(E.lonIni)} / +${n0(E.lonIni)} y promedias buscando +${n0(nyMeta)} o más (nunca más de −${n0(E.lonR)}). El grupo B ocupa Londres hoy.`));
+      } else if (bSes) {
+        noToca.push(`${h.foco.nombre} (${codes.join(", ")}) espera: el grupo B tiene prioridad hoy`);
+      } else if (fondSes === "Londres") {
+        PB["Nueva York"].push(fila(`🎯 <b>Examen ${quien}</b> · −${n0(E.lonIni)} / +${n0(E.lonIni)} y promedias buscando +${n0(nyMeta)} o más (nunca más de −${n0(E.lonR)})`));
+        PB["Nueva York"].push(`<div class="hz-note">↩ Si las fondeadas no hicieron nada en Londres, pueden reintentar aquí: entonces el examen espera a mañana.</div>`);
+      } else {
+        PB.Londres.push(fila(`🎯 <b>Examen ${quien}</b> · −${n0(E.lonIni)} / +${n0(Math.round(E.lonIni * E.lonT / E.lonR))}, promedia hasta −${n0(E.lonR)} / +${n0(E.lonT)}`));
+        PB["Nueva York"].push(seg ? fila(`🎯 <b>Examen ${quien2}</b> · −${n0(E.lonIni)} / +${n0(E.lonIni)} y promedias buscando +${n0(nyMeta)} o más (nunca más de −${n0(E.lonR)}). Sin fondeadas hoy, Nueva York es para este grupo.`) : fondSes === "Nueva York" ? `<div class="hz-note">Nueva York es de las fondeadas hoy: si el examen no cerró en Londres, no continúa aquí y lo intenta mañana.</div>`
+          : fila(`🎯 <b>Examen ${quien}</b> · solo si Londres no llegó al objetivo, 1:1 con lo ganado en Londres`)); } }
     else PB.Aparte.push(fila(`🎯 <b>Examen ${quien}</b> · 2 balas · Bala 1 −${n0(E.b1r)} / +${n0(E.b1t)}; si gana, Bala 2 −${n0(E.b2r)} / +${n0(E.b2t)}`));
-    for (const { u } of h.unidades || []) { const rest = u.cuentas.filter((c) => !codes.includes(c.codigo)); if (!rest.length) continue; if (E.modo === "grupo" && rest.length > 1) noToca.push(`${u.nombre} (${rest.map((c) => c.codigo).join(", ")}) espera su turno`); else for (const c of rest) noToca.push(c.codigo + " (espera su turno)"); } }
-  { const b = cercaB(); if (b.length) PB.Aparte.push(fila(`🎯 <b>Grupo B: ${esc(lst(b.map((x) => x.cuenta)))}</b> (cuentas con +${n0(E.examCerca)} o más de ganancia) · aparte, una a una, un trade de −${n0(E.cercaR)}`)); }
+    for (const { u } of h.unidades || []) { const rest = u.cuentas.filter((c) => !codes.includes(c.codigo)); if (!rest.length || (seg && u.id === seg.id)) continue; if (E.modo === "grupo" && rest.length > 1) noToca.push(`${u.nombre} (${rest.map((c) => c.codigo).join(", ")}) espera su turno`); else for (const c of rest) noToca.push(c.codigo + " (espera su turno)"); } }
+  { const b = cercaB(); if (b.length) PB[bSes || "Aparte"].push(fila(`🎯 <b>Grupo B${bSes ? " · prioridad" : ""}: ${esc(lst(b.map((x) => x.cuenta)))}</b> (cuentas con +${n0(E.examCerca)} o más de ganancia) · aparte, una a una, un trade de −${n0(E.cercaR)}`)); }
   for (const f of fs.filter((f) => f.rol === "cola")) noToca.push(f.cuenta + " (en cola)");
   const estSes = (ini, fin, hora) => (nyMin >= fin ? ["done", "TERMINADA ✓"] : nyMin >= ini ? ["now", "AHORA"] : ini - nyMin <= 180 ? ["next", "EMPIEZA EN " + dur(ini - nyMin).toUpperCase()] : ["", hora]);
   const bloque = (t, xs, [cl, tag]) => (xs.length ? `<div class="hz-ses ${cl}"><div class="hz-ses-t">${t}<span class="t">${esc(tag)}</span></div>${xs.join("")}</div>` : "");
+  const fondBox = fs.some((f) => f.rol === "fuerte" || f.rol === "minimos") ? `<div class="hz-auto${fondSes ? " on" : ""}"><div class="hz-row">💼 <b>¿Dónde operas las fondeadas hoy?</b> ${fondSes ? "El examen va en la otra sesión." : "Elige y Jarvis coloca el examen en la otra sesión."}</div><span class="seg mini"><button type="button" data-fond="Londres" aria-pressed="${fondSes === "Londres"}">🇬🇧 Londres</button><button type="button" data-fond="Nueva York" aria-pressed="${fondSes === "Nueva York"}">🗽 Nueva York</button></span></div>` : "";
   const planHoy = PB.Londres.length + PB["Nueva York"].length + PB.Fond.length + PB.Aparte.length + noToca.length ? bloque(`🇬🇧 Londres · ${sh.lon}`, PB.Londres, estSes(120, 300, sh.lon.split("–")[0]))
     + bloque(`🗽 Nueva York · ${sh.ny}`, PB["Nueva York"], estSes(630, 720, sh.ny.split("–")[0])) + bloque("💼 Fondeadas · Londres o NY", PB.Fond, ["", "LA QUE ELIJAS"]) + bloque("📌 Aparte", PB.Aparte, ["", "EN SU MOMENTO"])
     + (noToca.length ? `<div class="hz-off">⏸ <b>Hoy no tocas:</b> ${esc(noToca.join(" · "))}</div>` : "") : "";
@@ -1253,13 +1284,14 @@ function hoyHtml() {
   const vacio = !cards.length ? `<p class="hint">${esc(h.lineas[0] || "Aún no hay cuentas vivas.")}</p>` : "";
   return `<div class="card hoy"><div class="hoy-head"><h3>🎯 Hoy operas</h3><span class="hz-date">${esc(fecha)}</span></div>
     <p class="hz-top">${esc(reloj)} · ${esc(como)}</p>
-    ${planHoy ? `<div class="hz-more hz-planbox">${hz("plan", "📋 Tu plan de hoy", autoBox + planHoy, true)}</div>` : ""}
+    ${planHoy ? `<div class="hz-more hz-planbox">${hz("plan", "📋 Tu plan de hoy", autoBox + fondBox + planHoy, true)}</div>` : ""}
     <div class="hz-list">${cards.map(tarj).join("")}</div>
     ${pago}
     ${otras.map((l) => `<div class="banner ok" style="margin:10px 0 0">${esc(l)}</div>`).join("")}
     <button type="button" class="hz-btn" data-bt="ir-consulta">🔎 ¿Puedo entrar? Foto del gráfico al profesor</button>
     <div class="hz-more">
       ${hz("modo", "Modo de cada grupo", `<div class="hz-modos"><span class="seg mini"><span class="seglab">🤖 AUTOMÁTICO</span><button type="button" data-auto="si" aria-pressed="${autoOn}">Activado</button><button type="button" data-auto="no" aria-pressed="${!autoOn}">Manual</button></span>${modos}${autoOn ? `<span class="hz-note">Jarvis elige el modo solo: ahora ${E.modo === "grupo" ? "Por grupos (copiadas)" : "Cuenta a cuenta"}.</span>` : `<span class="seg mini"><button type="button" data-modo="individual" aria-pressed="${E.modo === "individual"}">Cuenta a cuenta</button><button type="button" data-modo="grupo" aria-pressed="${E.modo === "grupo"}">Por grupos (copiadas)</button></span>`}${h.fondeadas.length || E.escalera ? `<span class="seg mini"><span class="seglab">FONDEADAS</span><button type="button" data-esc="si" aria-pressed="${!!E.escalera}">Escalera</button><button type="button" data-esc="no" aria-pressed="${!E.escalera}">Todas a la vez</button></span>` : ""}</div>`)}
+      ${hz("guia", "📖 Cómo opero mi sistema", guia, false)}
       ${hz("sistema", "Tu sistema", sistemaExamenes(E) + (E.escalera ? sistemaFondeadas(E) : h.fondeadas.length ? `<div data-sistema style="margin-top:10px;font-size:12px;line-height:1.55;color:var(--muted)">${esc(m.resumen || "")}</div>` : ""))}
       ${hz("ajustar", "Ajustar la estrategia", `<div class="filters">      ${[...(modosEnUso().includes("londres") ? [["lonIni", "Londres · riesgo de entrada"], ["lonR", "Londres · riesgo máximo promediando"], ["lonT", "Londres · objetivo promediando"], ["lonMax", "Londres · buscar con trailing"]] : []),
         ...(modosEnUso().includes("balas") ? [["b1r", "Bala 1 · riesgo"], ["b1t", "Bala 1 · objetivo"], ["b2r", "Bala 2 · riesgo"], ["b2t", "Bala 2 · objetivo"], ["opsDia", "Operaciones al día"]] : []), ["examCerca", "Examen · grupo B desde (+$)"], ["cercaR", "Grupo B · riesgo"], ["fuerteIni", "Día grande · entrada (stop y objetivo)"], ["fuerteSL", "Día grande · riesgo máximo promediando"], ["fuerteMeta", "Día grande · buscar (+$)"], ["fuerteTP", "Día grande · cuenta desde (+$)"], ["minimoSL", "Día mínimo · riesgo"], ["dmTP", "Día mínimo · objetivo"], ["minimo", "Día mínimo · vale desde (+$)"], ["recupR", "Recuperación · riesgo"], ["diasPayout", "Días mínimos tras el día grande"], ["pgMax", "Escalera · cuentas a la vez en el día grande"], ["pgContratos", "Escalera · contratos día grande"], ["dmContratos", "Escalera · contratos días mínimos"], ["tandaDM", "Escalera · días mínimos por tanda"], ["pausaStops", "Pausa · stops en un día"], ["pausaSemana", "Pausa · pérdida en la semana"], ["pausaRojos", "Pausa · días en rojo"]]
@@ -1665,6 +1697,7 @@ root.addEventListener("click", async (e) => {
     toast("Revisión guardada."); return;
   }
   if (d.modo) { await guardarEst({ modo: d.modo }); return; }
+  if (d.fond) { await guardarEst({ fondDia: { d: hoyOperas().dia || tradingDay(Date.now()), s: d.fond } }); return; }
   if (d.auto) { await guardarEst(d.auto === "si" ? { auto: true, modo: autoModo() } : { auto: false, modo: est().modo }); return; }
   if (d.act === "auto-repartir") {
     if (!S.db) return toast("Abre el Plan dentro de Claude para guardar.");
