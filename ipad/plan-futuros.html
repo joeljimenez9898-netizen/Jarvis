@@ -193,6 +193,12 @@
 .pf .hz-auto.on { border-style: solid; border-color: #86efac; background: #f0fdf4; }
 .pf .hz-btn.go { text-align: center; background: #16a34a; color: #fff; border-color: #16a34a; margin-top: 10px; }
 .pf .hz-note { font-size: 13px; color: var(--muted); }
+.pf .hz-now { border: 2px solid #22c55e; border-radius: 16px; padding: 14px; margin: 0 0 12px; background: #f0fdf4; }
+.pf .hz-now.done { border-color: var(--line); background: var(--bg-soft, #f8fafc); }
+.pf .hz-now-t { font-size: 12px; font-weight: 800; letter-spacing: .08em; color: #15803d; }
+.pf .hz-now-h { font-size: 20px; font-weight: 800; margin: 4px 0 2px; }
+.pf .hz-now-tag { display: inline-block; font-size: 12px; font-weight: 800; background: #22c55e; color: #fff; border-radius: 99px; padding: 3px 10px; margin-bottom: 8px; }
+.pf .hz-now-s { font-size: 12px; color: var(--muted); margin-top: 8px; }
 .pf .hz-gt { font-weight: 700; font-size: 13px; margin: 12px 0 4px; color: var(--ink); }
 .pf .hz-gt:first-child { margin-top: 0; }
 .pf .seg.mini button { padding: 6px 11px; font-size: 13px; }
@@ -1261,6 +1267,16 @@ function hoyHtml() {
   const planHoy = PB.Londres.length + PB["Nueva York"].length + PB.Fond.length + PB.Aparte.length + noToca.length ? bloque(`🇬🇧 Londres · ${sh.lon}`, PB.Londres, estSes(120, 300, sh.lon.split("–")[0]))
     + bloque(`🗽 Nueva York · ${sh.ny}`, PB["Nueva York"], estSes(630, 720, sh.ny.split("–")[0])) + bloque("💼 Fondeadas · Londres o NY", PB.Fond, ["", "LA QUE ELIJAS"]) + bloque("📌 Aparte", PB.Aparte, ["", "EN SU MOMENTO"])
     + (noToca.length ? `<div class="hz-off">⏸ <b>Hoy no tocas:</b> ${esc(noToca.join(" · "))}</div>` : "") : "";
+  // «AHORA»: solo lo que toca en este momento o lo siguiente, en grande
+  const ahoraBox = (() => {
+    const orden = [["Londres", "🇬🇧", 120, 300, sh.lon], ["Nueva York", "🗽", 630, 720, sh.ny]];
+    const hay = orden.some(([k]) => PB[k].length);
+    if (!hay && !PB.Aparte.length) return "";
+    const sig = orden.find(([k, , , fin]) => PB[k].length && nyMin < fin);
+    if (!sig) return `<div class="hz-now done"><div class="hz-now-t">⏱ AHORA</div><div class="hz-now-h">Hoy ya no queda nada por operar ✓</div>${PB.Aparte.length ? `<div class="hz-now-s">Pendiente aparte:</div>${PB.Aparte.join("")}` : ""}</div>`;
+    const [k, ic, ini, fin, hora] = sig, [cl, tag] = estSes(ini, fin, hora.split("–")[0]);
+    return `<div class="hz-now ${cl}"><div class="hz-now-t">⏱ AHORA</div><div class="hz-now-h">${ic} ${k} · ${esc(hora)}</div><div class="hz-now-tag">${esc(tag)}</div>${PB[k].join("")}</div>`;
+  })();
   const fecha = (() => { const s = new Intl.DateTimeFormat("es-ES", { timeZone: "Europe/Madrid", weekday: "long", day: "numeric", month: "short" }).format(new Date()).replace(",", "").replace(/\.$/, ""); return s.charAt(0).toUpperCase() + s.slice(1); })();
   // an example with made-up accounts, so he can see how it looks before his own accounts are in
   const ejemplo = (() => { const F = E.fuerteTP || 1000, D = E.diasPayout, lon = `Londres −${n0(E.lonIni)} / +${n0(E.lonIni)}`;
@@ -1284,6 +1300,7 @@ function hoyHtml() {
   const vacio = !cards.length ? `<p class="hint">${esc(h.lineas[0] || "Aún no hay cuentas vivas.")}</p>` : "";
   return `<div class="card hoy"><div class="hoy-head"><h3>🎯 Hoy operas</h3><span class="hz-date">${esc(fecha)}</span></div>
     <p class="hz-top">${esc(reloj)} · ${esc(como)}</p>
+    ${ahoraBox}
     ${planHoy ? `<div class="hz-more hz-planbox">${hz("plan", "📋 Tu plan de hoy", autoBox + fondBox + planHoy, true)}</div>` : ""}
     <div class="hz-list">${cards.map(tarj).join("")}</div>
     ${pago}
