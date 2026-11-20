@@ -193,6 +193,17 @@
 .pf .hz-auto.on { border-style: solid; border-color: #86efac; background: #f0fdf4; }
 .pf .hz-btn.go { text-align: center; background: #16a34a; color: #fff; border-color: #16a34a; margin-top: 10px; }
 .pf .hz-note { font-size: 13px; color: var(--muted); }
+.pf .bk-c { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.pf .bk-c input { width: 130px; }
+.pf .bk-e > div { border-radius: 12px; }
+.pf .bk-p { background: #fee2e2 !important; }
+.pf .bk-n { background: #e0f2fe !important; }
+.pf .bk-o { background: #dcfce7 !important; }
+.pf .bk-e b { display: block; font-size: 18px; }
+.pf .bk-e small { display: block; font-size: 11px; color: #475569; }
+.pf .bk-t { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pf .bk-t th, .pf .bk-t td { padding: 6px 4px; text-align: right; }
+.pf .bk-t th:first-child, .pf .bk-t td:first-child { text-align: left; }
 .pf .mando-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .pf .mando-b { flex: 1 1 22%; min-width: 72px; padding: 11px 4px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--card, #fff); font-weight: 700; font-size: 13px; color: var(--ink); }
 .pf .mando-f.has .mando-b:not(.sel) { opacity: .4; }
@@ -334,7 +345,7 @@ const GRUPO_ESTADOS = { MAESTRA: "👑 MAESTRA", ACTIVO: "🔄 ACTIVO", PAUSADO:
 const ICONO = (g, i) => (g.estado === "MAESTRA" ? "🥇" : i === 1 ? "🥈" : "📊");
 // «Bloqueo de Topstep»: the daily loss limit is set in TopstepX itself, so Topstep closes and blocks the account for the day
 const ACCIONES = ["Liquidar", "Cerrar y bloquear", "Bloqueo de Topstep", "Solo alertar"];
-const TABS = [["dashboard", "Dashboard"], ["mando", "🎛 Mando"], ["analisis", "📊 Análisis"], ["grupos", "Grupos"], ["cuentas", "Cuentas"], ["operaciones", "Operaciones"], ["semanas", "Semanas"],
+const TABS = [["dashboard", "Dashboard"], ["mando", "🎛 Mando"], ["banca", "💰 Bankroll"], ["analisis", "📊 Análisis"], ["grupos", "Grupos"], ["cuentas", "Cuentas"], ["operaciones", "Operaciones"], ["semanas", "Semanas"],
               ["reglas", "Reglas"], ["backtest", "📒 Backtesting"], ["domingo", "📋 Domingo"], ["riesgo", "⚙️ Riesgo"], ["calendario", "📅 Calendario"]];
 
 const S = { tab: "dashboard", grupos: new Map(), cuentas: new Map(), ops: new Map(), semanas: new Map(), revisiones: new Map(), topstep: null,
@@ -486,6 +497,35 @@ V.mando = () => {
     + `<div class="card"><h3>✅ Cerrar el día</h3><p class="hint">Toca cómo acabó cada sesión. Queda marcado con ✓ y vuelve a tocarlo para quitarlo. Es tu apunte del día: Jarvis sigue leyendo tus operaciones de Topstep para rotar las cuentas.</p>${fila("L", "🇬🇧 Londres")}${fila("N", "🗽 Nueva York")}</div>`
     + ahoraHtml()
     + `<div class="card"><h3>📈 Tu semana</h3><div class="mando-k"><div><b>${sgn(neto)}</b><small>NETO</small></div><div><b>${pasadas}</b><small>EXÁMENES PASADOS</small></div><div><b>${dias.size}</b><small>DÍAS OPERADOS</small></div></div></div>`;
+};
+V.banca = () => {
+  const E = est(), g = (k, d) => (E[k] === undefined || E[k] === null || E[k] === "" ? d : Number(E[k]) || 0);
+  const precio = g("bkPrecio", 100) || 100, retiro = g("bkRetiro", 1000) || 1000, fondo = g("bkFondo", 0), reinv = g("bkReinv", 50), riesgo = g("bkRiesgo", 50), cobrado = g("bkCobrado", 0), obj = g("bkObjMes", 0), n = Math.max(1, Math.round(g("bkN", 30)));
+  const eur = (v) => Math.round(v).toLocaleString("es-ES") + " €", sg = (v) => (Math.round(v) > 0 ? "+" : "") + eur(v);
+  const cs = cuentas(), ex = cs.filter((c) => c.tipo !== "Fondeada");
+  const pasadas = ex.filter((c) => c.estado === "APROBADA").length, quemadas = ex.filter((c) => c.estado === "PERDIDA").length, muestra = pasadas + quemadas;
+  const real = muestra >= 6 ? pasadas / muestra : null, p = real !== null ? real : Math.min(1, Math.max(0.01, g("bkPaso", 33) / 100));
+  const vivos = ex.filter((c) => c.estado === "EXAM").length, fond = cs.filter((c) => c.tipo === "Fondeada" && c.estado !== "PERDIDA").length;
+  const maxCompra = fondo > 0 ? Math.floor(fondo * riesgo / 100 / precio) : 0;
+  const recs = [];
+  if (fondo > 0) recs.push(`Con tu fondo de <b>${eur(fondo)}</b> puedes comprar hasta <b>${maxCompra}</b> ${maxCompra === 1 ? "examen" : "exámenes"} de una vez (el ${riesgo}% del fondo; el resto queda de reserva para repetir).`);
+  else recs.push("Pon abajo tu <b>fondo para exámenes</b> y te digo cuántos puedes comprar sin quedarte sin reserva.");
+  if (obj > 0) {
+    const falta = obj - cobrado - (fond + vivos * p) * retiro;
+    if (falta <= 0) recs.push(`✅ Para llegar a <b>${eur(obj)}</b> este mes no necesitas comprar más: tus ${fond} fondeadas y tus ${vivos} exámenes vivos ya lo cubren en teoría.`);
+    else { const add = Math.ceil(falta / (retiro * p)); recs.push(`🎯 Para llegar a <b>${eur(obj)}</b> este mes te faltan unos ${eur(falta)}: añade <b>${add}</b> ${add === 1 ? "examen" : "exámenes"} (${eur(add * precio)})${maxCompra && add > maxCompra ? `, pero tu límite es ${maxCompra}: compra ${maxCompra} ahora y el resto cuando cobres.` : "."}`); }
+  }
+  if (cobrado > 0) { const r = cobrado * reinv / 100, k = Math.floor(r / precio); recs.push(`💸 Has cobrado <b>${eur(cobrado)}</b> este mes: si reinviertes el ${reinv}% (${eur(r)}) son <b>${k}</b> ${k === 1 ? "examen" : "exámenes"} más.`); }
+  const esc3 = [["Pesimista", p * 0.6, "p"], ["Normal", p, "n"], ["Optimista", Math.min(1, p * 1.2), "o"]].map(([t, q, cl]) => { const c = Math.round(n * q); return `<div class="bk-${cl}"><small>${t} · ${Math.round(q * 100)}%</small><b>${sg(c * retiro - n * precio)}</b><small>${c} cuentas</small></div>`; }).join("");
+  let fila = n, osl = "";
+  for (let i = 1; i <= 3; i++) { const c = Math.round(fila * p), ret = c * retiro, sig = Math.floor(ret * reinv / 100 / precio); osl += `<tr><td>${i}</td><td>${fila}</td><td>${eur(fila * precio)}</td><td>${eur(ret)}</td><td>${eur(ret * (100 - reinv) / 100)}</td></tr>`; fila = sig; if (!fila) break; }
+  const campo = (k, l, v) => `<label class="bk-c">${l}<input type="number" data-est="${k}" value="${v}"></label>`;
+  return `<div class="card"><h3>💰 Bankroll</h3><p class="hint">Jarvis mira tus exámenes y fondeadas y te dice cuánto comprar. Las cifras son brutas: sin impuestos ni reparto de cada retiro.</p>
+    <div class="mando-k"><div><b>${vivos}</b><small>EXÁMENES VIVOS</small></div><div><b>${fond}</b><small>FONDEADAS</small></div><div><b>${real !== null ? Math.round(real * 100) + "%" : "—"}</b><small>${real !== null ? `PASAS (${pasadas}/${muestra})` : "TASA REAL · faltan datos"}</small></div></div></div>
+    <div class="card"><h3>🧭 Qué te recomiendo</h3>${recs.map((t) => `<div class="banner ok" style="margin-bottom:8px">${t}</div>`).join("")}</div>
+    <div class="card"><h3>🧮 Y si pruebo ${n} exámenes</h3><p class="hint">Inversión: <b>${eur(n * precio)}</b>. Cambia el número abajo.</p><div class="mando-k bk-e">${esc3}</div><p class="hint" style="margin-top:8px">Punto de equilibrio: <b>${Math.ceil(n * precio / retiro)}</b> cuentas retirando ${eur(retiro)}.</p>
+      <h3 style="margin-top:12px">❄️ Bola de nieve (reinviertes el ${reinv}%)</h3><table class="bk-t"><tr><th>Oleada</th><th>Exám.</th><th>Gasto</th><th>Retiras</th><th>Para ti</th></tr>${osl}</table><p class="hint" style="margin-top:8px">⚠️ Topstep limita a 5 fondeadas activas a la vez según su ayuda: la bola de nieve se frena antes de lo que marca la tabla.</p></div>
+    <div class="card"><h3>⚙️ Tus números</h3><div class="filters">${campo("bkN", "Exámenes a probar", n)}${campo("bkPrecio", "Precio por examen (€)", precio)}${campo("bkRetiro", "Retiro por cuenta (€)", retiro)}${campo("bkFondo", "Fondo para exámenes (€)", fondo)}${campo("bkObjMes", "Objetivo de retiros este mes (€)", obj)}${campo("bkCobrado", "Cobrado este mes (€)", cobrado)}${campo("bkPaso", "Tasa de paso a mano (%)", g("bkPaso", 33))}${campo("bkReinv", "Reinviertes de cada retiro (%)", reinv)}${campo("bkRiesgo", "Máx. del fondo por compra (%)", riesgo)}</div><p class="hint" style="margin-top:8px">La tasa a mano solo se usa hasta tener 6 exámenes resueltos: después manda tu tasa real.</p></div>`;
 };
 V.grupos = () => {
   const days = dayMap(), rk = { ACTIVO: 0, MAESTRA: 1, PAUSADO: 2, RESERVA: 3 }, gs = grupos().filter((g) => S.f.chip === "todos" || g.id === S.f.chip).sort((a, b) => (rk[a.estado] ?? 2) - (rk[b.estado] ?? 2));
