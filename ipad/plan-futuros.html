@@ -193,6 +193,16 @@
 .pf .hz-auto.on { border-style: solid; border-color: #86efac; background: #f0fdf4; }
 .pf .hz-btn.go { text-align: center; background: #16a34a; color: #fff; border-color: #16a34a; margin-top: 10px; }
 .pf .hz-note { font-size: 13px; color: var(--muted); }
+.pf .mando-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.pf .mando-b { flex: 1 1 22%; min-width: 72px; padding: 11px 4px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--card, #fff); font-weight: 700; font-size: 13px; color: var(--ink); }
+.pf .mando-f.has .mando-b:not(.sel) { opacity: .4; }
+.pf .mando-b.sel.g { background: #22c55e; border-color: #16a34a; color: #fff; }
+.pf .mando-b.sel.r { background: #ef4444; border-color: #dc2626; color: #fff; }
+.pf .mando-b.sel.y { background: #64748b; border-color: #475569; color: #fff; }
+.pf .mando-k { display: flex; gap: 8px; }
+.pf .mando-k div { flex: 1; text-align: center; background: var(--bg-soft, #f8fafc); border-radius: 12px; padding: 10px 4px; }
+.pf .mando-k b { display: block; font-size: 20px; }
+.pf .mando-k small { font-size: 11px; color: var(--muted); }
 .pf .hz-now { border: 2px solid #22c55e; border-radius: 16px; padding: 14px; margin: 0 0 12px; background: #f0fdf4; }
 .pf .hz-now.done { border-color: var(--line); background: var(--bg-soft, #f8fafc); }
 .pf .hz-now-t { font-size: 12px; font-weight: 800; letter-spacing: .08em; color: #15803d; }
@@ -324,7 +334,7 @@ const GRUPO_ESTADOS = { MAESTRA: "👑 MAESTRA", ACTIVO: "🔄 ACTIVO", PAUSADO:
 const ICONO = (g, i) => (g.estado === "MAESTRA" ? "🥇" : i === 1 ? "🥈" : "📊");
 // «Bloqueo de Topstep»: the daily loss limit is set in TopstepX itself, so Topstep closes and blocks the account for the day
 const ACCIONES = ["Liquidar", "Cerrar y bloquear", "Bloqueo de Topstep", "Solo alertar"];
-const TABS = [["dashboard", "Dashboard"], ["analisis", "📊 Análisis"], ["grupos", "Grupos"], ["cuentas", "Cuentas"], ["operaciones", "Operaciones"], ["semanas", "Semanas"],
+const TABS = [["dashboard", "Dashboard"], ["mando", "🎛 Mando"], ["analisis", "📊 Análisis"], ["grupos", "Grupos"], ["cuentas", "Cuentas"], ["operaciones", "Operaciones"], ["semanas", "Semanas"],
               ["reglas", "Reglas"], ["backtest", "📒 Backtesting"], ["domingo", "📋 Domingo"], ["riesgo", "⚙️ Riesgo"], ["calendario", "📅 Calendario"]];
 
 const S = { tab: "dashboard", grupos: new Map(), cuentas: new Map(), ops: new Map(), semanas: new Map(), revisiones: new Map(), topstep: null,
@@ -464,6 +474,19 @@ function grupoBox(g, days) {
       ${prox.map((x) => `<div class="acc prox"><span class="acc-top"><b>${esc(x.codigo)}</b></span><span class="acc-meta">por comprar${x.estado ? " · " + esc(x.estado) : ""}</span><span class="acc-when">Jarvis la registra aquí sola</span></div>`).join("")}
       ${!cs.length && !prox.length ? '<p class="hint" style="margin:0">Sin cuentas.</p>' : ""}</div></div>`;
 }
+V.mando = () => {
+  S.ahoraHtml = ""; hoyHtml();
+  const dia = tradingDay(Date.now()), E = est(), c0 = E.cierre && E.cierre.d === dia ? E.cierre : {};
+  const btn = (k, v, t, cl) => `<button type="button" class="mando-b ${cl}${c0[k] === v ? " sel" : ""}" data-cierre="${k}:${v}" aria-pressed="${c0[k] === v}">${c0[k] === v ? "✓ " : ""}${t}</button>`;
+  const fila = (k, t) => `<div class="mando-f${c0[k] ? " has" : ""}"><div class="hint" style="margin:10px 0 6px">${t}</div><div class="mando-row">${btn(k, "ganó", "Ganó", "g")}${btn(k, "be", "Break even", "y")}${btn(k, "stop", "Stop", "r")}${btn(k, "nada", "No operé", "y")}</div></div>`;
+  const lunes = monday(dia), dm = dayMap(), neto = cuentas().reduce((a, c) => a + Object.entries(dm[c.id] || {}).filter(([d]) => d >= lunes && d <= dia).reduce((t, [, v]) => t + (Number(v) || 0), 0), 0);
+  const pasadas = cuentas().filter((c) => c.estado === "APROBADA" && (c.aprobada || "") >= lunes).length;
+  const dias = new Set(); for (const c of cuentas()) for (const [d, v] of Object.entries(dm[c.id] || {})) if (d >= lunes && d <= dia && Number(v)) dias.add(d);
+  return (S.ahoraHtml || '<div class="card"><h3>⏱ AHORA</h3><p class="hint">No hay nada que operar ahora mismo: Jarvis no ve exámenes vivos ni fondeadas operando. Cuando haya cuentas, aquí te dice qué toca y cuándo.</p></div>')
+    + `<div class="card"><h3>✅ Cerrar el día</h3><p class="hint">Toca cómo acabó cada sesión. Queda marcado con ✓ y vuelve a tocarlo para quitarlo. Es tu apunte del día: Jarvis sigue leyendo tus operaciones de Topstep para rotar las cuentas.</p>${fila("L", "🇬🇧 Londres")}${fila("N", "🗽 Nueva York")}</div>`
+    + ahoraHtml()
+    + `<div class="card"><h3>📈 Tu semana</h3><div class="mando-k"><div><b>${sgn(neto)}</b><small>NETO</small></div><div><b>${pasadas}</b><small>EXÁMENES PASADOS</small></div><div><b>${dias.size}</b><small>DÍAS OPERADOS</small></div></div></div>`;
+};
 V.grupos = () => {
   const days = dayMap(), rk = { ACTIVO: 0, MAESTRA: 1, PAUSADO: 2, RESERVA: 3 }, gs = grupos().filter((g) => S.f.chip === "todos" || g.id === S.f.chip).sort((a, b) => (rk[a.estado] ?? 2) - (rk[b.estado] ?? 2));
   return `<div class="chips">${[["todos", "Todos"], ...grupos().map((g) => [g.id, g.nombre])].map(([k, n]) => `<button type="button" data-chip="${esc(k)}" aria-pressed="${S.f.chip === k}">${esc(n)}</button>`).join("")}</div>
@@ -1277,6 +1300,7 @@ function hoyHtml() {
     const [k, ic, ini, fin, hora] = sig, [cl, tag] = estSes(ini, fin, hora.split("–")[0]);
     return `<div class="hz-now ${cl}"><div class="hz-now-t">⏱ AHORA</div><div class="hz-now-h">${ic} ${k} · ${esc(hora)}</div><div class="hz-now-tag">${esc(tag)}</div>${PB[k].join("")}</div>`;
   })();
+  S.ahoraHtml = ahoraBox;
   const fecha = (() => { const s = new Intl.DateTimeFormat("es-ES", { timeZone: "Europe/Madrid", weekday: "long", day: "numeric", month: "short" }).format(new Date()).replace(",", "").replace(/\.$/, ""); return s.charAt(0).toUpperCase() + s.slice(1); })();
   // an example with made-up accounts, so he can see how it looks before his own accounts are in
   const ejemplo = (() => { const F = E.fuerteTP || 1000, D = E.diasPayout, lon = `Londres −${n0(E.lonIni)} / +${n0(E.lonIni)}`;
@@ -1300,7 +1324,6 @@ function hoyHtml() {
   const vacio = !cards.length ? `<p class="hint">${esc(h.lineas[0] || "Aún no hay cuentas vivas.")}</p>` : "";
   return `<div class="card hoy"><div class="hoy-head"><h3>🎯 Hoy operas</h3><span class="hz-date">${esc(fecha)}</span></div>
     <p class="hz-top">${esc(reloj)} · ${esc(como)}</p>
-    ${ahoraBox}
     ${planHoy ? `<div class="hz-more hz-planbox">${hz("plan", "📋 Tu plan de hoy", autoBox + fondBox + planHoy, true)}</div>` : ""}
     <div class="hz-list">${cards.map(tarj).join("")}</div>
     ${pago}
@@ -1714,6 +1737,7 @@ root.addEventListener("click", async (e) => {
     toast("Revisión guardada."); return;
   }
   if (d.modo) { await guardarEst({ modo: d.modo }); return; }
+  if (d.cierre) { const [k, v] = d.cierre.split(":"), dia = tradingDay(Date.now()), prev = est().cierre && est().cierre.d === dia ? est().cierre : {}; await guardarEst({ cierre: { ...prev, d: dia, [k]: prev[k] === v ? "" : v } }); return; }
   if (d.fond) { await guardarEst({ fondDia: { d: hoyOperas().dia || tradingDay(Date.now()), s: d.fond } }); return; }
   if (d.auto) { await guardarEst(d.auto === "si" ? { auto: true, modo: autoModo() } : { auto: false, modo: est().modo }); return; }
   if (d.act === "auto-repartir") {
