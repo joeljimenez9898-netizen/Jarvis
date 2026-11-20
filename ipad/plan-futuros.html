@@ -990,6 +990,7 @@ async function autoRegistro() {
 /*@motor-reglas@*/
 // Modo automático: con "auto" puesto, Jarvis elige el modo según los exámenes vivos (3 o más: por grupos copiadas; 1 o 2: cuenta a cuenta)
 // y propone el reparto en grupos de 3 (nunca uno solo: 4 = 2+2, 5 = 3+2, 10 = 3+3+2+2). Los grupos los mueve él solo si lo confirmas.
+const tandaEfU = () => { try { return motor().tandaEf; } catch { return 0; } };
 const AUTO_MIN = { fondeadas: 2, examenes: 6 };
 const autoTam = (n) => { if (n < 3) return []; const r = n % 3, t = Math.floor(n / 3); return r === 0 ? Array(t).fill(3) : r === 2 ? [...Array(t).fill(3), 2] : [...Array(t - 1).fill(3), 2, 2]; };
 const autoExamenes = () => { const ids = rotan().map((g) => g.id); return cuentas().filter((c) => vivaC(c) && c.tipo !== "Fondeada" && ids.includes(c.grupo)); };
@@ -1129,7 +1130,7 @@ function escaleraHtml(fs, E) {
   orden.sort((a, b) => { const r = (g) => (g === "Grupo 1" ? 0 : /^Grupo Días Mínimos/.test(g) ? 1 : g === "Recup" ? 2 : g === "Payout" ? 3 : g === "Cola" ? 4 : 5); return r(a) - r(b) || a.localeCompare(b, "es", { numeric: true }); });
   const de = (rol) => fs.filter((f) => f.rol === rol), hoyT = fs.reduce((a, f) => a + (Number(f.hoy) || 0), 0);
   const kpi = [["Fondeadas", String(fs.filter((f) => f.rol !== "quemada").length), "activas"], ["Día grande", de("fuerte").map((f) => f.cuenta).join(", ") || "—", E.pgContratos + " contratos · busca +" + usd(E.fuerteMeta || E.fuerteTP)],
-    ["Días mínimos", String(de("minimos").length), "máx. " + (E.tandaDM || 5) + " por grupo"], ["Payout", String(de("payout").length), de("payout").map((f) => f.cuenta).join(", ") || "ninguna lista"],
+    ["Días mínimos", String(de("minimos").length), "máx. " + ((tandaEfU() || est().tandaDM || 5)) + " por grupo"], ["Payout", String(de("payout").length), de("payout").map((f) => f.cuenta).join(", ") || "ninguna lista"],
     ["Hoy", sg(hoyT), "entre todas las fondeadas"]];
   const dots = (n) => `<span style="display:inline-flex;gap:3px;margin-left:6px;vertical-align:middle">${[...Array(E.diasPayout)].map((_, i) => `<i style="width:7px;height:7px;border-radius:50%;background:${i < n ? "#16a34a" : "#e2e8f0"}"></i>`).join("")}</span>`;
   const medias = (f) => f.rol === "fuerte" && /🟡|⚪/.test(f.txt);
@@ -1146,7 +1147,7 @@ function escaleraHtml(fs, E) {
     Payout: ["Payout", E.diasPayout + " días mínimos hechos", "#7c3aed"], Cola: ["En cola", "hoy no operan", "#94a3b8"], Quemadas: ["Quemadas", "repón con un examen nuevo", "#0f172a"] };
   const tarjeta = (g) => { const [t, sub, col] = cab[g] || [g, ses2 + " · su propio trade", "#16a34a"], mins = grupos[g].filter((f) => f.rol === "minimos").length;
     return `<div style="border:1px solid var(--line);border-radius:14px;padding:12px;background:var(--card);border-top:4px solid ${col};display:grid;gap:8px;align-content:start">
-      <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><b>${esc(t)}</b><span style="font-size:12px;color:var(--muted)">${mins ? mins + "/" + (E.tandaDM || 5) + " en mínimos · " : ""}${esc(sub)}</span></div>
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><b>${esc(t)}</b><span style="font-size:12px;color:var(--muted)">${mins ? mins + "/" + ((tandaEfU() || est().tandaDM || 5)) + " en mínimos · " : ""}${esc(sub)}</span></div>
       ${[...grupos[g]].sort((a, b) => (b.rol === "fuerte") - (a.rol === "fuerte")).map(chip).join("")}</div>`; };
   // what to do today, one line per group
   const lista = (xs) => (xs.length < 2 ? xs.join("") : xs.slice(0, -1).join(", ") + " y " + xs.at(-1));
@@ -1177,7 +1178,7 @@ function sistemaFondeadas(E) {
     <span><b>Fondeadas · escalera:</b> una cuenta a la vez va a por el día grande con ${E.pgContratos} contratos: entra −${usd(E.fuerteIni)} / +${usd(E.fuerteIni)} y promedia en su propia cuenta (nunca en la MASTER), sin pasar de −${usd(E.fuerteSL)}. Busca +${usd(E.fuerteMeta || E.fuerteTP)} y cuenta en cuanto acumule +${usd(E.fuerteTP)}, aunque sea sumando días. Hecho el día grande, al día siguiente pasa a días mínimos y entra la siguiente.</span>
     <span><b>Día grande a medias:</b> si en una sesión se queda en +${usd(E.fuerteIni)} o menos, en la otra sesión la operas sin las de días mínimos (sola, o con el trade de un grupo que aún no ha operado) arriesgando solo lo ganado y promediando a favor con ese stop; en break even, entrada normal. Si no hay entrada, al día siguiente sigue sumando.</span>
     <span><b>Días mínimos:</b> ${E.dmContratos} contrato copiado en el mismo trade, stop −${usd(E.minimoSL)} y la cierras en +${usd(E.dmTP)}; la del día grande sigue corriendo. Día grande + ${E.diasPayout} días mínimos: pides el payout y vuelve a la cola.</span>
-    <span><b>Grupos:</b> Grupo 1 en tu sesión (Londres o NY, la que elijas) = día grande + hasta ${E.tandaDM || 5} en días mínimos. Si hay más de ${E.tandaDM || 5} en mínimos, las demás van de ${E.tandaDM || 5} en ${E.tandaDM || 5} a los Grupos Días Mínimos en la otra sesión, cada uno con su propio trade. Si una falla el día grande, se aparta a recuperar (−${usd(E.recupR)} / +${usd(E.minimo)}) y entra la siguiente.</span></div>`;
+    <span><b>Grupos:</b> Grupo 1 en tu sesión (Londres o NY, la que elijas) = día grande + hasta ${(tandaEfU() || est().tandaDM || 5)} en días mínimos. Si hay más de ${(tandaEfU() || est().tandaDM || 5)} en mínimos, las demás van de ${(tandaEfU() || est().tandaDM || 5)} en ${(tandaEfU() || est().tandaDM || 5)} a los Grupos Días Mínimos en la otra sesión, cada uno con su propio trade. Si una falla el día grande, se aparta a recuperar (−${usd(E.recupR)} / +${usd(E.minimo)}) y entra la siguiente.</span></div>`;
 }
 function hoyHtml() {
   const E = est(), h = hoyOperas(), m = motor(), ses = sesiones(), dia = h.dia || tradingDay(Date.now());

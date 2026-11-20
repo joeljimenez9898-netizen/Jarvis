@@ -361,18 +361,29 @@ export function motorReglas({ estrategia: E, cuentas, hoy, ahora, londresCerrada
     const d0 = i < 0 ? 0 : g.antes.slice(i + 1).filter((v) => v >= E.minimo).length;
     return { c, ...g, grande: i >= 0, acc: i < 0 ? acc : 0, d0, d: d0 + (i >= 0 && g.h >= E.minimo ? 1 : 0), ops: (c.tradesHoy || []).length }; });
   const listo = (x) => x.grande && x.d0 >= E.diasPayout, riesgo = (x, r) => (x.m0 >= 2 * r ? r : Math.max(0, Math.min(E.recupR, x.m0)));
+  // días mínimos de 5 en 5; si encadenas 3 días con stop pasan a ir de 3 en 3, y vuelven a 5 tras 3 días en verde (break even no cuenta)
+  const tandaBase = Number(E.tandaDM) || 5;
+  let tandaEf = tandaBase;
+  if (E.tandaAuto !== false && tandaBase > 3) {
+    const ref = info.filter((x) => x.grande).map((x) => { let acc = 0, i = -1; for (let k = 0; k < x.antes.length && i < 0; k++) { acc = Math.max(0, acc + x.antes[k]); if (acc >= E.fuerteTP) i = k; } return x.antes.slice(i + 1); }).sort((a, b) => b.length - a.length)[0] || [];
+    let modo = tandaBase, neg = 0, pos = 0;
+    for (const v of ref) { if (v < 0) { neg++; pos = 0; if (neg >= 3) modo = 3; } else if (v > 0) { pos++; neg = 0; if (pos >= 3) modo = tandaBase; } }
+    tandaEf = modo;
+  }
+  out.tandaEf = tandaEf;
+  if (tandaEf < tandaBase) av("tandaBaja", "🛡️ Llevas 3 stops seguidos en días mínimos: ahora van de " + tandaEf + " en " + tandaEf + " (día grande + " + tandaEf + " en el Grupo 1, el resto en Grupos Días Mínimos). Vuelven a " + tandaBase + " tras 3 días seguidos en verde.");
   const mitad = {}, tanda = {};
   if (E.escalera) {
     info.filter((x) => x.ahora > 0 && !listo(x) && !x.grande && x.m0 < 2 * E.fuerteSL).forEach((x) => { mitad[x.c.codigo] = "Recup"; });
     info.filter((x) => x.ahora > 0 && !listo(x) && !x.grande && x.m0 >= 2 * E.fuerteSL).forEach((x, i) => { mitad[x.c.codigo] = i < (Number(E.pgMax) || 1) ? "A" : "Cola"; });
-    info.filter((x) => x.ahora > 0 && !listo(x) && x.grande).forEach((x, i) => { mitad[x.c.codigo] = "B"; const n = Number(E.tandaDM) || 5; tanda[x.c.codigo] = i < n ? 1 : 2 + Math.floor((i - n) / n); });
+    info.filter((x) => x.ahora > 0 && !listo(x) && x.grande).forEach((x, i) => { mitad[x.c.codigo] = "B"; const n = tandaEf; tanda[x.c.codigo] = i < n ? 1 : 2 + Math.floor((i - n) / n); });
   } else for (const L of ["A", "B"]) info.filter((x) => x.ahora > 0 && !listo(x) && (L === "B") === x.grande).forEach((x, i) => { mitad[x.c.codigo] = L + (i % 2 + 1); });
   const enPG = info.filter((x) => mitad[x.c.codigo] === "A").map((x) => x.c.codigo);
   // the name of each group: Grupo 1 (big day + its minimum days), then Grupo Días Mínimos 1, 2, …
   const nomG = (t) => (t === 1 ? "Grupo 1" : "Grupo Días Mínimos " + (t - 1));
   const gruposDM = [...new Set(Object.values(tanda).filter((t) => t > 1))].sort((a, b) => a - b);
   const listaG = (t) => Object.keys(tanda).filter((k) => tanda[k] === t);
-  if (E.escalera && gruposDM.length) av("tanda2", "📣 Tienes más de " + (Number(E.tandaDM) || 5) + " cuentas en días mínimos: " + gruposDM.map((t) => nomG(t) + " (" + listaG(t).join(", ") + ")").join(", ") +
+  if (E.escalera && gruposDM.length) av("tanda2", "📣 Tienes más de " + tandaEf + " cuentas en días mínimos: " + gruposDM.map((t) => nomG(t) + " (" + listaG(t).join(", ") + ")").join(", ") +
     ". Cada grupo va en " + (E.sesionT2 || "Londres") + " con su propio trade, sin día grande, 1 contrato cada cuenta.");
   for (const x of info) {
     const cod = x.c.codigo, sub = mitad[cod];
