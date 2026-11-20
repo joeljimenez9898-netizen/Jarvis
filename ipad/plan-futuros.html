@@ -193,6 +193,9 @@
 .pf .hz-auto.on { border-style: solid; border-color: #86efac; background: #f0fdf4; }
 .pf .hz-btn.go { text-align: center; background: #16a34a; color: #fff; border-color: #16a34a; margin-top: 10px; }
 .pf .hz-note { font-size: 13px; color: var(--muted); }
+.pf .bk-r { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.pf .bk-r span:nth-child(3) { flex: 1; }
+.pf .bk-r button { border: 0; background: transparent; font-size: 16px; color: var(--muted); }
 .pf .bk-c { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
 .pf .bk-c input { width: 130px; }
 .pf .bk-e > div { border-radius: 12px; }
@@ -500,7 +503,7 @@ V.mando = () => {
 };
 V.banca = () => {
   const E = est(), g = (k, d) => (E[k] === undefined || E[k] === null || E[k] === "" ? d : Number(E[k]) || 0);
-  const precio = g("bkPrecio", 100) || 100, retiro = g("bkRetiro", 1000) || 1000, fondo = g("bkFondo", 0), reinv = g("bkReinv", 50), riesgo = g("bkRiesgo", 50), cobrado = g("bkCobrado", 0), obj = g("bkObjMes", 0), n = Math.max(1, Math.round(g("bkN", 30)));
+  const precio = g("bkPrecio", 100) || 100, retiro = g("bkRetiro", 1000) || 1000, fondo = g("bkFondo", 0), reinv = g("bkReinv", 50), riesgo = g("bkRiesgo", 50), ret = Array.isArray(E.bkRetiros) ? E.bkRetiros : [], mesAct = tradingDay(Date.now()).slice(0, 7), cobrado = ret.filter((x) => String(x.f).startsWith(mesAct)).reduce((a, x) => a + (Number(x.e) || 0), 0), obj = g("bkObjMes", 0), n = Math.max(1, Math.round(g("bkN", 30)));
   const eur = (v) => Math.round(v).toLocaleString("es-ES") + " €", sg = (v) => (Math.round(v) > 0 ? "+" : "") + eur(v);
   const cs = cuentas(), ex = cs.filter((c) => c.tipo !== "Fondeada");
   const pasadas = ex.filter((c) => c.estado === "APROBADA").length, quemadas = ex.filter((c) => c.estado === "PERDIDA").length, muestra = pasadas + quemadas;
@@ -525,7 +528,12 @@ V.banca = () => {
     <div class="card"><h3>🧭 Qué te recomiendo</h3>${recs.map((t) => `<div class="banner ok" style="margin-bottom:8px">${t}</div>`).join("")}</div>
     <div class="card"><h3>🧮 Y si pruebo ${n} exámenes</h3><p class="hint">Inversión: <b>${eur(n * precio)}</b>. Cambia el número abajo.</p><div class="mando-k bk-e">${esc3}</div><p class="hint" style="margin-top:8px">Punto de equilibrio: <b>${Math.ceil(n * precio / retiro)}</b> cuentas retirando ${eur(retiro)}.</p>
       <h3 style="margin-top:12px">❄️ Bola de nieve (reinviertes el ${reinv}%)</h3><table class="bk-t"><tr><th>Oleada</th><th>Exám.</th><th>Gasto</th><th>Retiras</th><th>Para ti</th></tr>${osl}</table><p class="hint" style="margin-top:8px">⚠️ Topstep limita a 5 fondeadas activas a la vez según su ayuda: la bola de nieve se frena antes de lo que marca la tabla.</p></div>
-    <div class="card"><h3>⚙️ Tus números</h3><div class="filters">${campo("bkN", "Exámenes a probar", n)}${campo("bkPrecio", "Precio por examen (€)", precio)}${campo("bkRetiro", "Retiro por cuenta (€)", retiro)}${campo("bkFondo", "Fondo para exámenes (€)", fondo)}${campo("bkObjMes", "Objetivo de retiros este mes (€)", obj)}${campo("bkCobrado", "Cobrado este mes (€)", cobrado)}${campo("bkPaso", "Tasa de paso a mano (%)", g("bkPaso", 33))}${campo("bkReinv", "Reinviertes de cada retiro (%)", reinv)}${campo("bkRiesgo", "Máx. del fondo por compra (%)", riesgo)}</div><p class="hint" style="margin-top:8px">La tasa a mano solo se usa hasta tener 6 exámenes resueltos: después manda tu tasa real.</p></div>`;
+    <div class="card"><h3>💸 Mis retiros</h3><p class="hint">Apunta cada retiro que cobras. Jarvis suma el mes solo y lo usa para recomendarte.</p>
+      <div class="mando-k"><div><b>${eur(cobrado)}</b><small>ESTE MES</small></div><div><b>${eur(ret.reduce((a, x) => a + (Number(x.e) || 0), 0))}</b><small>EN TOTAL</small></div><div><b>${ret.length}</b><small>RETIROS</small></div></div>
+      <div class="filters" style="margin-top:10px"><label class="bk-c">Fecha<input type="date" data-bkf value="${iso(new Date())}"></label><label class="bk-c">Importe (€)<input type="number" data-bke placeholder="1000"></label><label class="bk-c">Nota (opcional)<input type="text" data-bkn placeholder="TS-2"></label></div>
+      <button type="button" class="hz-btn go" data-bkadd style="margin-top:10px">➕ Apuntar retiro</button>
+      ${ret.length ? `<div style="margin-top:12px">${[...ret].sort((a, b) => String(b.f).localeCompare(String(a.f))).map((x) => `<div class="bk-r"><span>${esc(String(x.f).split("-").reverse().join("/"))}</span><b>${eur(Number(x.e) || 0)}</b><span class="hint" style="margin:0">${esc(x.n || "")}</span><button type="button" data-bkdel="${esc(x.id)}" aria-label="Borrar">✕</button></div>`).join("")}</div>` : ""}</div>
+    <div class="card"><h3>⚙️ Tus números</h3><div class="filters">${campo("bkN", "Exámenes a probar", n)}${campo("bkPrecio", "Precio por examen (€)", precio)}${campo("bkRetiro", "Retiro por cuenta (€)", retiro)}${campo("bkFondo", "Fondo para exámenes (€)", fondo)}${campo("bkObjMes", "Objetivo de retiros este mes (€)", obj)}${campo("bkPaso", "Tasa de paso a mano (%)", g("bkPaso", 33))}${campo("bkReinv", "Reinviertes de cada retiro (%)", reinv)}${campo("bkRiesgo", "Máx. del fondo por compra (%)", riesgo)}</div><p class="hint" style="margin-top:8px">La tasa a mano solo se usa hasta tener 6 exámenes resueltos: después manda tu tasa real.</p></div>`;
 };
 V.grupos = () => {
   const days = dayMap(), rk = { ACTIVO: 0, MAESTRA: 1, PAUSADO: 2, RESERVA: 3 }, gs = grupos().filter((g) => S.f.chip === "todos" || g.id === S.f.chip).sort((a, b) => (rk[a.estado] ?? 2) - (rk[b.estado] ?? 2));
@@ -1778,6 +1786,8 @@ root.addEventListener("click", async (e) => {
     toast("Revisión guardada."); return;
   }
   if (d.modo) { await guardarEst({ modo: d.modo }); return; }
+  if (d.bkadd != null) { const q = (a) => document.querySelector("[" + a + "]"), f = q("data-bkf").value, e = Number(q("data-bke").value), n = q("data-bkn").value.trim(); if (!f || !(e > 0)) return; const l = Array.isArray(est().bkRetiros) ? est().bkRetiros : []; await guardarEst({ bkRetiros: [...l, { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), f, e, n }] }); return; }
+  if (d.bkdel) { if (!confirm("¿Borrar este retiro?")) return; await guardarEst({ bkRetiros: (est().bkRetiros || []).filter((x) => x.id !== d.bkdel) }); return; }
   if (d.cierre) { const [k, v] = d.cierre.split(":"), dia = tradingDay(Date.now()), prev = est().cierre && est().cierre.d === dia ? est().cierre : {}; await guardarEst({ cierre: { ...prev, d: dia, [k]: prev[k] === v ? "" : v } }); return; }
   if (d.fond) { await guardarEst({ fondDia: { d: hoyOperas().dia || tradingDay(Date.now()), s: d.fond } }); return; }
   if (d.auto) { await guardarEst(d.auto === "si" ? { auto: true, modo: autoModo() } : { auto: false, modo: est().modo }); return; }
