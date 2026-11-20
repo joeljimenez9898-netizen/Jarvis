@@ -488,6 +488,12 @@ function grupoBox(g, days) {
       ${prox.map((x) => `<div class="acc prox"><span class="acc-top"><b>${esc(x.codigo)}</b></span><span class="acc-meta">por comprar${x.estado ? " · " + esc(x.estado) : ""}</span><span class="acc-when">Jarvis la registra aquí sola</span></div>`).join("")}
       ${!cs.length && !prox.length ? '<p class="hint" style="margin:0">Sin cuentas.</p>' : ""}</div></div>`;
 }
+// cuentas fondeadas listas para pedir payout: Jarvis te recuerda apuntar el retiro cuando lo cobres
+const pagoAviso = () => {
+  let l = []; try { l = fondeadasHoy().filter((f) => f.rol === "payout").map((f) => f.cuenta); } catch {}
+  if (!l.length) return "";
+  return `<div class="card" style="border:2px solid #7c3aed"><h3>💸 Lista para cobrar</h3><p class="hint" style="margin:0 0 8px">${esc(l.join(", "))} ${l.length === 1 ? "ha completado" : "han completado"} los días mínimos: pide el payout en Topstep. Cuando lo cobres, apúntalo para que Jarvis cuente tu mes.</p><div class="hz-btns">${l.map((c) => `<button type="button" class="hz-btn go" data-bkpre="${esc(c)}">➕ Apuntar retiro de ${esc(c)}</button>`).join(" ")}</div></div>`;
+};
 V.mando = () => {
   S.ahoraHtml = ""; hoyHtml();
   const dia = tradingDay(Date.now()), E = est(), c0 = E.cierre && E.cierre.d === dia ? E.cierre : {};
@@ -498,6 +504,7 @@ V.mando = () => {
   const dias = new Set(); for (const c of cuentas()) for (const [d, v] of Object.entries(dm[c.id] || {})) if (d >= lunes && d <= dia && Number(v)) dias.add(d);
   return (S.ahoraHtml || '<div class="card"><h3>⏱ AHORA</h3><p class="hint">No hay nada que operar ahora mismo: Jarvis no ve exámenes vivos ni fondeadas operando. Cuando haya cuentas, aquí te dice qué toca y cuándo.</p></div>')
     + `<div class="card"><h3>✅ Cerrar el día</h3><p class="hint">Toca cómo acabó cada sesión. Queda marcado con ✓ y vuelve a tocarlo para quitarlo. Es tu apunte del día: Jarvis sigue leyendo tus operaciones de Topstep para rotar las cuentas.</p>${fila("L", "🇬🇧 Londres")}${fila("N", "🗽 Nueva York")}</div>`
+    + pagoAviso()
     + ahoraHtml()
     + `<div class="card"><h3>📈 Tu semana</h3><div class="mando-k"><div><b>${sgn(neto)}</b><small>NETO</small></div><div><b>${pasadas}</b><small>EXÁMENES PASADOS</small></div><div><b>${dias.size}</b><small>DÍAS OPERADOS</small></div></div></div>`;
 };
@@ -525,7 +532,7 @@ V.banca = () => {
   const campo = (k, l, v) => `<label class="bk-c">${l}<input type="number" data-est="${k}" value="${v}"></label>`;
   return `<div class="card"><h3>💰 Bankroll</h3><p class="hint">Jarvis mira tus exámenes y fondeadas y te dice cuánto comprar. Las cifras son brutas: sin impuestos ni reparto de cada retiro.</p>
     <div class="mando-k"><div><b>${vivos}</b><small>EXÁMENES VIVOS</small></div><div><b>${fond}</b><small>FONDEADAS</small></div><div><b>${real !== null ? Math.round(real * 100) + "%" : "—"}</b><small>${real !== null ? `PASAS (${pasadas}/${muestra})` : "TASA REAL · faltan datos"}</small></div></div></div>
-    <div class="card"><h3>🧭 Qué te recomiendo</h3>${recs.map((t) => `<div class="banner ok" style="margin-bottom:8px">${t}</div>`).join("")}</div>
+    ${pagoAviso()}<div class="card"><h3>🧭 Qué te recomiendo</h3>${recs.map((t) => `<div class="banner ok" style="margin-bottom:8px">${t}</div>`).join("")}</div>
     <div class="card"><h3>🧮 Y si pruebo ${n} exámenes</h3><p class="hint">Inversión: <b>${eur(n * precio)}</b>. Cambia el número abajo.</p><div class="mando-k bk-e">${esc3}</div><p class="hint" style="margin-top:8px">Punto de equilibrio: <b>${Math.ceil(n * precio / retiro)}</b> cuentas retirando ${eur(retiro)}.</p>
       <h3 style="margin-top:12px">❄️ Bola de nieve (reinviertes el ${reinv}%)</h3><table class="bk-t"><tr><th>Oleada</th><th>Exám.</th><th>Gasto</th><th>Retiras</th><th>Para ti</th></tr>${osl}</table><p class="hint" style="margin-top:8px">⚠️ Topstep limita a 5 fondeadas activas a la vez según su ayuda: la bola de nieve se frena antes de lo que marca la tabla.</p></div>
     <div class="card"><h3>💸 Mis retiros</h3><p class="hint">Apunta cada retiro que cobras. Jarvis suma el mes solo y lo usa para recomendarte.</p>
@@ -1786,6 +1793,7 @@ root.addEventListener("click", async (e) => {
     toast("Revisión guardada."); return;
   }
   if (d.modo) { await guardarEst({ modo: d.modo }); return; }
+  if (d.bkpre) { S.tab = "banca"; try { localStorage.setItem("pf-tab", "banca"); } catch {} render(); const n = document.querySelector("[data-bkn]"), e = document.querySelector("[data-bke]"); if (n) n.value = d.bkpre; if (e) { if (!e.value) e.value = String(Number(est().bkRetiro) || 1000); e.scrollIntoView({ block: "center" }); e.focus(); } return; }
   if (d.bkadd != null) { const q = (a) => document.querySelector("[" + a + "]"), f = q("data-bkf").value, e = Number(q("data-bke").value), n = q("data-bkn").value.trim(); if (!f || !(e > 0)) return; const l = Array.isArray(est().bkRetiros) ? est().bkRetiros : []; await guardarEst({ bkRetiros: [...l, { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), f, e, n }] }); return; }
   if (d.bkdel) { if (!confirm("¿Borrar este retiro?")) return; await guardarEst({ bkRetiros: (est().bkRetiros || []).filter((x) => x.id !== d.bkdel) }); return; }
   if (d.cierre) { const [k, v] = d.cierre.split(":"), dia = tradingDay(Date.now()), prev = est().cierre && est().cierre.d === dia ? est().cierre : {}; await guardarEst({ cierre: { ...prev, d: dia, [k]: prev[k] === v ? "" : v } }); return; }
